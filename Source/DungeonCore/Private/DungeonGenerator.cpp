@@ -5,6 +5,7 @@
 #include "DelaunayTetrahedralization.h"
 #include "MinimumSpanningTree.h"
 #include "HallwayPathfinder.h"
+#include "DungeonValidator.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDungeonGenerator, Log, All);
 
@@ -319,6 +320,19 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 			break;
 		}
 	}
+
+	// =========================================================================
+	// Step 11: Validation (non-shipping builds only)
+	// =========================================================================
+#if !UE_BUILD_SHIPPING
+	{
+		FDungeonValidationResult Validation = FDungeonValidator::ValidateAll(Result, *Config);
+		if (!Validation.bPassed)
+		{
+			UE_LOG(LogDungeonGenerator, Warning, TEXT("Validation: %s"), *Validation.GetSummary());
+		}
+	}
+#endif
 
 	const double EndTime = FPlatformTime::Seconds();
 	Result.GenerationTimeMs = (EndTime - StartTime) * 1000.0;
