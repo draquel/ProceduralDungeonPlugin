@@ -15,6 +15,8 @@ class DUNGEONCORE_API UDungeonConfiguration : public UDataAsset
 	GENERATED_BODY()
 
 public:
+	UDungeonConfiguration();
+
 	// --- Grid ---
 
 	/** Grid dimensions (X width, Y depth, Z floors). */

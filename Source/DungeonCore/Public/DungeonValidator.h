@@ -68,6 +68,9 @@ struct DUNGEONCORE_API FDungeonValidator
 	/** 6-directional flood fill from entrance cell reaches all non-Empty cells. */
 	static void ValidateReachability(const FDungeonResult& Result, TArray<FDungeonValidationIssue>& OutIssues);
 
+	/** Room types assigned correctly per config rules. */
+	static void ValidateRoomSemantics(const FDungeonResult& Result, const UDungeonConfiguration& Config, TArray<FDungeonValidationIssue>& OutIssues);
+
 private:
 	/** Flood fill from Start through non-Empty cells in 6 directions. Populates VisitedIndices with flat cell indices. */
 	static void FloodFill(const FDungeonGrid& Grid, const FIntVector& Start, TSet<int32>& VisitedIndices);

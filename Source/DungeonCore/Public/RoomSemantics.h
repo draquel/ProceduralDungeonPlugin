@@ -4,6 +4,9 @@
 #include "DungeonTypes.h"
 #include "RoomSemantics.generated.h"
 
+class UDungeonConfiguration;
+struct FDungeonSeed;
+
 /**
  * FDungeonRoomTypeRule
  * Declarative rule for assigning room types during generation.
@@ -47,4 +50,42 @@ struct DUNGEONCORE_API FDungeonRoomTypeRule
 	/** Override minimum size for this room type. Zero = no override. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Room Type")
 	FIntVector MinSize = FIntVector::ZeroValue;
+};
+
+/**
+ * Per-room computed metrics used during type assignment scoring.
+ * Not a USTRUCT — internal algorithm data only.
+ */
+struct DUNGEONCORE_API FRoomSemanticContext
+{
+	int32 RoomArrayIndex = -1;
+	int32 GraphDistance = -1;
+	float NormalizedDistance = 0.0f;
+	bool bIsLeafNode = false;
+	bool bOnMainPath = false;
+	bool bSpansMultipleFloors = false;
+};
+
+/**
+ * FRoomSemantics
+ * Static utility functions for entrance selection, graph analysis, and room type assignment.
+ */
+struct DUNGEONCORE_API FRoomSemantics
+{
+	/** Pick entrance room index based on Config.EntrancePlacement. Uses RNG for tie-breaking. */
+	static int32 SelectEntranceRoom(
+		const FDungeonResult& Result,
+		const UDungeonConfiguration& Config,
+		FDungeonSeed& Seed);
+
+	/** BFS from entrance; populates Room.GraphDistanceFromEntrance, Room.bOnMainPath, returns contexts. */
+	static TArray<FRoomSemanticContext> ComputeGraphMetrics(
+		FDungeonResult& Result);
+
+	/** Assign room types from Config.RoomTypeRules using priority + scoring. Modifies Result.Rooms[].RoomType. */
+	static void AssignRoomTypes(
+		FDungeonResult& Result,
+		const UDungeonConfiguration& Config,
+		const TArray<FRoomSemanticContext>& Contexts,
+		FDungeonSeed& Seed);
 };

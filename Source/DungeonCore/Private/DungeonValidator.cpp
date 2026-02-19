@@ -37,6 +37,7 @@ FDungeonValidationResult FDungeonValidator::ValidateAll(const FDungeonResult& Re
 	ValidateRoomConnectivity(Result, Validation.Issues);
 	ValidateStaircaseHeadroom(Result, Validation.Issues);
 	ValidateReachability(Result, Validation.Issues);
+	ValidateRoomSemantics(Result, Config, Validation.Issues);
 
 	Validation.bPassed = Validation.Issues.Num() == 0;
 	return Validation;
@@ -341,6 +342,93 @@ void FDungeonValidator::ValidateStaircaseHeadroom(const FDungeonResult& Result, 
 						Cell));
 				}
 			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ValidateRoomSemantics
+// ---------------------------------------------------------------------------
+
+void FDungeonValidator::ValidateRoomSemantics(const FDungeonResult& Result, const UDungeonConfiguration& Config, TArray<FDungeonValidationIssue>& OutIssues)
+{
+	// 1. Exactly one Entrance room exists
+	int32 EntranceCount = 0;
+	for (int32 i = 0; i < Result.Rooms.Num(); ++i)
+	{
+		if (Result.Rooms[i].RoomType == EDungeonRoomType::Entrance)
+		{
+			EntranceCount++;
+		}
+	}
+
+	if (EntranceCount == 0)
+	{
+		OutIssues.Add(FDungeonValidationIssue(
+			TEXT("Semantics"), TEXT("No room has RoomType=Entrance")));
+	}
+	else if (EntranceCount > 1)
+	{
+		OutIssues.Add(FDungeonValidationIssue(
+			TEXT("Semantics"),
+			FString::Printf(TEXT("Multiple entrance rooms found: %d (expected 1)"), EntranceCount)));
+	}
+
+	// 2. Boss guarantee
+	if (Config.bGuaranteeBossRoom && Result.Rooms.Num() > 1)
+	{
+		bool bHasBoss = false;
+		for (const FDungeonRoom& Room : Result.Rooms)
+		{
+			if (Room.RoomType == EDungeonRoomType::Boss)
+			{
+				bHasBoss = true;
+				break;
+			}
+		}
+
+		if (!bHasBoss)
+		{
+			OutIssues.Add(FDungeonValidationIssue(
+				TEXT("Semantics"), TEXT("bGuaranteeBossRoom is true but no Boss room was assigned")));
+		}
+	}
+
+	// 3. Rule count limits — no over-assignment
+	for (const FDungeonRoomTypeRule& Rule : Config.RoomTypeRules)
+	{
+		if (Rule.RoomType == EDungeonRoomType::Entrance)
+		{
+			continue; // Entrance is handled separately
+		}
+
+		int32 TypeCount = 0;
+		for (const FDungeonRoom& Room : Result.Rooms)
+		{
+			if (Room.RoomType == Rule.RoomType)
+			{
+				TypeCount++;
+			}
+		}
+
+		if (TypeCount > Rule.Count)
+		{
+			OutIssues.Add(FDungeonValidationIssue(
+				TEXT("Semantics"),
+				FString::Printf(TEXT("Room type %d has %d rooms but rule allows max %d"),
+					static_cast<int32>(Rule.RoomType), TypeCount, Rule.Count)));
+		}
+	}
+
+	// 4. Entrance room's GraphDistanceFromEntrance == 0
+	if (Result.EntranceRoomIndex >= 0 && Result.EntranceRoomIndex < Result.Rooms.Num())
+	{
+		if (Result.Rooms[Result.EntranceRoomIndex].GraphDistanceFromEntrance != 0)
+		{
+			OutIssues.Add(FDungeonValidationIssue(
+				TEXT("Semantics"),
+				FString::Printf(TEXT("Entrance room %d has GraphDistanceFromEntrance=%d (expected 0)"),
+					Result.EntranceRoomIndex, Result.Rooms[Result.EntranceRoomIndex].GraphDistanceFromEntrance)));
 		}
 	}
 }

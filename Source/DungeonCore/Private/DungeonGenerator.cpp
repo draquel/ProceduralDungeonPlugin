@@ -5,6 +5,7 @@
 #include "DelaunayTetrahedralization.h"
 #include "MinimumSpanningTree.h"
 #include "HallwayPathfinder.h"
+#include "RoomSemantics.h"
 #include "DungeonValidator.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDungeonGenerator, Log, All);
@@ -82,14 +83,18 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 	}
 
 	// =========================================================================
-	// Step 4: Assign Room Types (basic — full semantic assignment is Phase 3)
+	// Step 4: Select Entrance Room
 	// =========================================================================
-	if (Result.Rooms.Num() > 0)
+	FDungeonSeed EntranceSeed = MainSeed.Fork(3);
+	Result.EntranceRoomIndex = FRoomSemantics::SelectEntranceRoom(Result, *Config, EntranceSeed);
+	if (Result.EntranceRoomIndex >= 0)
 	{
-		Result.Rooms[0].RoomType = EDungeonRoomType::Entrance;
-		Result.EntranceRoomIndex = 0;
-		Result.EntranceCell = Result.Rooms[0].Center;
+		Result.Rooms[Result.EntranceRoomIndex].RoomType = EDungeonRoomType::Entrance;
+		Result.EntranceCell = Result.Rooms[Result.EntranceRoomIndex].Center;
 	}
+
+	UE_LOG(LogDungeonGenerator, Log, TEXT("Step 4: Selected entrance room %d (placement=%d)"),
+		Result.EntranceRoomIndex, static_cast<int32>(Config->EntrancePlacement));
 
 	// =========================================================================
 	// Step 5: Delaunay Tetrahedralization (3D)
@@ -193,8 +198,11 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 		Result.FinalEdges.Num() - Result.MSTEdges.Num());
 
 	// =========================================================================
-	// Step 8: Mark Main Path (Phase 3 — skipped for now)
+	// Step 8: Graph Metrics + Room Type Assignment
 	// =========================================================================
+	TArray<FRoomSemanticContext> SemanticContexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonSeed TypeSeed = MainSeed.Fork(4);
+	FRoomSemantics::AssignRoomTypes(Result, *Config, SemanticContexts, TypeSeed);
 
 	// =========================================================================
 	// Step 9: A* Hallway Carving
