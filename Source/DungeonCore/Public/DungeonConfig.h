@@ -17,8 +17,9 @@ class DUNGEONCORE_API UDungeonConfiguration : public UDataAsset
 public:
 	// --- Grid ---
 
+	/** Grid dimensions (X width, Y depth, Z floors). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Grid")
-	FIntVector GridSize = FIntVector(30, 5, 30);
+	FIntVector GridSize = FIntVector(30, 30, 5);
 
 	/** World units per cell (cm). 400 = comfortable rooms. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Grid", meta=(ClampMin="100.0", ClampMax="2000.0"))
@@ -29,11 +30,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Rooms", meta=(ClampMin="2", ClampMax="255"))
 	int32 RoomCount = 8;
 
+	/** Minimum room dimensions (X width, Y depth, Z height in floors). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Rooms")
-	FIntVector MinRoomSize = FIntVector(3, 1, 3);
+	FIntVector MinRoomSize = FIntVector(3, 3, 1);
 
+	/** Maximum room dimensions (X width, Y depth, Z height in floors). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Rooms")
-	FIntVector MaxRoomSize = FIntVector(7, 2, 7);
+	FIntVector MaxRoomSize = FIntVector(7, 7, 2);
 
 	/** Minimum gap between rooms in cells. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Rooms", meta=(ClampMin="0", ClampMax="5"))

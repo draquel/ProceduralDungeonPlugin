@@ -114,7 +114,7 @@ struct DUNGEONCORE_API FDungeonRoom
 	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
 	FIntVector Position = FIntVector::ZeroValue;
 
-	/** Grid-space dimensions (width, height, depth). */
+	/** Grid-space dimensions (X width, Y depth, Z height). */
 	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
 	FIntVector Size = FIntVector::ZeroValue;
 
@@ -250,9 +250,9 @@ struct DUNGEONCORE_API FDungeonResult
 	const FDungeonRoom* FindRoomByType(EDungeonRoomType Type) const;
 	const FDungeonRoom* GetEntranceRoom() const;
 
-	/** Convert grid coordinate to world position. Grid Y (floor) maps to World Z (up). */
+	/** Convert grid coordinate to world position (Z-up, direct mapping). */
 	FVector GridToWorld(const FIntVector& GridCoord) const;
 
-	/** Convert world position to grid coordinate. */
+	/** Convert world position to grid coordinate (Z-up, direct mapping). */
 	FIntVector WorldToGrid(const FVector& WorldPos) const;
 };

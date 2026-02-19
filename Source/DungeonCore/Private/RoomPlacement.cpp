@@ -21,22 +21,23 @@ bool FRoomPlacement::PlaceRooms(
 		{
 			// Random size within configured bounds
 			const int32 SizeX = RoomSeed.RandRange(Config.MinRoomSize.X, Config.MaxRoomSize.X);
+			const int32 SizeY = RoomSeed.RandRange(Config.MinRoomSize.Y, Config.MaxRoomSize.Y);
 			const int32 SizeZ = RoomSeed.RandRange(Config.MinRoomSize.Z, Config.MaxRoomSize.Z);
-			const int32 SizeY = 1; // Phase 1: single floor only
 
-			// Valid position range (buffer from grid edges)
+			// Valid position range (buffer from grid edges on XY, no buffer on Z)
 			const int32 MinPos = Config.RoomBuffer;
 			const int32 MaxPosX = Config.GridSize.X - SizeX - Config.RoomBuffer;
-			const int32 MaxPosZ = Config.GridSize.Z - SizeZ - Config.RoomBuffer;
+			const int32 MaxPosY = Config.GridSize.Y - SizeY - Config.RoomBuffer;
+			const int32 MaxPosZ = Config.GridSize.Z - SizeZ;
 
-			if (MaxPosX < MinPos || MaxPosZ < MinPos)
+			if (MaxPosX < MinPos || MaxPosY < MinPos || MaxPosZ < 0)
 			{
-				continue; // Room too large to fit with buffer
+				continue; // Room too large to fit
 			}
 
 			const int32 PosX = RoomSeed.RandRange(MinPos, MaxPosX);
-			const int32 PosZ = RoomSeed.RandRange(MinPos, MaxPosZ);
-			const int32 PosY = 0; // Phase 1: floor 0
+			const int32 PosY = RoomSeed.RandRange(MinPos, MaxPosY);
+			const int32 PosZ = RoomSeed.RandRange(0, MaxPosZ);
 
 			const FIntVector Position(PosX, PosY, PosZ);
 			const FIntVector Size(SizeX, SizeY, SizeZ);
@@ -49,7 +50,7 @@ bool FRoomPlacement::PlaceRooms(
 				Room.Position = Position;
 				Room.Size = Size;
 				Room.Center = Position + FIntVector(SizeX / 2, SizeY / 2, SizeZ / 2);
-				Room.FloorLevel = PosY;
+				Room.FloorLevel = PosZ;
 
 				StampRoomToGrid(Grid, Room);
 				OutRooms.Add(Room);
@@ -78,7 +79,7 @@ bool FRoomPlacement::DoesRoomOverlap(
 {
 	for (const FDungeonRoom& Other : ExistingRooms)
 	{
-		// AABB overlap test including buffer zone
+		// AABB overlap test: buffer on XY axes (hallway space), no buffer on Z (floors)
 		const bool bOverlapX =
 			Position.X < (Other.Position.X + Other.Size.X + Buffer) &&
 			(Position.X + Size.X + Buffer) > Other.Position.X;
@@ -88,8 +89,8 @@ bool FRoomPlacement::DoesRoomOverlap(
 			(Position.Y + Size.Y + Buffer) > Other.Position.Y;
 
 		const bool bOverlapZ =
-			Position.Z < (Other.Position.Z + Other.Size.Z + Buffer) &&
-			(Position.Z + Size.Z + Buffer) > Other.Position.Z;
+			Position.Z < (Other.Position.Z + Other.Size.Z) &&
+			(Position.Z + Size.Z) > Other.Position.Z;
 
 		if (bOverlapX && bOverlapY && bOverlapZ)
 		{
@@ -112,7 +113,7 @@ void FRoomPlacement::StampRoomToGrid(FDungeonGrid& Grid, const FDungeonRoom& Roo
 					FDungeonCell& Cell = Grid.GetCell(X, Y, Z);
 					Cell.CellType = EDungeonCellType::Room;
 					Cell.RoomIndex = Room.RoomIndex;
-					Cell.FloorIndex = static_cast<uint8>(Y);
+					Cell.FloorIndex = static_cast<uint8>(Z);
 				}
 			}
 		}

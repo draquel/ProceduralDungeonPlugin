@@ -73,11 +73,10 @@ const FDungeonRoom* FDungeonResult::GetEntranceRoom() const
 
 FVector FDungeonResult::GridToWorld(const FIntVector& GridCoord) const
 {
-	// Grid X -> World X, Grid Z -> World Y, Grid Y (floor) -> World Z (up)
 	return FVector(
 		GridCoord.X * CellWorldSize,
-		GridCoord.Z * CellWorldSize,
-		GridCoord.Y * CellWorldSize
+		GridCoord.Y * CellWorldSize,
+		GridCoord.Z * CellWorldSize
 	);
 }
 
@@ -85,7 +84,7 @@ FIntVector FDungeonResult::WorldToGrid(const FVector& WorldPos) const
 {
 	return FIntVector(
 		FMath::FloorToInt32(WorldPos.X / CellWorldSize),
-		FMath::FloorToInt32(WorldPos.Z / CellWorldSize),
-		FMath::FloorToInt32(WorldPos.Y / CellWorldSize)
+		FMath::FloorToInt32(WorldPos.Y / CellWorldSize),
+		FMath::FloorToInt32(WorldPos.Z / CellWorldSize)
 	);
 }
