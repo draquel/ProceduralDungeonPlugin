@@ -18,6 +18,11 @@
 			"Name": "DungeonCore",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "DungeonOutput",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
 		}
 	]
 }
