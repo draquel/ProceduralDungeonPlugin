@@ -36,12 +36,16 @@ public:
 	int64 Seed = 0;
 
 	/** Generate the dungeon and create tile geometry. */
-	UFUNCTION(BlueprintCallable, Category = "Dungeon")
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
 	void GenerateDungeon();
 
 	/** Destroy all tile geometry. */
-	UFUNCTION(BlueprintCallable, Category = "Dungeon")
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
 	void ClearDungeon();
+
+	/** Set a random seed and regenerate. */
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
+	void RandomizeSeed();
 
 	/** Get the cached generation result. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
@@ -59,6 +63,56 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
 	int32 GetTotalInstanceCount() const;
 
+#if WITH_EDITORONLY_DATA
+	/** Master toggle for debug visualization in the viewport. */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization")
+	bool bShowDebugVisualization = false;
+
+	/** Show wireframe boxes for rooms (colored by type). */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization"))
+	bool bShowRooms = true;
+
+	/** Show hallway path lines. */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization"))
+	bool bShowHallways = true;
+
+	/** Show Delaunay, MST, and final graph edges. */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization"))
+	bool bShowGraphEdges = true;
+
+	/** Show room labels at room centers. */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization"))
+	bool bShowRoomLabels = true;
+
+	/** Show entrance marker. */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization"))
+	bool bShowEntrance = true;
+
+	/** Show staircase directional arrows. */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization"))
+	bool bShowStaircases = true;
+
+	/** Show grid bounds wireframe. */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization"))
+	bool bShowGridBounds = true;
+
+	/** Thickness of debug lines. */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization", ClampMin = "0.5", ClampMax = "10.0"))
+	float DebugLineThickness = 2.0f;
+
+	/** Automatically regenerate when config, tileset, or seed changes. */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Editor")
+	bool bAutoRegenerate = true;
+#endif
+
+	// AActor interface
+	virtual void Tick(float DeltaSeconds) override;
+	virtual bool ShouldTickIfViewportsOnly() const override;
+
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
 private:
 	UPROPERTY()
 	FDungeonResult CachedResult;
@@ -67,4 +121,11 @@ private:
 	TMap<uint8, TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> TileComponents;
 
 	bool bHasDungeon = false;
+
+#if WITH_EDITOR
+	void DrawDebugVisualization();
+	void UpdateTickState();
+	FColor GetRoomTypeColor(EDungeonRoomType Type) const;
+	FString GetRoomTypeName(EDungeonRoomType Type) const;
+#endif
 };

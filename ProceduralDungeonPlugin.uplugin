@@ -23,6 +23,11 @@
 			"Name": "DungeonOutput",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "DungeonEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
 		}
 	]
 }
