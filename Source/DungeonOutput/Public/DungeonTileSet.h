@@ -82,10 +82,6 @@ public:
 
 	// --- Stairs ---
 
-	/** When true, the high/exit side of staircases is left open, allowing hallways to pass underneath. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Stairs")
-	bool bStaircaseUnderpassOpen = false;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Stairs")
 	TSoftObjectPtr<UStaticMesh> StaircaseMesh;
 

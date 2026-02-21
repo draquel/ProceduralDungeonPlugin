@@ -501,8 +501,6 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 
 							if (bSameStaircase)
 								bPlaceWall = false;
-							else if (TileSet.bStaircaseUnderpassOpen)
-								bPlaceWall = NeedsWall(Result.Grid, Cell, NX, NY, Z);
 							else
 								bPlaceWall = true;
 						}
