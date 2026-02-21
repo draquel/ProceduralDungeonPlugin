@@ -13,6 +13,13 @@
 	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
 	"Installed": false,
+	"Plugins": [
+		{
+			"Name": "VoxelWorlds",
+			"Enabled": true,
+			"Optional": true
+		}
+	],
 	"Modules": [
 		{
 			"Name": "DungeonCore",
@@ -27,6 +34,11 @@
 		{
 			"Name": "DungeonEditor",
 			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "DungeonVoxelIntegration",
+			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		}
 	]
