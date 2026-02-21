@@ -61,12 +61,14 @@ static void TestDungeonStamp(const TArray<FString>& Args)
 
 	// Create dungeon configuration — small grid for quick visual testing
 	UDungeonConfiguration* DungeonConfig = NewObject<UDungeonConfiguration>();
-	DungeonConfig->GridSize = FIntVector(15, 15, 1);
-	DungeonConfig->RoomCount = 4;
+	DungeonConfig->GridSize = FIntVector(15, 15, 3);
+	DungeonConfig->RoomCount = 5;
 	DungeonConfig->CellWorldSize = 400.0f;
 	DungeonConfig->MinRoomSize = FIntVector(3, 3, 1);
-	DungeonConfig->MaxRoomSize = FIntVector(5, 5, 1);
+	DungeonConfig->MaxRoomSize = FIntVector(5, 5, 2);
 	DungeonConfig->RoomBuffer = 1;
+	DungeonConfig->StaircaseRiseToRun = 2;
+	DungeonConfig->StaircaseHeadroom = 2;
 	DungeonConfig->bGuaranteeEntrance = true;
 	DungeonConfig->bGuaranteeBossRoom = true;
 
@@ -200,6 +202,19 @@ static void TestDungeonStamp(const TArray<FString>& Args)
 			TEXT("  Room %d (%s) floor=%d center=(%.0f,%.0f,%.0f)"),
 			Room.RoomIndex, *UEnum::GetValueAsString(Room.RoomType),
 			Room.FloorLevel, RC.X, RC.Y, RC.Z);
+	}
+
+	// Log staircase positions
+	for (int32 i = 0; i < Result.Staircases.Num(); ++i)
+	{
+		const FDungeonStaircase& S = Result.Staircases[i];
+		const FVector BotWorld = WorldOffset + Result.GridToWorld(S.BottomCell) + FVector(CWS * 0.5f);
+		const FVector TopWorld = WorldOffset + Result.GridToWorld(S.TopCell) + FVector(CWS * 0.5f);
+		UE_LOG(LogDungeonVoxelIntegration, Log,
+			TEXT("  Staircase %d: Bottom=(%d,%d,%d)(%.0f,%.0f,%.0f) Top=(%d,%d,%d)(%.0f,%.0f,%.0f) Dir=%d Run=%d"),
+			i, S.BottomCell.X, S.BottomCell.Y, S.BottomCell.Z, BotWorld.X, BotWorld.Y, BotWorld.Z,
+			S.TopCell.X, S.TopCell.Y, S.TopCell.Z, TopWorld.X, TopWorld.Y, TopWorld.Z,
+			S.Direction, S.RiseRunRatio);
 	}
 
 	// Teleport player character into the room

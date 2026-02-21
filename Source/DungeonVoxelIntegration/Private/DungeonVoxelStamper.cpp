@@ -69,17 +69,15 @@ bool UDungeonVoxelStamper::NeedsWall(const FDungeonGrid& Grid, const FDungeonCel
 		return false;
 	}
 
-	// Hallway-family merge, with StaircaseHead restrictions
+	// Hallway-family merge: same hallway = open, different hallway = wall
+	// StaircaseHead cells must connect to their exit Hallway (same HallwayIndex)
 	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType))
 	{
 		const bool bEitherIsHead = (Current.CellType == EDungeonCellType::StaircaseHead
 			|| Neighbor.CellType == EDungeonCellType::StaircaseHead);
 		if (bEitherIsHead)
 		{
-			const bool bBothStaircaseFamily =
-				(Current.CellType == EDungeonCellType::Staircase || Current.CellType == EDungeonCellType::StaircaseHead)
-				&& (Neighbor.CellType == EDungeonCellType::Staircase || Neighbor.CellType == EDungeonCellType::StaircaseHead);
-			return !(bBothStaircaseFamily && Current.HallwayIndex == Neighbor.HallwayIndex);
+			return Current.HallwayIndex != Neighbor.HallwayIndex;
 		}
 		return false;
 	}
@@ -268,6 +266,93 @@ int32 UDungeonVoxelStamper::PlaceBoundary(
 			}
 		}
 	}
+	return Count;
+}
+
+// ============================================================================
+// Staircase Step Geometry
+// ============================================================================
+
+static int32 PlaceStaircaseSteps(
+	UVoxelEditManager* EditManager,
+	UVoxelChunkManager* ChunkManager,
+	const FDungeonStaircase& Staircase,
+	const FVector& WorldOffset,
+	float CellWorldSize,
+	int32 VoxelsPerCell,
+	float VoxelSize,
+	uint8 MaterialID,
+	uint8 BiomeID,
+	TSet<FIntVector>& AffectedChunks)
+{
+	int32 Count = 0;
+	const FVoxelData SolidVoxel = FVoxelData::Solid(MaterialID, BiomeID);
+
+	const int32 RiseToRun = Staircase.RiseRunRatio;
+
+	// Climb direction: 0=+X, 1=-X, 2=+Y, 3=-Y
+	static const int32 CDX[] = {1, -1, 0, 0};
+	static const int32 CDY[] = {0, 0, 1, -1};
+	const int32 ClimbDX = CDX[Staircase.Direction];
+	const int32 ClimbDY = CDY[Staircase.Direction];
+
+	// Determine climb axis and sign
+	const bool bClimbAlongX = (ClimbDX != 0);
+	const bool bPositiveClimb = bClimbAlongX ? (ClimbDX > 0) : (ClimbDY > 0);
+
+	// Iterate body cells in climb order (ci=0 is nearest entry)
+	for (int32 ci = 0; ci < RiseToRun; ++ci)
+	{
+		const FIntVector CellCoord(
+			Staircase.BottomCell.X + ClimbDX * (ci + 1),
+			Staircase.BottomCell.Y + ClimbDY * (ci + 1),
+			Staircase.BottomCell.Z);
+
+		const FVector CellWorldMin = WorldOffset + FVector(CellCoord) * CellWorldSize;
+
+		for (int32 LocalClimb = 0; LocalClimb < VoxelsPerCell; ++LocalClimb)
+		{
+			// Map local climb-axis position to global run index
+			const int32 RunWithinCell = bPositiveClimb ? LocalClimb : (VoxelsPerCell - 1 - LocalClimb);
+			const int32 GlobalRunIdx = ci * VoxelsPerCell + RunWithinCell;
+
+			// Step height: rises by 1 voxel every RiseToRun horizontal voxels
+			const int32 StepTop = GlobalRunIdx / RiseToRun; // 0 to VoxelsPerCell-1
+
+			// Fill solid from VZ=0 up to and including StepTop
+			for (int32 Perp = 0; Perp < VoxelsPerCell; ++Perp)
+			{
+				for (int32 VZ = 0; VZ <= StepTop; ++VZ)
+				{
+					int32 VX, VY;
+					if (bClimbAlongX)
+					{
+						VX = LocalClimb;
+						VY = Perp;
+					}
+					else
+					{
+						VX = Perp;
+						VY = LocalClimb;
+					}
+
+					const FVector WorldPos = CellWorldMin + FVector(
+						(VX + 0.5f) * VoxelSize,
+						(VY + 0.5f) * VoxelSize,
+						(VZ + 0.5f) * VoxelSize);
+
+					if (EditManager->ApplyEdit(WorldPos, SolidVoxel, EEditMode::Set))
+					{
+						++Count;
+					}
+				}
+			}
+		}
+
+		AffectedChunks.Add(ChunkManager->WorldToChunkCoord(
+			CellWorldMin + FVector(CellWorldSize * 0.5f)));
+	}
+
 	return Count;
 }
 
@@ -469,6 +554,18 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 				}
 			}
 		}
+	}
+
+	// ------------------------------------------------------------------
+	// Pass 3: Place staircase step geometry inside body cells
+	// ------------------------------------------------------------------
+	for (const FDungeonStaircase& Staircase : Result.Staircases)
+	{
+		const int32 StepVoxels = PlaceStaircaseSteps(
+			EditManager, ChunkManager, Staircase, WorldOffset,
+			CellWorldSize, VoxelsPerCell, VoxelSize,
+			Config->StaircaseMaterialID, BiomeID, AffectedChunks);
+		StampResult.VoxelsModified += StepVoxels;
 	}
 
 	// ------------------------------------------------------------------
