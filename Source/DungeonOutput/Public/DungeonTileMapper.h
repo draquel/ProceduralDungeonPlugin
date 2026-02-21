@@ -24,6 +24,12 @@ enum class EDungeonTileType : uint8
 	HallwayFloorTJunction,  // 3 neighbors
 	HallwayFloorCrossroad,  // 4 neighbors
 	HallwayFloorEndCap,     // 1 neighbor
+	// Hallway ceiling connectivity variants
+	HallwayCeilingStraight,
+	HallwayCeilingCorner,
+	HallwayCeilingTJunction,
+	HallwayCeilingCrossroad,
+	HallwayCeilingEndCap,
 	COUNT
 };
 

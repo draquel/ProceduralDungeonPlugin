@@ -19,6 +19,18 @@ namespace
 	static constexpr int32 StairClimbDX[] = {1, -1, 0, 0};
 	static constexpr int32 StairClimbDY[] = {0, 0, 1, -1};
 
+	// Returns true if this cell is above the ground floor of its room.
+	// Upper room cells are airspace (no walkable floor) and must be blocked for pathfinding.
+	bool IsUpperRoomCell(const FDungeonGrid& Grid, const FIntVector& Coord, uint8 RoomIndex)
+	{
+		const FIntVector Below(Coord.X, Coord.Y, Coord.Z - 1);
+		if (!Grid.IsInBounds(Below)) return false;
+		const FDungeonCell& BelowCell = Grid.GetCell(Below);
+		return (BelowCell.CellType == EDungeonCellType::Room
+			|| BelowCell.CellType == EDungeonCellType::RoomWall)
+			&& BelowCell.RoomIndex == RoomIndex;
+	}
+
 	float GetCellCost(
 		const FDungeonGrid& Grid,
 		const FIntVector& Coord,
@@ -31,35 +43,29 @@ namespace
 		switch (Cell.CellType)
 		{
 		case EDungeonCellType::Empty:
-		{
-			// Block cells adjacent to staircase sides to prevent hallways
-			// running into walled staircase flanks.
-			for (const FHDir& Dir : HorizontalDirs)
-			{
-				const FIntVector N(Coord.X + Dir.DX, Coord.Y + Dir.DY, Coord.Z);
-				if (!Grid.IsInBounds(N)) continue;
-				const FDungeonCell& NC = Grid.GetCell(N);
-				if (NC.CellType != EDungeonCellType::Staircase) continue;
-
-				// Check if this cell is on the side (perpendicular to climb direction).
-				// Entry/exit direction cells are fine — only block the flanks.
-				const uint8 SD = NC.StaircaseDirection;
-				const bool bAlongClimb = (Dir.DX == StairClimbDX[SD] && Dir.DY == StairClimbDY[SD])
-					|| (Dir.DX == -StairClimbDX[SD] && Dir.DY == -StairClimbDY[SD]);
-				if (!bAlongClimb) return -1.0f;
-			}
-			return 1.0f;
-		}
+		return 1.0f;
 		case EDungeonCellType::Hallway:
+		return Config.HallwayMergeCostMultiplier;
 		case EDungeonCellType::Door:
 			return Config.HallwayMergeCostMultiplier;
 		case EDungeonCellType::Room:
+			// Block upper room cells — airspace above the ground floor has no walkable surface.
+			// Ground floor is detected by checking if the cell below belongs to the same room.
+			if (IsUpperRoomCell(Grid, Coord, Cell.RoomIndex))
+			{
+				return -1.0f;
+			}
 			if (Cell.RoomIndex == SourceRoomIdx || Cell.RoomIndex == DestRoomIdx)
 			{
 				return 0.0f;
 			}
 			return Config.RoomPassthroughCostMultiplier;
 		case EDungeonCellType::RoomWall:
+			// Block upper room walls — can't break through walls above the ground floor.
+			if (IsUpperRoomCell(Grid, Coord, Cell.RoomIndex))
+			{
+				return -1.0f;
+			}
 			return 5.0f;
 		default:
 			return -1.0f; // Blocked (Staircase, StaircaseHead, Entrance)
@@ -115,6 +121,23 @@ bool FHallwayPathfinder::CanBuildStaircase(
 		}
 	}
 
+	// Check that body cells aren't adjacent to existing staircase zones.
+	// This prevents back-to-back and side-by-side staircase placement.
+	for (int32 i = 1; i <= RiseToRun; ++i)
+	{
+		const FIntVector BodyCell(Entry.X + DirX * i, Entry.Y + DirY * i, LowerZ);
+		for (const FHDir& HDir : HorizontalDirs)
+		{
+			const FIntVector Neighbor(BodyCell.X + HDir.DX, BodyCell.Y + HDir.DY, BodyCell.Z);
+			if (!Grid.IsInBounds(Neighbor)) continue;
+			const EDungeonCellType NType = Grid.GetCell(Neighbor).CellType;
+			if (NType == EDungeonCellType::Staircase || NType == EDungeonCellType::StaircaseHead)
+			{
+				return false;
+			}
+		}
+	}
+
 	// Check headroom cells above each body cell
 	for (int32 i = 1; i <= RiseToRun; ++i)
 	{
@@ -129,6 +152,18 @@ bool FHallwayPathfinder::CanBuildStaircase(
 			if (!IsCellAvailableForStaircase(Grid, HeadCell))
 			{
 				return false;
+			}
+
+			// Headroom cells must not be cardinally adjacent to existing staircases
+			for (const FHDir& HDir : HorizontalDirs)
+			{
+				const FIntVector Adj(HeadCell.X + HDir.DX, HeadCell.Y + HDir.DY, HeadCell.Z);
+				if (!Grid.IsInBounds(Adj)) continue;
+				const EDungeonCellType AdjType = Grid.GetCell(Adj).CellType;
+				if (AdjType == EDungeonCellType::Staircase || AdjType == EDungeonCellType::StaircaseHead)
+				{
+					return false;
+				}
 			}
 		}
 	}
@@ -261,6 +296,7 @@ bool FHallwayPathfinder::FindPath(
 
 			const int32 NeighborIdx = Grid.CellIndex(NeighborCoord);
 			if (ClosedSet[NeighborIdx]) continue;
+			if (StaircaseReserved[NeighborIdx]) continue;
 
 			const float MoveCost = GetCellCost(Grid, NeighborCoord, Config, SourceRoomIdx, DestRoomIdx);
 			if (MoveCost < 0.0f) continue;
@@ -291,6 +327,7 @@ bool FHallwayPathfinder::FindPath(
 
 					const int32 ExitIdx = Grid.CellIndex(ExitCell);
 					if (ClosedSet[ExitIdx]) continue;
+					if (StaircaseReserved[ExitIdx]) continue;
 
 					// Check that body/headroom cells don't overlap with an already-planned staircase
 					const int32 StairLowerZ = (Rise > 0) ? CurZ : CurZ - 1;
@@ -313,8 +350,42 @@ bool FHallwayPathfinder::FindPath(
 					}
 					if (bOverlapsReserved) continue;
 
+					// Check that body AND headroom cells aren't adjacent to already-reserved cells.
+					// Prevents elbow/U-staircase connections through staircase sides
+					// within the same A* path (grid adjacency check only catches carved stairs).
+					bool bAdjacentToReserved = false;
+					for (int32 s = 1; s <= RiseToRun && !bAdjacentToReserved; ++s)
+					{
+						// Body cell adjacency
+						const FIntVector BodyCell(CurX + Dir.DX * s, CurY + Dir.DY * s, StairLowerZ);
+						for (const FHDir& AdjDir : HorizontalDirs)
+						{
+							const FIntVector Adj(BodyCell.X + AdjDir.DX, BodyCell.Y + AdjDir.DY, StairLowerZ);
+							if (Grid.IsInBounds(Adj) && StaircaseReserved[Grid.CellIndex(Adj)])
+							{
+								bAdjacentToReserved = true;
+								break;
+							}
+						}
+						// Headroom cell adjacency
+						for (int32 h = 1; h <= HeadroomCells && !bAdjacentToReserved; ++h)
+						{
+							const FIntVector HeadCell(CurX + Dir.DX * s, CurY + Dir.DY * s, StairLowerZ + h);
+							for (const FHDir& AdjDir : HorizontalDirs)
+							{
+								const FIntVector Adj(HeadCell.X + AdjDir.DX, HeadCell.Y + AdjDir.DY, HeadCell.Z);
+								if (Grid.IsInBounds(Adj) && StaircaseReserved[Grid.CellIndex(Adj)])
+								{
+									bAdjacentToReserved = true;
+									break;
+								}
+							}
+						}
+					}
+					if (bAdjacentToReserved) continue;
+
 					// Cost: traverse RiseToRun body cells + exit cell
-					const float StaircaseCost = static_cast<float>(RiseToRun + 1) + 1.0f;
+					const float StaircaseCost = static_cast<float>(RiseToRun + 1) * 5.0f;
 					const float ExitCellCost = GetCellCost(Grid, ExitCell, Config, SourceRoomIdx, DestRoomIdx);
 					if (ExitCellCost < 0.0f) continue;
 
@@ -343,6 +414,7 @@ bool FHallwayPathfinder::FindPath(
 								}
 							}
 						}
+
 					}
 				}
 			}
@@ -431,6 +503,7 @@ void FHallwayPathfinder::CarveHallway(
 							{
 								HeadCellRef.CellType = EDungeonCellType::StaircaseHead;
 								HeadCellRef.HallwayIndex = HallwayIndex;
+								HeadCellRef.StaircaseDirection = Staircase.Direction;
 							}
 							Staircase.OccupiedCells.Add(HeadCell);
 						}

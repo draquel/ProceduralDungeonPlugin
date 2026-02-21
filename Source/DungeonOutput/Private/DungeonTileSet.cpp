@@ -13,8 +13,29 @@ UDungeonTileSet::UDungeonTileSet()
 	EntranceFrame = TSoftObjectPtr<UStaticMesh>(DefaultCube);
 	StaircaseMesh = TSoftObjectPtr<UStaticMesh>(DefaultCube);
 	StaircaseMeshRotationOffset = FRotator::ZeroRotator;
+	// Floor variant rotation offsets + scale multipliers
+	HallwayFloorStraightRotationOffset = FRotator::ZeroRotator;
+	HallwayFloorStraightScaleMultiplier = FVector::OneVector;
+	HallwayFloorCornerRotationOffset = FRotator::ZeroRotator;
+	HallwayFloorCornerScaleMultiplier = FVector::OneVector;
 	HallwayFloorTJunctionRotationOffset = FRotator::ZeroRotator;
-	// Hallway floor variants default to null (fall back to HallwayFloor)
+	HallwayFloorTJunctionScaleMultiplier = FVector::OneVector;
+	HallwayFloorCrossroadRotationOffset = FRotator::ZeroRotator;
+	HallwayFloorCrossroadScaleMultiplier = FVector::OneVector;
+	HallwayFloorEndCapRotationOffset = FRotator::ZeroRotator;
+	HallwayFloorEndCapScaleMultiplier = FVector::OneVector;
+	// Ceiling variant rotation offsets + scale multipliers
+	HallwayCeilingStraightRotationOffset = FRotator::ZeroRotator;
+	HallwayCeilingStraightScaleMultiplier = FVector::OneVector;
+	HallwayCeilingCornerRotationOffset = FRotator::ZeroRotator;
+	HallwayCeilingCornerScaleMultiplier = FVector::OneVector;
+	HallwayCeilingTJunctionRotationOffset = FRotator::ZeroRotator;
+	HallwayCeilingTJunctionScaleMultiplier = FVector::OneVector;
+	HallwayCeilingCrossroadRotationOffset = FRotator::ZeroRotator;
+	HallwayCeilingCrossroadScaleMultiplier = FVector::OneVector;
+	HallwayCeilingEndCapRotationOffset = FRotator::ZeroRotator;
+	HallwayCeilingEndCapScaleMultiplier = FVector::OneVector;
+	// Hallway floor/ceiling variants default to null (fall back to base mesh)
 }
 
 bool UDungeonTileSet::IsValid() const
@@ -49,6 +70,11 @@ void UDungeonTileSet::GetAllUniqueMeshes(TArray<TPair<FName, TSoftObjectPtr<USta
 	ADD_SLOT(HallwayFloorTJunction);
 	ADD_SLOT(HallwayFloorCrossroad);
 	ADD_SLOT(HallwayFloorEndCap);
+	ADD_SLOT(HallwayCeilingStraight);
+	ADD_SLOT(HallwayCeilingCorner);
+	ADD_SLOT(HallwayCeilingTJunction);
+	ADD_SLOT(HallwayCeilingCrossroad);
+	ADD_SLOT(HallwayCeilingEndCap);
 
 #undef ADD_SLOT
 }

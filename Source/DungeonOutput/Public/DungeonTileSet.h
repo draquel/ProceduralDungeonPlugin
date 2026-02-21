@@ -59,9 +59,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
 	TSoftObjectPtr<UStaticMesh> HallwayFloorStraight;
 
+	/** Rotation offset for straight floor meshes with non-standard native orientation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
+	FRotator HallwayFloorStraightRotationOffset;
+
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
+	FVector HallwayFloorStraightScaleMultiplier;
+
 	/** Hallway floor for corners (2 adjacent neighbors). Connects +X and +Y. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
 	TSoftObjectPtr<UStaticMesh> HallwayFloorCorner;
+
+	/** Rotation offset for corner floor meshes with non-standard native orientation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
+	FRotator HallwayFloorCornerRotationOffset;
+
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
+	FVector HallwayFloorCornerScaleMultiplier;
 
 	/** Hallway floor for T-junctions (3 neighbors). Missing side is -Y. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
@@ -72,13 +88,95 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
 	FRotator HallwayFloorTJunctionRotationOffset;
 
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
+	FVector HallwayFloorTJunctionScaleMultiplier;
+
 	/** Hallway floor for crossroads (4 neighbors). 4-way symmetric. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
 	TSoftObjectPtr<UStaticMesh> HallwayFloorCrossroad;
 
+	/** Rotation offset for crossroad floor meshes with non-standard native orientation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
+	FRotator HallwayFloorCrossroadRotationOffset;
+
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
+	FVector HallwayFloorCrossroadScaleMultiplier;
+
 	/** Hallway floor for dead ends (1 neighbor). Open side faces +Y. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
 	TSoftObjectPtr<UStaticMesh> HallwayFloorEndCap;
+
+	/** Rotation offset for end cap floor meshes with non-standard native orientation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
+	FRotator HallwayFloorEndCapRotationOffset;
+
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors|Hallway Variants")
+	FVector HallwayFloorEndCapScaleMultiplier;
+
+	// --- Hallway Ceiling Variants (optional — null falls back to HallwayCeiling) ---
+
+	/** Hallway ceiling for straight sections (2 opposite neighbors). Runs along +Y. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	TSoftObjectPtr<UStaticMesh> HallwayCeilingStraight;
+
+	/** Rotation offset for straight ceiling meshes with non-standard native orientation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FRotator HallwayCeilingStraightRotationOffset;
+
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FVector HallwayCeilingStraightScaleMultiplier;
+
+	/** Hallway ceiling for corners (2 adjacent neighbors). Connects +X and +Y. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	TSoftObjectPtr<UStaticMesh> HallwayCeilingCorner;
+
+	/** Rotation offset for corner ceiling meshes with non-standard native orientation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FRotator HallwayCeilingCornerRotationOffset;
+
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FVector HallwayCeilingCornerScaleMultiplier;
+
+	/** Hallway ceiling for T-junctions (3 neighbors). Missing side is -Y. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	TSoftObjectPtr<UStaticMesh> HallwayCeilingTJunction;
+
+	/** Rotation offset for T-junction ceiling meshes with non-standard native orientation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FRotator HallwayCeilingTJunctionRotationOffset;
+
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FVector HallwayCeilingTJunctionScaleMultiplier;
+
+	/** Hallway ceiling for crossroads (4 neighbors). 4-way symmetric. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	TSoftObjectPtr<UStaticMesh> HallwayCeilingCrossroad;
+
+	/** Rotation offset for crossroad ceiling meshes with non-standard native orientation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FRotator HallwayCeilingCrossroadRotationOffset;
+
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FVector HallwayCeilingCrossroadScaleMultiplier;
+
+	/** Hallway ceiling for dead ends (1 neighbor). Open side faces +Y. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	TSoftObjectPtr<UStaticMesh> HallwayCeilingEndCap;
+
+	/** Rotation offset for end cap ceiling meshes with non-standard native orientation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FRotator HallwayCeilingEndCapRotationOffset;
+
+	/** Scale multiplier applied on top of auto-fit scaling. (1,1,1) = exact cell fit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings|Hallway Variants")
+	FVector HallwayCeilingEndCapScaleMultiplier;
 
 	// --- Stairs ---
 

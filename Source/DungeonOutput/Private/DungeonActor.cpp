@@ -83,6 +83,12 @@ void ADungeonActor::GenerateDungeon()
 		{ EDungeonTileType::HallwayFloorTJunction,  TileSet->HallwayFloorTJunction,  TEXT("HallwayFloorTJunction") },
 		{ EDungeonTileType::HallwayFloorCrossroad,  TileSet->HallwayFloorCrossroad,  TEXT("HallwayFloorCrossroad") },
 		{ EDungeonTileType::HallwayFloorEndCap,     TileSet->HallwayFloorEndCap,     TEXT("HallwayFloorEndCap") },
+		// Hallway ceiling connectivity variants (null mesh = auto-skipped)
+		{ EDungeonTileType::HallwayCeilingStraight,   TileSet->HallwayCeilingStraight,   TEXT("HallwayCeilingStraight") },
+		{ EDungeonTileType::HallwayCeilingCorner,     TileSet->HallwayCeilingCorner,     TEXT("HallwayCeilingCorner") },
+		{ EDungeonTileType::HallwayCeilingTJunction,  TileSet->HallwayCeilingTJunction,  TEXT("HallwayCeilingTJunction") },
+		{ EDungeonTileType::HallwayCeilingCrossroad,  TileSet->HallwayCeilingCrossroad,  TEXT("HallwayCeilingCrossroad") },
+		{ EDungeonTileType::HallwayCeilingEndCap,     TileSet->HallwayCeilingEndCap,     TEXT("HallwayCeilingEndCap") },
 	};
 
 	for (const FTileSlot& Slot : Slots)
