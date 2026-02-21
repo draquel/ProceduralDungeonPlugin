@@ -15,6 +15,10 @@ namespace
 		{ 0, -1}, // -Y
 	};
 
+	// Staircase climb direction lookup: 0=+X, 1=-X, 2=+Y, 3=-Y
+	static constexpr int32 StairClimbDX[] = {1, -1, 0, 0};
+	static constexpr int32 StairClimbDY[] = {0, 0, 1, -1};
+
 	float GetCellCost(
 		const FDungeonGrid& Grid,
 		const FIntVector& Coord,
@@ -27,7 +31,25 @@ namespace
 		switch (Cell.CellType)
 		{
 		case EDungeonCellType::Empty:
+		{
+			// Block cells adjacent to staircase sides to prevent hallways
+			// running into walled staircase flanks.
+			for (const FHDir& Dir : HorizontalDirs)
+			{
+				const FIntVector N(Coord.X + Dir.DX, Coord.Y + Dir.DY, Coord.Z);
+				if (!Grid.IsInBounds(N)) continue;
+				const FDungeonCell& NC = Grid.GetCell(N);
+				if (NC.CellType != EDungeonCellType::Staircase) continue;
+
+				// Check if this cell is on the side (perpendicular to climb direction).
+				// Entry/exit direction cells are fine — only block the flanks.
+				const uint8 SD = NC.StaircaseDirection;
+				const bool bAlongClimb = (Dir.DX == StairClimbDX[SD] && Dir.DY == StairClimbDY[SD])
+					|| (Dir.DX == -StairClimbDX[SD] && Dir.DY == -StairClimbDY[SD]);
+				if (!bAlongClimb) return -1.0f;
+			}
 			return 1.0f;
+		}
 		case EDungeonCellType::Hallway:
 		case EDungeonCellType::Door:
 			return Config.HallwayMergeCostMultiplier;

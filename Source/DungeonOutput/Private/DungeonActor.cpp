@@ -77,6 +77,12 @@ void ADungeonActor::GenerateDungeon()
 		{ EDungeonTileType::DoorFrame,      TileSet->DoorFrame,      TEXT("DoorFrame") },
 		{ EDungeonTileType::EntranceFrame,  TileSet->EntranceFrame,  TEXT("EntranceFrame") },
 		{ EDungeonTileType::StaircaseMesh,  TileSet->StaircaseMesh,  TEXT("StaircaseMesh") },
+		// Hallway floor connectivity variants (null mesh = auto-skipped)
+		{ EDungeonTileType::HallwayFloorStraight,   TileSet->HallwayFloorStraight,   TEXT("HallwayFloorStraight") },
+		{ EDungeonTileType::HallwayFloorCorner,     TileSet->HallwayFloorCorner,     TEXT("HallwayFloorCorner") },
+		{ EDungeonTileType::HallwayFloorTJunction,  TileSet->HallwayFloorTJunction,  TEXT("HallwayFloorTJunction") },
+		{ EDungeonTileType::HallwayFloorCrossroad,  TileSet->HallwayFloorCrossroad,  TEXT("HallwayFloorCrossroad") },
+		{ EDungeonTileType::HallwayFloorEndCap,     TileSet->HallwayFloorEndCap,     TEXT("HallwayFloorEndCap") },
 	};
 
 	for (const FTileSlot& Slot : Slots)

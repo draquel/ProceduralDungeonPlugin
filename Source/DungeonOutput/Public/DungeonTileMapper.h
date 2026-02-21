@@ -18,6 +18,12 @@ enum class EDungeonTileType : uint8
 	DoorFrame,
 	EntranceFrame,
 	StaircaseMesh,
+	// Hallway floor connectivity variants
+	HallwayFloorStraight,   // 2 opposite neighbors
+	HallwayFloorCorner,     // 2 adjacent neighbors
+	HallwayFloorTJunction,  // 3 neighbors
+	HallwayFloorCrossroad,  // 4 neighbors
+	HallwayFloorEndCap,     // 1 neighbor
 	COUNT
 };
 

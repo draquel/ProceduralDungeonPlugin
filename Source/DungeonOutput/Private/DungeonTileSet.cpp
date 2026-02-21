@@ -12,6 +12,9 @@ UDungeonTileSet::UDungeonTileSet()
 	DoorFrame = TSoftObjectPtr<UStaticMesh>(DefaultCube);
 	EntranceFrame = TSoftObjectPtr<UStaticMesh>(DefaultCube);
 	StaircaseMesh = TSoftObjectPtr<UStaticMesh>(DefaultCube);
+	StaircaseMeshRotationOffset = FRotator::ZeroRotator;
+	HallwayFloorTJunctionRotationOffset = FRotator::ZeroRotator;
+	// Hallway floor variants default to null (fall back to HallwayFloor)
 }
 
 bool UDungeonTileSet::IsValid() const
@@ -41,6 +44,11 @@ void UDungeonTileSet::GetAllUniqueMeshes(TArray<TPair<FName, TSoftObjectPtr<USta
 	ADD_SLOT(DoorFrame);
 	ADD_SLOT(EntranceFrame);
 	ADD_SLOT(StaircaseMesh);
+	ADD_SLOT(HallwayFloorStraight);
+	ADD_SLOT(HallwayFloorCorner);
+	ADD_SLOT(HallwayFloorTJunction);
+	ADD_SLOT(HallwayFloorCrossroad);
+	ADD_SLOT(HallwayFloorEndCap);
 
 #undef ADD_SLOT
 }
