@@ -47,6 +47,10 @@ public:
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
 	void RandomizeSeed();
 
+	/** Move the editor viewport camera to the dungeon entrance cell. */
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
+	void GoToEntrance();
+
 	/** Get the cached generation result. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
 	const FDungeonResult& GetDungeonResult() const { return CachedResult; }

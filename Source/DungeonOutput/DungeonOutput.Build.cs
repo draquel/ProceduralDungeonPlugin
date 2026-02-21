@@ -13,5 +13,10 @@ public class DungeonOutput : ModuleRules
 			"Engine",
 			"DungeonCore",
 		});
+
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
 	}
 }

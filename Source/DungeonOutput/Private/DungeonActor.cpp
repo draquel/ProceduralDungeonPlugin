@@ -8,6 +8,8 @@
 
 #if WITH_EDITOR
 #include "DrawDebugHelpers.h"
+#include "Editor.h"
+#include "LevelEditorViewport.h"
 #endif
 
 ADungeonActor::ADungeonActor()
@@ -161,6 +163,37 @@ FVector ADungeonActor::GetEntranceWorldPosition() const
 			+ FVector(CachedResult.CellWorldSize * 0.5f, CachedResult.CellWorldSize * 0.5f, 0.0f);
 	}
 	return FVector::ZeroVector;
+}
+
+void ADungeonActor::GoToEntrance()
+{
+#if WITH_EDITOR
+	if (!bHasDungeon)
+	{
+		UE_LOG(LogDungeonOutput, Warning, TEXT("GoToEntrance: No dungeon generated."));
+		return;
+	}
+
+	const FVector Pos = GetEntranceWorldPosition();
+	const float ViewDistance = CachedResult.CellWorldSize * 3.0f;
+
+	// Position camera slightly above and behind the entrance, looking down at it
+	const FVector CamPos = Pos + FVector(-ViewDistance, 0.0f, ViewDistance);
+	const FRotator CamRot = (Pos - CamPos).Rotation();
+
+	if (GEditor && GEditor->GetActiveViewport())
+	{
+		FEditorViewportClient* ViewportClient = static_cast<FEditorViewportClient*>(GEditor->GetActiveViewport()->GetClient());
+		if (ViewportClient)
+		{
+			ViewportClient->SetViewLocation(CamPos);
+			ViewportClient->SetViewRotation(CamRot);
+			ViewportClient->Invalidate();
+		}
+	}
+
+	UE_LOG(LogDungeonOutput, Log, TEXT("GoToEntrance: Camera moved to entrance at (%.0f, %.0f, %.0f)"), Pos.X, Pos.Y, Pos.Z);
+#endif
 }
 
 int32 ADungeonActor::GetTotalInstanceCount() const

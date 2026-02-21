@@ -90,7 +90,9 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 	if (Result.EntranceRoomIndex >= 0)
 	{
 		Result.Rooms[Result.EntranceRoomIndex].RoomType = EDungeonRoomType::Entrance;
-		Result.EntranceCell = Result.Rooms[Result.EntranceRoomIndex].Center;
+		// Use ground-floor center so the entrance is at the walkable level
+		const FDungeonRoom& EntRoom = Result.Rooms[Result.EntranceRoomIndex];
+		Result.EntranceCell = EntRoom.Position + FIntVector(EntRoom.Size.X / 2, EntRoom.Size.Y / 2, 0);
 	}
 
 	UE_LOG(LogDungeonGenerator, Log, TEXT("Step 4: Selected entrance room %d (placement=%d)"),
@@ -234,13 +236,18 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 			}
 		}
 
+		// Use ground-floor center for pathfinding so hallways connect at
+		// the walkable level of multi-floor rooms, not the volumetric center.
+		const FIntVector StartPoint = RoomA.Position + FIntVector(RoomA.Size.X / 2, RoomA.Size.Y / 2, 0);
+		const FIntVector EndPoint = RoomB.Position + FIntVector(RoomB.Size.X / 2, RoomB.Size.Y / 2, 0);
+
 		UE_LOG(LogDungeonGenerator, Warning, TEXT("  Attempting hallway: room %d (%d,%d,%d) -> room %d (%d,%d,%d)"),
-			RoomAIdx, RoomA.Center.X, RoomA.Center.Y, RoomA.Center.Z,
-			RoomBIdx, RoomB.Center.X, RoomB.Center.Y, RoomB.Center.Z);
+			RoomAIdx, StartPoint.X, StartPoint.Y, StartPoint.Z,
+			RoomBIdx, EndPoint.X, EndPoint.Y, EndPoint.Z);
 
 		TArray<FIntVector> PathCells;
 		if (FHallwayPathfinder::FindPath(
-				Result.Grid, RoomA.Center, RoomB.Center, *Config,
+				Result.Grid, StartPoint, EndPoint, *Config,
 				RoomA.RoomIndex, RoomB.RoomIndex, PathCells))
 		{
 			TArray<FDungeonStaircase> HallwayStaircases;

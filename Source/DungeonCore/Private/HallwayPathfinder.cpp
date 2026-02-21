@@ -48,7 +48,9 @@ namespace
 	{
 		if (!Grid.IsInBounds(Coord)) return false;
 		const EDungeonCellType Type = Grid.GetCell(Coord).CellType;
-		return Type == EDungeonCellType::Empty || Type == EDungeonCellType::Hallway;
+		// Only allow empty cells — existing hallways, staircases, and rooms are off-limits.
+		// This prevents new staircases from overlapping existing corridors.
+		return Type == EDungeonCellType::Empty;
 	}
 
 	float Heuristic(const FIntVector& A, const FIntVector& B, int32 RiseToRun)
@@ -175,6 +177,11 @@ bool FHallwayPathfinder::FindPath(
 	TArray<bool> ClosedSet;
 	ClosedSet.SetNumZeroed(TotalCells);
 
+	// Tracks cells claimed by staircase body/headroom during pathfinding.
+	// Prevents a second staircase from stacking on top of an already-planned one.
+	TArray<bool> StaircaseReserved;
+	StaircaseReserved.SetNumZeroed(TotalCells);
+
 	// Min-heap open set
 	struct FNode
 	{
@@ -263,6 +270,27 @@ bool FHallwayPathfinder::FindPath(
 					const int32 ExitIdx = Grid.CellIndex(ExitCell);
 					if (ClosedSet[ExitIdx]) continue;
 
+					// Check that body/headroom cells don't overlap with an already-planned staircase
+					const int32 StairLowerZ = (Rise > 0) ? CurZ : CurZ - 1;
+					bool bOverlapsReserved = false;
+					for (int32 s = 1; s <= RiseToRun && !bOverlapsReserved; ++s)
+					{
+						const FIntVector BodyCell(CurX + Dir.DX * s, CurY + Dir.DY * s, StairLowerZ);
+						if (Grid.IsInBounds(BodyCell) && StaircaseReserved[Grid.CellIndex(BodyCell)])
+						{
+							bOverlapsReserved = true;
+						}
+						for (int32 h = 1; h <= HeadroomCells && !bOverlapsReserved; ++h)
+						{
+							const FIntVector HeadCell(CurX + Dir.DX * s, CurY + Dir.DY * s, StairLowerZ + h);
+							if (Grid.IsInBounds(HeadCell) && StaircaseReserved[Grid.CellIndex(HeadCell)])
+							{
+								bOverlapsReserved = true;
+							}
+						}
+					}
+					if (bOverlapsReserved) continue;
+
 					// Cost: traverse RiseToRun body cells + exit cell
 					const float StaircaseCost = static_cast<float>(RiseToRun + 1) + 1.0f;
 					const float ExitCellCost = GetCellCost(Grid, ExitCell, Config, SourceRoomIdx, DestRoomIdx);
@@ -275,6 +303,24 @@ bool FHallwayPathfinder::FindPath(
 						CameFrom[ExitIdx] = Current.CellIdx;
 						OpenSet.HeapPush(
 							FNode{TentativeG + Heuristic(ExitCell, End, RiseToRun), ExitIdx}, HeapPred);
+
+						// Reserve body and headroom cells for this staircase
+						for (int32 s = 1; s <= RiseToRun; ++s)
+						{
+							const FIntVector BodyCell(CurX + Dir.DX * s, CurY + Dir.DY * s, StairLowerZ);
+							if (Grid.IsInBounds(BodyCell))
+							{
+								StaircaseReserved[Grid.CellIndex(BodyCell)] = true;
+							}
+							for (int32 h = 1; h <= HeadroomCells; ++h)
+							{
+								const FIntVector HeadCell(CurX + Dir.DX * s, CurY + Dir.DY * s, StairLowerZ + h);
+								if (Grid.IsInBounds(HeadCell))
+								{
+									StaircaseReserved[Grid.CellIndex(HeadCell)] = true;
+								}
+							}
+						}
 					}
 				}
 			}
@@ -324,8 +370,12 @@ void FHallwayPathfinder::CarveHallway(
 				FDungeonStaircase Staircase;
 				Staircase.BottomCell = (Rise > 0) ? Prev : Coord;
 				Staircase.TopCell = (Rise > 0) ? Coord : Prev;
+				// Direction = climb direction (BottomCell → TopCell), not travel direction.
+				// When going up (Rise>0), travel == climb. When going down, invert.
+				const int32 ClimbDirX = (Rise > 0) ? DirX : -DirX;
+				const int32 ClimbDirY = (Rise > 0) ? DirY : -DirY;
 				Staircase.Direction = static_cast<uint8>(
-					(DirX == 1) ? 0 : (DirX == -1) ? 1 : (DirY == 1) ? 2 : 3);
+					(ClimbDirX == 1) ? 0 : (ClimbDirX == -1) ? 1 : (ClimbDirY == 1) ? 2 : 3);
 				Staircase.RiseRunRatio = RiseToRun;
 				Staircase.HeadroomCells = HeadroomCells;
 
@@ -343,7 +393,9 @@ void FHallwayPathfinder::CarveHallway(
 					}
 				}
 
-				// Carve headroom cells above body (Z is up)
+				// Carve headroom cells above body (Z is up).
+				// Claim empty and hallway cells as StaircaseHead to reserve the shaft
+				// and prevent later staircases from overlapping.
 				for (int32 s = 1; s <= RiseToRun; ++s)
 				{
 					for (int32 h = 1; h <= HeadroomCells; ++h)
@@ -352,7 +404,8 @@ void FHallwayPathfinder::CarveHallway(
 						if (Grid.IsInBounds(HeadCell))
 						{
 							FDungeonCell& HeadCellRef = Grid.GetCell(HeadCell);
-							if (HeadCellRef.CellType == EDungeonCellType::Empty)
+							if (HeadCellRef.CellType == EDungeonCellType::Empty
+								|| HeadCellRef.CellType == EDungeonCellType::Hallway)
 							{
 								HeadCellRef.CellType = EDungeonCellType::StaircaseHead;
 								HeadCellRef.HallwayIndex = HallwayIndex;

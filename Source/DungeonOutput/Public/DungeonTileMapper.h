@@ -4,6 +4,8 @@
 
 class UDungeonTileSet;
 struct FDungeonResult;
+struct FDungeonGrid;
+struct FDungeonCell;
 
 /** Identifies each type of tile geometry placed in the dungeon. */
 enum class EDungeonTileType : uint8
@@ -53,6 +55,18 @@ struct DUNGEONOUTPUT_API FDungeonTileMapper
 		const FVector& WorldOffset);
 
 private:
-	/** Returns true if the given cell coordinate is solid (OOB, Empty, or RoomWall). */
-	static bool IsSolid(const FDungeonResult& Result, int32 X, int32 Y, int32 Z);
+	/**
+	 * Returns true if a wall is needed on the current cell's face toward the horizontal neighbor.
+	 * Walls are placed when the neighbor is solid, OOB, or belongs to a different logical space
+	 * (different room, different hallway, room↔hallway boundary).
+	 * Returns false for Door/Entrance neighbors — those cells handle their own frames.
+	 */
+	static bool NeedsWall(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ);
+
+	/**
+	 * Returns true if a floor/ceiling boundary is needed between the current cell and a vertical neighbor.
+	 * A boundary is needed when the neighbor is solid, OOB, or belongs to a different logical space
+	 * (different room, different hallway, or different space type).
+	 */
+	static bool NeedsVerticalBoundary(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ);
 };
