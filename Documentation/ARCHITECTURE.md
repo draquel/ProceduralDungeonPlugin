@@ -2,7 +2,7 @@
 
 **Version**: 1.0  
 **Date**: 2026-02-19  
-**Target Engine**: Unreal Engine 5.7  
+**Target Engine**: Unreal Engine 5.8  
 **Relationship**: Standalone plugin with optional VoxelWorlds integration  
 **Reference Algorithm**: [Vazgriz — Procedurally Generated Dungeons](https://vazgriz.com/119/procedurally-generated-dungeons/) (TinyKeep-derived, extended to 3D)
 

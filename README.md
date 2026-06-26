@@ -1,6 +1,6 @@
 # ProceduralDungeon — 3D Procedural Dungeon Generator
 
-A standalone Unreal Engine 5.7 plugin for generating 3D multi-floor procedural dungeons with semantic room types, deterministic seeding, and optional VoxelWorlds integration.
+A standalone Unreal Engine 5.8 plugin for generating 3D multi-floor procedural dungeons with semantic room types, deterministic seeding, and optional VoxelWorlds integration.
 
 ## Key Features
 
@@ -37,9 +37,8 @@ ProceduralDungeon/
 │   ├── DefaultTileSet.uasset
 │   └── ExampleDungeonConfig.uasset
 └── Documentation/
-    ├── ARCHITECTURE.md           ← Complete system design
-    ├── ALGORITHM_REFERENCE.md    ← Detailed algorithm walkthrough
-    └── QUICK_START.md
+    └── ARCHITECTURE.md           ← Complete system design (algorithm walkthrough + quick start
+                                     are planned but not yet written)
 ```
 
 ### Module Dependencies
@@ -64,7 +63,7 @@ DungeonCore (Runtime)
 
 ### Prerequisites
 
-- Unreal Engine 5.7
+- Unreal Engine 5.8
 - Visual Studio 2022 or Rider
 - (Optional) VoxelWorlds plugin for voxel integration
 
@@ -225,8 +224,9 @@ See [IMPLEMENTATION_PHASES in ARCHITECTURE.md](Documentation/ARCHITECTURE.md) fo
 ## Documentation
 
 - **[Architecture](Documentation/ARCHITECTURE.md)** — Complete system design, data structures, pipeline, integration layer, design decisions
-- **[Algorithm Reference](Documentation/ALGORITHM_REFERENCE.md)** — Step-by-step algorithm walkthrough with diagrams
-- **[Quick Start](Documentation/QUICK_START.md)** — Getting started guide
+
+> A standalone algorithm-reference walkthrough and a quick-start guide are planned but not yet
+> written; for now the algorithm and getting-started material lives in ARCHITECTURE.md.
 
 For Claude Code assistance, project context is in `.claude/instructions.md`.
 
@@ -239,6 +239,7 @@ For Claude Code assistance, project context is in `.claude/instructions.md`.
 
 ---
 
-**Target Engine**: Unreal Engine 5.7  
+**Target Engine**: Unreal Engine 5.8  
 **Language**: C++17  
-**Status**: Architecture Complete, Implementation Pending
+**Status**: Implemented — all four modules (DungeonCore, DungeonOutput, DungeonEditor,
+DungeonVoxelIntegration) are present and built. See ARCHITECTURE.md for the design of record.
