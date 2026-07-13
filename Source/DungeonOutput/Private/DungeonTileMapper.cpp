@@ -146,7 +146,8 @@ bool FDungeonTileMapper::NeedsVerticalBoundary(const FDungeonGrid& Grid, const F
 FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	const FDungeonResult& Result,
 	const UDungeonTileSet& TileSet,
-	const FVector& WorldOffset)
+	const FVector& WorldOffset,
+	bool bOpenEntranceCeiling)
 {
 	FDungeonTileMapResult Out;
 
@@ -442,7 +443,11 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 
 				// Ceiling: place if cell above is a different space, solid, or OOB.
 				// Top face of the ceiling mesh is aligned flush with the cell's upper boundary.
-				if (bHasCeilingMesh && NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z + 1))
+				// The designated entrance cell's ceiling stays OPEN when a vertical passage
+				// enters from above (bOpenEntranceCeiling).
+				const bool bIsOpenEntranceCeiling = bOpenEntranceCeiling
+					&& X == Result.EntranceCell.X && Y == Result.EntranceCell.Y && Z == Result.EntranceCell.Z;
+				if (bHasCeilingMesh && !bIsOpenEntranceCeiling && NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z + 1))
 				{
 					const FVector CeilingPos = CellCenter + FVector(0.0f, 0.0f, CS);
 

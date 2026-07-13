@@ -322,15 +322,23 @@ bool FTileMapperStaircaseExists::RunTest(const FString& Parameters)
 	Result.CellWorldSize = 400.0f;
 	Result.Grid.Initialize(FIntVector(3, 3, 2));
 
-	// Place a staircase cell at (1,1,0) going +X
+	// Staircase meshes are driven by Result.Staircases (the pathfinder's records), not by cell
+	// flags — the cells only shape floors/walls around the ramp.
 	Result.Grid.GetCell(1, 1, 0).CellType = EDungeonCellType::Staircase;
-	Result.Grid.GetCell(1, 1, 0).StaircaseDirection = 0; // +X
+	Result.Grid.GetCell(1, 1, 0).StaircaseDirection = 0; // climb +X
+
+	FDungeonStaircase Staircase;
+	Staircase.BottomCell = FIntVector(1, 1, 0);
+	Staircase.TopCell = FIntVector(2, 1, 1);
+	Staircase.Direction = 0;
+	Staircase.RiseRunRatio = 1;
+	Result.Staircases.Add(Staircase);
 	Result.EntranceRoomIndex = -1;
 
 	FDungeonTileMapResult TileMap = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector);
 
 	const int32 StairCount = TileMap.Transforms[static_cast<int32>(EDungeonTileType::StaircaseMesh)].Num();
-	TestEqual(TEXT("Single staircase cell should produce 1 StaircaseMesh"), StairCount, 1);
+	TestEqual(TEXT("Single staircase record should produce 1 StaircaseMesh"), StairCount, 1);
 
 	CleanupTileSet(TS);
 	return true;
@@ -347,17 +355,27 @@ bool FTileMapperStaircaseRotation::RunTest(const FString& Parameters)
 
 	UDungeonTileSet* TS = CreateTileSet();
 
-	// Direction: 0=+X(0°), 1=-X(180°), 2=+Y(90°), 3=-Y(-90°)
-	const float ExpectedYaws[] = { 0.0f, 180.0f, 90.0f, -90.0f };
+	// Mesh convention: slopes DOWN along local +Y (climb = -Y), so the directional yaw rotates
+	// -Y onto the climb direction: 0=+X(90°), 1=-X(-90°), 2=+Y(180°), 3=-Y(0°).
+	const float ExpectedYaws[] = { 90.0f, -90.0f, 180.0f, 0.0f };
+	const FIntVector BottomCells[] = {
+		FIntVector(0, 1, 0), FIntVector(2, 1, 0), FIntVector(1, 0, 0), FIntVector(1, 2, 0) };
 
 	for (int32 Dir = 0; Dir < 4; ++Dir)
 	{
 		FDungeonResult Result;
-		Result.GridSize = FIntVector(3, 3, 1);
+		Result.GridSize = FIntVector(3, 3, 2);
 		Result.CellWorldSize = 400.0f;
-		Result.Grid.Initialize(FIntVector(3, 3, 1));
-		Result.Grid.GetCell(1, 1, 0).CellType = EDungeonCellType::Staircase;
-		Result.Grid.GetCell(1, 1, 0).StaircaseDirection = static_cast<uint8>(Dir);
+		Result.Grid.Initialize(FIntVector(3, 3, 2));
+		Result.Grid.GetCell(BottomCells[Dir].X, BottomCells[Dir].Y, 0).CellType = EDungeonCellType::Staircase;
+		Result.Grid.GetCell(BottomCells[Dir].X, BottomCells[Dir].Y, 0).StaircaseDirection = static_cast<uint8>(Dir);
+
+		FDungeonStaircase Staircase;
+		Staircase.BottomCell = BottomCells[Dir];
+		Staircase.TopCell = FIntVector(1, 1, 1);
+		Staircase.Direction = static_cast<uint8>(Dir);
+		Staircase.RiseRunRatio = 1;
+		Result.Staircases.Add(Staircase);
 		Result.EntranceRoomIndex = -1;
 
 		FDungeonTileMapResult TileMap = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector);
@@ -371,7 +389,7 @@ bool FTileMapperStaircaseRotation::RunTest(const FString& Parameters)
 			const float ActualYaw = StairTransforms[0].Rotator().Yaw;
 			TestTrue(FString::Printf(TEXT("Direction %d: yaw should be %.1f, got %.1f"),
 				Dir, ExpectedYaws[Dir], ActualYaw),
-				FMath::IsNearlyEqual(ActualYaw, ExpectedYaws[Dir], 0.1f));
+				FMath::IsNearlyZero(FRotator::NormalizeAxis(ActualYaw - ExpectedYaws[Dir]), 0.1f));
 		}
 	}
 
@@ -446,6 +464,49 @@ bool FTileMapperFullIntegration::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Should have ceiling tiles"), CeilingCount > 0);
 
 	Config->RemoveFromRoot();
+	CleanupTileSet(TS);
+	return true;
+}
+
+
+// --- OpenEntranceCeiling: only the designated entrance cell's ceiling is skipped ---
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTileMapperOpenEntranceCeiling,
+	"Dungeon.TileMapper.Entrance.OpenCeilingSkipsOnlyEntranceCell",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FTileMapperOpenEntranceCeiling::RunTest(const FString& Parameters)
+{
+	using namespace DungeonTileMapperTestHelpers;
+
+	UDungeonTileSet* TS = CreateTileSet();
+	FDungeonResult Result = CreateSingleRoomResult();
+
+	// Designate the room centre as the entrance cell (a vertical passage would land here).
+	Result.Grid.GetCell(2, 2, 0).CellType = EDungeonCellType::Entrance;
+	Result.EntranceCell = FIntVector(2, 2, 0);
+	Result.EntranceRoomIndex = 1;
+
+	// Default (closed): all 9 walkable cells are ceilinged.
+	FDungeonTileMapResult Closed = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector);
+	TestEqual(TEXT("Closed: 9 ceilings"),
+		Closed.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 9);
+
+	// Open: exactly the entrance cell's ceiling is skipped; floors untouched.
+	FDungeonTileMapResult Open = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector,
+		/*bOpenEntranceCeiling=*/true);
+	TestEqual(TEXT("Open: 8 ceilings (entrance cell open)"),
+		Open.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 8);
+	TestEqual(TEXT("Open: floors unaffected"),
+		Open.Transforms[static_cast<int32>(EDungeonTileType::RoomFloor)].Num(), 9);
+
+	// No ceiling transform sits over the entrance cell — cell (2,2) spans 800..1200, centre (1000,1000).
+	for (const FTransform& Xf : Open.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)])
+	{
+		const FVector P = Xf.GetLocation();
+		const bool bOverEntrance = FMath::Abs(P.X - 1000.0f) < 1.0f && FMath::Abs(P.Y - 1000.0f) < 1.0f;
+		TestFalse(TEXT("No ceiling over the entrance cell"), bOverEntrance);
+	}
+
 	CleanupTileSet(TS);
 	return true;
 }

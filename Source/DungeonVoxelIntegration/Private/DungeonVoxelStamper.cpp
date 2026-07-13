@@ -497,6 +497,8 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 	// ------------------------------------------------------------------
 	// Pass 2: Place boundary voxels on faces adjacent to solid/OOB
+	// (skipped in CarveOnly — tile meshes provide the lining, and boundary
+	// voxels thicken INTO the open cell where those tiles stand)
 	// ------------------------------------------------------------------
 	// Direction offsets: +X, -X, +Y, -Y, +Z, -Z
 	static const FIntVector Directions[6] = {
@@ -505,7 +507,8 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 		{0, 0, 1}, {0, 0, -1},
 	};
 
-	for (int32 GZ = 0; GZ < Grid.GridSize.Z; ++GZ)
+	const int32 BoundaryPassGridZ = (StampMode == EDungeonStampMode::CarveOnly) ? 0 : Grid.GridSize.Z;
+	for (int32 GZ = 0; GZ < BoundaryPassGridZ; ++GZ)
 	{
 		for (int32 GY = 0; GY < Grid.GridSize.Y; ++GY)
 		{

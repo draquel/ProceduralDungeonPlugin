@@ -15,6 +15,14 @@ enum class EDungeonStampMode : uint8
 
 	/** Merged with existing terrain SDF — only carves where terrain is currently solid. */
 	MergeAsStructure,
+
+	/**
+	 * CarveUnderground WITHOUT the boundary-voxel pass: open cells become bare voids in the
+	 * surrounding terrain. For tile-dressed dungeons (ADungeonActor over the same grid) — the
+	 * tile meshes provide the walls/floors/ceilings and the seal, and the boundary pass would
+	 * bury them (it thickens INTO the open cell, exactly where the tiles stand).
+	 */
+	CarveOnly,
 };
 
 /** Visual style for connecting the dungeon entrance to the terrain surface. */
