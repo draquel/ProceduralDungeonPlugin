@@ -28,6 +28,10 @@ public:
 	 * @param WorldOffset World-space offset applied to dungeon grid coordinates.
 	 * @param Style Visual style for the entrance passage.
 	 * @param Config Material and scale configuration.
+	 * @param bStopAtEntranceCellTop Stop the carve at the entrance cell's TOP plane instead of
+	 *        its bottom. For tile-dressed dungeons (CarveOnly + ADungeonActor): the mapper opens
+	 *        the entrance cell's ceiling, and carving deeper would run the shaft (and its wall
+	 *        shell) down through the tiled room interior.
 	 * @return Number of voxels modified, or -1 on failure.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "DungeonVoxelIntegration|Entrance")
@@ -36,7 +40,8 @@ public:
 		UVoxelChunkManager* ChunkManager,
 		const FVector& WorldOffset,
 		EDungeonEntranceStyle Style,
-		UDungeonVoxelConfig* Config);
+		UDungeonVoxelConfig* Config,
+		bool bStopAtEntranceCellTop = false);
 
 private:
 	/** Detect terrain surface height at a world XY position using the world mode or vertical sweep. */
@@ -55,15 +60,18 @@ private:
 		uint8 WallMaterialID,
 		uint8 BiomeID);
 
+	/** Bottom Z of the entrance carve: the entrance cell's bottom, or its top when stopping there. */
+	static float ComputeEntranceZ(const FDungeonResult& Result, const FVector& WorldOffset, bool bStopAtEntranceCellTop);
+
 	int32 StitchVerticalShaft(const FDungeonResult& Result, UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize);
+		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize, float EntranceZ);
 
 	int32 StitchSlopedTunnel(const FDungeonResult& Result, UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize);
+		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize, float EntranceZ);
 
 	int32 StitchCaveOpening(const FDungeonResult& Result, UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize);
+		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize, float EntranceZ);
 
 	int32 StitchTrapdoor(const FDungeonResult& Result, UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize);
+		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize, float EntranceZ);
 };

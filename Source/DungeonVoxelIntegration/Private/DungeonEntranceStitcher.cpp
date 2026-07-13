@@ -109,7 +109,8 @@ int32 UDungeonEntranceStitcher::StitchEntrance(
 	UVoxelChunkManager* ChunkManager,
 	const FVector& WorldOffset,
 	EDungeonEntranceStyle Style,
-	UDungeonVoxelConfig* Config)
+	UDungeonVoxelConfig* Config,
+	bool bStopAtEntranceCellTop)
 {
 	if (!ChunkManager)
 	{
@@ -137,26 +138,34 @@ int32 UDungeonEntranceStitcher::StitchEntrance(
 	}
 
 	const float VoxelSize = VoxelConfig->VoxelSize;
+	const float EntranceZ = ComputeEntranceZ(Result, WorldOffset, bStopAtEntranceCellTop);
 
 	UE_LOG(LogDungeonVoxelIntegration, Log,
-		TEXT("StitchEntrance: Style=%d EntranceCell=(%d,%d,%d)"),
+		TEXT("StitchEntrance: Style=%d EntranceCell=(%d,%d,%d) StopAtTop=%d"),
 		static_cast<int32>(Style),
-		Result.EntranceCell.X, Result.EntranceCell.Y, Result.EntranceCell.Z);
+		Result.EntranceCell.X, Result.EntranceCell.Y, Result.EntranceCell.Z,
+		bStopAtEntranceCellTop ? 1 : 0);
 
 	switch (Style)
 	{
 	case EDungeonEntranceStyle::VerticalShaft:
-		return StitchVerticalShaft(Result, ChunkManager, WorldOffset, Config, VoxelSize);
+		return StitchVerticalShaft(Result, ChunkManager, WorldOffset, Config, VoxelSize, EntranceZ);
 	case EDungeonEntranceStyle::SlopedTunnel:
-		return StitchSlopedTunnel(Result, ChunkManager, WorldOffset, Config, VoxelSize);
+		return StitchSlopedTunnel(Result, ChunkManager, WorldOffset, Config, VoxelSize, EntranceZ);
 	case EDungeonEntranceStyle::CaveOpening:
-		return StitchCaveOpening(Result, ChunkManager, WorldOffset, Config, VoxelSize);
+		return StitchCaveOpening(Result, ChunkManager, WorldOffset, Config, VoxelSize, EntranceZ);
 	case EDungeonEntranceStyle::Trapdoor:
-		return StitchTrapdoor(Result, ChunkManager, WorldOffset, Config, VoxelSize);
+		return StitchTrapdoor(Result, ChunkManager, WorldOffset, Config, VoxelSize, EntranceZ);
 	default:
 		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: Unknown style %d"), static_cast<int32>(Style));
 		return -1;
 	}
+}
+
+float UDungeonEntranceStitcher::ComputeEntranceZ(const FDungeonResult& Result, const FVector& WorldOffset, bool bStopAtEntranceCellTop)
+{
+	const float EntranceCellBottomZ = WorldOffset.Z + Result.EntranceCell.Z * Result.CellWorldSize;
+	return bStopAtEntranceCellTop ? EntranceCellBottomZ + Result.CellWorldSize : EntranceCellBottomZ;
 }
 
 // ============================================================================
@@ -168,14 +177,14 @@ int32 UDungeonEntranceStitcher::StitchVerticalShaft(
 	UVoxelChunkManager* ChunkManager,
 	const FVector& WorldOffset,
 	UDungeonVoxelConfig* Config,
-	float VoxelSize)
+	float VoxelSize,
+	float EntranceZ)
 {
 	const float CellWorldSize = Result.CellWorldSize;
 	const FVector EntranceWorldMin = WorldOffset + FVector(Result.EntranceCell) * CellWorldSize;
 	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
 
 	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
-	const float EntranceZ = EntranceWorldMin.Z;
 	const float HalfExtent = CellWorldSize * 0.5f;
 
 	UVoxelEditManager* EditManager = ChunkManager->GetEditManager();
@@ -208,14 +217,14 @@ int32 UDungeonEntranceStitcher::StitchSlopedTunnel(
 	UVoxelChunkManager* ChunkManager,
 	const FVector& WorldOffset,
 	UDungeonVoxelConfig* Config,
-	float VoxelSize)
+	float VoxelSize,
+	float EntranceZ)
 {
 	const float CellWorldSize = Result.CellWorldSize;
 	const FVector EntranceWorldMin = WorldOffset + FVector(Result.EntranceCell) * CellWorldSize;
 	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
 
 	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
-	const float EntranceZ = EntranceWorldMin.Z;
 	const float HalfExtent = CellWorldSize * 0.5f;
 
 	// Determine horizontal direction: from entrance toward nearest grid boundary
@@ -282,14 +291,14 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 	UVoxelChunkManager* ChunkManager,
 	const FVector& WorldOffset,
 	UDungeonVoxelConfig* Config,
-	float VoxelSize)
+	float VoxelSize,
+	float EntranceZ)
 {
 	const float CellWorldSize = Result.CellWorldSize;
 	const FVector EntranceWorldMin = WorldOffset + FVector(Result.EntranceCell) * CellWorldSize;
 	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
 
 	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
-	const float EntranceZ = EntranceWorldMin.Z;
 	const float BaseRadius = CellWorldSize * 0.5f;
 
 	UVoxelEditManager* EditManager = ChunkManager->GetEditManager();
@@ -364,14 +373,14 @@ int32 UDungeonEntranceStitcher::StitchTrapdoor(
 	UVoxelChunkManager* ChunkManager,
 	const FVector& WorldOffset,
 	UDungeonVoxelConfig* Config,
-	float VoxelSize)
+	float VoxelSize,
+	float EntranceZ)
 {
 	const float CellWorldSize = Result.CellWorldSize;
 	const FVector EntranceWorldMin = WorldOffset + FVector(Result.EntranceCell) * CellWorldSize;
 	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
 
 	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
-	const float EntranceZ = EntranceWorldMin.Z;
 
 	// Minimal 1x1 voxel column — no walls
 	const float HalfExtent = VoxelSize * 0.5f;

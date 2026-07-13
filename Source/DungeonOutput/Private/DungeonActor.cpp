@@ -57,7 +57,7 @@ void ADungeonActor::GenerateDungeon()
 
 	// Map grid to tile transforms
 	FDungeonTileMapResult TileMap = FDungeonTileMapper::MapToTiles(
-		CachedResult, *TileSet, GetActorLocation());
+		CachedResult, *TileSet, GetActorLocation(), bOpenEntranceCeiling);
 
 	// Resolve TileSet slots to mesh pointers (order must match EDungeonTileType)
 	struct FTileSlot

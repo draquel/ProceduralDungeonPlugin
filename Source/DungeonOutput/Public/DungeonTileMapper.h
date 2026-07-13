@@ -59,12 +59,17 @@ struct DUNGEONOUTPUT_API FDungeonTileMapper
 	 * @param Result      The generated dungeon grid data.
 	 * @param TileSet     Mesh mapping (used to determine which slots are active).
 	 * @param WorldOffset World-space offset applied to all transforms (typically actor location).
+	 * @param bOpenEntranceCeiling Skip the ceiling tile of the DESIGNATED entrance cell
+	 *        (Result.EntranceCell) so a vertical passage stitched from above (shaft/trapdoor)
+	 *        can drop into the entrance room. Off by default: a standalone dungeon keeps its
+	 *        ceiling closed.
 	 * @return Per-tile-type arrays of instance transforms.
 	 */
 	static FDungeonTileMapResult MapToTiles(
 		const FDungeonResult& Result,
 		const UDungeonTileSet& TileSet,
-		const FVector& WorldOffset);
+		const FVector& WorldOffset,
+		bool bOpenEntranceCeiling = false);
 
 private:
 	/**

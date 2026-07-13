@@ -35,6 +35,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon")
 	int64 Seed = 0;
 
+	/**
+	 * Skip the designated entrance cell's ceiling tile so a vertical passage from above (e.g. a
+	 * voxel-stitched shaft) drops into the entrance room. Leave off for standalone dungeons.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon")
+	bool bOpenEntranceCeiling = false;
+
 	/** Generate the dungeon and create tile geometry. */
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
 	void GenerateDungeon();
