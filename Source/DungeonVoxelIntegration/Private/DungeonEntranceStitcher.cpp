@@ -14,15 +14,14 @@
 
 float UDungeonEntranceStitcher::DetectSurfaceHeight(UVoxelChunkManager* ChunkManager, float WorldX, float WorldY) const
 {
-	// Try heightmap-based detection first
+	// Try heightmap-based detection first. GetGeneratedSurfaceHeight is the canonical analytic
+	// surface: continentalness AND terrain-conditioning zones included, so the shaft top lands on
+	// the REAL generated surface. (The raw IVoxelWorldMode::GetTerrainHeightAt misses conditioning
+	// — on a flattened POI pad it either capped the shaft below the pad crust or collared it above.)
 	const IVoxelWorldMode* WorldMode = ChunkManager->GetWorldMode();
 	if (WorldMode && WorldMode->IsHeightmapBased())
 	{
-		const UVoxelWorldConfiguration* VoxelConfig = ChunkManager->GetConfiguration();
-		if (VoxelConfig)
-		{
-			return WorldMode->GetTerrainHeightAt(WorldX, WorldY, VoxelConfig->NoiseParams);
-		}
+		return ChunkManager->GetGeneratedSurfaceHeight(WorldX, WorldY);
 	}
 
 	// Fallback: vertical sweep from high to low, find first solid voxel
