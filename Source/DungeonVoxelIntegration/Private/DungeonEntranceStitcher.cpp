@@ -57,6 +57,7 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 	float BottomZ,
 	float VoxelSize,
 	bool bPlaceWalls,
+	float WallTopZ,
 	uint8 WallMaterialID,
 	uint8 BiomeID)
 {
@@ -69,6 +70,11 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 
 	for (float Z = BottomZ; Z < TopZ; Z += VoxelSize)
 	{
+		// The carve may overshoot the terrain surface (breaking the mouth open), but the wall
+		// shell must not follow it up: solid ring voxels placed in the air above the surface
+		// would build a knee-high collar the character cannot step over.
+		const bool bWallLayer = bPlaceWalls && Z < WallTopZ;
+
 		for (float Y = Center.Y - OuterExtent; Y < Center.Y + OuterExtent; Y += VoxelSize)
 		{
 			for (float X = Center.X - OuterExtent; X < Center.X + OuterExtent; X += VoxelSize)
@@ -85,7 +91,7 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 						++VoxelsModified;
 					}
 				}
-				else if (bPlaceWalls && DistX < OuterExtent && DistY < OuterExtent)
+				else if (bWallLayer && DistX < OuterExtent && DistY < OuterExtent)
 				{
 					// Shell — place wall
 					if (EditManager->ApplyEdit(WorldPos, WallVoxel, EEditMode::Set))
@@ -185,6 +191,10 @@ int32 UDungeonEntranceStitcher::StitchVerticalShaft(
 	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
 
 	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
+	// Overshoot ABOVE the surface: carving to exactly SurfaceZ leaves the voxel band CONTAINING
+	// the isosurface crossing uncarved, and the mesher skins a collidable lid over the mouth.
+	// (Player digs never hit this — the spherical brush overshoots the clicked surface point.)
+	const float CarveTopZ = SurfaceZ + 2.0f * VoxelSize;
 	const float HalfExtent = CellWorldSize * 0.5f;
 
 	UVoxelEditManager* EditManager = ChunkManager->GetEditManager();
@@ -193,21 +203,21 @@ int32 UDungeonEntranceStitcher::StitchVerticalShaft(
 
 	const int32 VoxelsModified = CarveColumn(EditManager, ChunkManager,
 		FVector(EntranceCenter.X, EntranceCenter.Y, 0.0f),
-		HalfExtent, SurfaceZ, EntranceZ, VoxelSize,
-		true, Config->WallMaterialID, Config->DungeonBiomeID);
+		HalfExtent, CarveTopZ, EntranceZ, VoxelSize,
+		true, /*WallTopZ=*/SurfaceZ, Config->WallMaterialID, Config->DungeonBiomeID);
 
 	EditManager->EndEditOperation();
 
 	// Mark affected chunks dirty
-	for (float Z = EntranceZ; Z < SurfaceZ; Z += VoxelSize * 32.0f)
+	for (float Z = EntranceZ; Z < CarveTopZ; Z += VoxelSize * 32.0f)
 	{
 		ChunkManager->MarkChunkDirty(
 			ChunkManager->WorldToChunkCoord(FVector(EntranceCenter.X, EntranceCenter.Y, Z)));
 	}
 
 	UE_LOG(LogDungeonVoxelIntegration, Log,
-		TEXT("StitchVerticalShaft: Carved from Z=%.0f to Z=%.0f, %d voxels modified"),
-		SurfaceZ, EntranceZ, VoxelsModified);
+		TEXT("StitchVerticalShaft: Carved from Z=%.0f (surface %.0f) to Z=%.0f, %d voxels modified"),
+		CarveTopZ, SurfaceZ, EntranceZ, VoxelsModified);
 
 	return VoxelsModified;
 }
@@ -225,6 +235,8 @@ int32 UDungeonEntranceStitcher::StitchSlopedTunnel(
 	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
 
 	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
+	// Break THROUGH the surface band, not up to it (see StitchVerticalShaft).
+	const float CarveTopZ = SurfaceZ + 2.0f * VoxelSize;
 	const float HalfExtent = CellWorldSize * 0.5f;
 
 	// Determine horizontal direction: from entrance toward nearest grid boundary
@@ -251,12 +263,12 @@ int32 UDungeonEntranceStitcher::StitchSlopedTunnel(
 
 	int32 TotalVoxels = 0;
 	const float HeightPerStep = CellWorldSize;
-	const int32 NumSteps = FMath::CeilToInt32((SurfaceZ - EntranceZ) / HeightPerStep);
+	const int32 NumSteps = FMath::CeilToInt32((CarveTopZ - EntranceZ) / HeightPerStep);
 
 	for (int32 Step = 0; Step < NumSteps; ++Step)
 	{
 		const float StepZ = EntranceZ + Step * HeightPerStep;
-		const float StepTopZ = FMath::Min(StepZ + HeightPerStep, SurfaceZ);
+		const float StepTopZ = FMath::Min(StepZ + HeightPerStep, CarveTopZ);
 		const FVector StepCenter = FVector(
 			EntranceCenter.X + HorizDir.X * Step * CellWorldSize,
 			EntranceCenter.Y + HorizDir.Y * Step * CellWorldSize,
@@ -264,7 +276,7 @@ int32 UDungeonEntranceStitcher::StitchSlopedTunnel(
 
 		TotalVoxels += CarveColumn(EditManager, ChunkManager,
 			StepCenter, HalfExtent, StepTopZ, StepZ, VoxelSize,
-			true, Config->WallMaterialID, Config->DungeonBiomeID);
+			true, /*WallTopZ=*/SurfaceZ, Config->WallMaterialID, Config->DungeonBiomeID);
 	}
 
 	EditManager->EndEditOperation();
@@ -299,6 +311,8 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
 
 	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
+	// Break THROUGH the surface band, not up to it (see StitchVerticalShaft).
+	const float CarveTopZ = SurfaceZ + 2.0f * VoxelSize;
 	const float BaseRadius = CellWorldSize * 0.5f;
 
 	UVoxelEditManager* EditManager = ChunkManager->GetEditManager();
@@ -311,9 +325,9 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 
 	// Carve a column with noise-displaced radius per Z-level
 	const float WallThickness = VoxelSize;
-	const float TotalHeight = SurfaceZ - EntranceZ;
+	const float TotalHeight = CarveTopZ - EntranceZ;
 
-	for (float Z = EntranceZ; Z < SurfaceZ; Z += VoxelSize)
+	for (float Z = EntranceZ; Z < CarveTopZ; Z += VoxelSize)
 	{
 		// Noise displacement: use sin-based pseudo-noise for organic feel
 		const float ZNormalized = (Z - EntranceZ) / FMath::Max(TotalHeight, 1.0f);
@@ -342,7 +356,7 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 						++VoxelsModified;
 					}
 				}
-				else if (DistXY < OuterRadius)
+				else if (DistXY < OuterRadius && Z < SurfaceZ) // no wall collar above ground
 				{
 					if (EditManager->ApplyEdit(WorldPos, WallVoxel, EEditMode::Set))
 					{
@@ -356,7 +370,7 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 	EditManager->EndEditOperation();
 
 	// Mark affected chunks dirty
-	for (float Z = EntranceZ; Z < SurfaceZ; Z += VoxelSize * 32.0f)
+	for (float Z = EntranceZ; Z < CarveTopZ; Z += VoxelSize * 32.0f)
 	{
 		ChunkManager->MarkChunkDirty(
 			ChunkManager->WorldToChunkCoord(FVector(EntranceCenter.X, EntranceCenter.Y, Z)));
@@ -381,6 +395,9 @@ int32 UDungeonEntranceStitcher::StitchTrapdoor(
 	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
 
 	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
+	// Break THROUGH the surface band, not up to it (see StitchVerticalShaft) — a 1x1 column
+	// skins over even more readily than the wide shaft.
+	const float CarveTopZ = SurfaceZ + 2.0f * VoxelSize;
 
 	// Minimal 1x1 voxel column — no walls
 	const float HalfExtent = VoxelSize * 0.5f;
@@ -391,8 +408,8 @@ int32 UDungeonEntranceStitcher::StitchTrapdoor(
 
 	const int32 VoxelsModified = CarveColumn(EditManager, ChunkManager,
 		FVector(EntranceCenter.X, EntranceCenter.Y, 0.0f),
-		HalfExtent, SurfaceZ, EntranceZ, VoxelSize,
-		false, 0, 0);
+		HalfExtent, CarveTopZ, EntranceZ, VoxelSize,
+		false, /*WallTopZ=*/SurfaceZ, 0, 0);
 
 	EditManager->EndEditOperation();
 
