@@ -55,6 +55,18 @@ struct DUNGEONOUTPUT_API FDungeonTileMapResult
 struct DUNGEONOUTPUT_API FDungeonTileMapper
 {
 	/**
+	 * Tile slab thickness as a fraction of the cell size: floors/ceilings/walls are scaled to
+	 * CellWorldSize * this along their thin axis. The SINGLE source of truth for tile metrics —
+	 * consumers placing content against tile geometry (walkable floor top = cell bottom +
+	 * TileThickness, wall inner face = cell edge - TileThickness) derive from here rather than
+	 * assuming a constant.
+	 */
+	static constexpr float TileThicknessFraction = 0.2f;
+
+	/** Tile slab thickness (world units) for a given cell size. */
+	static float TileThickness(float CellWorldSize) { return CellWorldSize * TileThicknessFraction; }
+
+	/**
 	 * Map a dungeon result to tile instance transforms.
 	 * @param Result      The generated dungeon grid data.
 	 * @param TileSet     Mesh mapping (used to determine which slots are active).
