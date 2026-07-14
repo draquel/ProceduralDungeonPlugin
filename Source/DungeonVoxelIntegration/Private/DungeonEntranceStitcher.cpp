@@ -65,7 +65,11 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 	const FVoxelData AirVoxel = FVoxelData::Air();
 	const FVoxelData WallVoxel = FVoxelData::Solid(WallMaterialID, BiomeID);
 
-	const float WallThickness = VoxelSize; // 1 voxel wall shell
+	// 2-voxel wall shell: a single-voxel skin meshes as a pinched thin feature in smooth
+	// (MC/DC) worlds wherever the shaft crosses open cave space — unstable normals streak the
+	// triplanar texturing. Two voxels give the mesher a solid interior sample so both faces
+	// mesh cleanly (and the shell survives a grazing edit).
+	const float WallThickness = 2.0f * VoxelSize;
 	const float OuterExtent = HalfExtentXY + (bPlaceWalls ? WallThickness : 0.0f);
 
 	for (float Z = BottomZ; Z < TopZ; Z += VoxelSize)
@@ -323,8 +327,9 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 	const FVoxelData AirVoxel = FVoxelData::Air();
 	const FVoxelData WallVoxel = FVoxelData::Solid(Config->WallMaterialID, Config->DungeonBiomeID);
 
-	// Carve a column with noise-displaced radius per Z-level
-	const float WallThickness = VoxelSize;
+	// Carve a column with noise-displaced radius per Z-level. 2-voxel shell for the same
+	// reason as CarveColumn: a 1-voxel skin streaks in smooth worlds where it crosses caves.
+	const float WallThickness = 2.0f * VoxelSize;
 	const float TotalHeight = CarveTopZ - EntranceZ;
 
 	for (float Z = EntranceZ; Z < CarveTopZ; Z += VoxelSize)

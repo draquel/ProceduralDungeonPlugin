@@ -154,7 +154,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	const FIntVector& GridSize = Result.Grid.GridSize;
 	const float CS = Result.CellWorldSize;
 	const float HalfCS = CS * 0.5f;
-	const float Thin = CS * 0.2f;
+	const float Thin = TileThickness(CS);
 
 	// --- Compute per-mesh bounding box info for scale-to-fit and pivot correction ---
 	// Each mesh may have different native dimensions and pivot locations.
