@@ -47,7 +47,12 @@ private:
 	/** Detect terrain surface height at a world XY position using the world mode or vertical sweep. */
 	float DetectSurfaceHeight(UVoxelChunkManager* ChunkManager, float WorldX, float WorldY) const;
 
-	/** Carve a column of air from top Z to bottom Z, with optional wall shell. */
+	/**
+	 * Carve a column of air from top Z to bottom Z, with optional wall shell.
+	 * @param WallTopZ Walls are only placed on layers BELOW this Z (typically the terrain
+	 *        surface): the carve may overshoot the surface to break the mouth open, but a wall
+	 *        ring above ground would collar the opening shut for walking characters.
+	 */
 	int32 CarveColumn(
 		class UVoxelEditManager* EditManager,
 		UVoxelChunkManager* ChunkManager,
@@ -57,6 +62,7 @@ private:
 		float BottomZ,
 		float VoxelSize,
 		bool bPlaceWalls,
+		float WallTopZ,
 		uint8 WallMaterialID,
 		uint8 BiomeID);
 
