@@ -319,7 +319,8 @@ int32 UDungeonVoxelStamper::PlaceOuterSeal(
 	int32 Face,
 	float Thickness,
 	uint8 MaterialID,
-	uint8 BiomeID)
+	uint8 BiomeID,
+	TSet<FIntVector>& SealedVoxels)
 {
 	int32 Count = 0;
 	const FVoxelData SolidVoxel = FVoxelData::Solid(MaterialID, BiomeID);
@@ -340,7 +341,17 @@ int32 UDungeonVoxelStamper::PlaceOuterSeal(
 		{
 			for (int32 IX = Min.X; IX <= Max.X; ++IX)
 			{
-				const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
+				const FIntVector Index(IX, IY, IZ);
+
+				// Already sealed by an adjoining face or cell — same value, so skip the work.
+				bool bAlreadySealed = false;
+				SealedVoxels.Add(Index, &bAlreadySealed);
+				if (bAlreadySealed)
+				{
+					continue;
+				}
+
+				const FVector WorldPos = Lattice.Center(Index);
 
 				// Never plug a room, hallway or the cell this seal belongs to. The lateral
 				// widening that closes the corners is exactly what makes this reachable.
@@ -623,6 +634,14 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 	// voxels asserted around the volume, procedural cave voids breach it and terrain reads through
 	// the tiles. Same boundary predicates, shell written OUTSIDE the cell instead.
 	const bool bOuterSeal = (StampMode == EDungeonStampMode::CarveOnly);
+
+	// Shared across every seal slab so each shell voxel is written exactly once.
+	TSet<FIntVector> SealedVoxels;
+	if (bOuterSeal)
+	{
+		SealedVoxels.Reserve(Grid.Cells.Num() * 4);
+	}
+
 	for (int32 GZ = 0; GZ < Grid.GridSize.Z; ++GZ)
 	{
 		for (int32 GY = 0; GY < Grid.GridSize.Y; ++GY)
@@ -664,7 +683,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 					const int32 Placed = bOuterSeal
 						? PlaceOuterSeal(EditManager, Lattice, Result, WorldOffset, CellWorldMin,
-							CellWorldSize, Face, WallWorldThickness, MatID, BiomeID)
+							CellWorldSize, Face, WallWorldThickness, MatID, BiomeID, SealedVoxels)
 						: PlaceBoundary(EditManager, Lattice, CellWorldMin, CellWorldSize,
 							Face, WallWorldThickness, MatID, BiomeID);
 					StampResult.VoxelsModified += Placed;

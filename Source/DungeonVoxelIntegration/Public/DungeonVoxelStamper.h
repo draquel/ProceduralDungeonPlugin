@@ -118,6 +118,10 @@ private:
 	 * Voxels whose centre falls inside any open cell are skipped, so a seal can never plug a
 	 * neighbouring room or hallway.
 	 *
+	 * @param SealedVoxels Lattice indices already sealed by this stamp. The six face slabs of a
+	 *        cell overlap at its edges and corners (that overlap is what closes the shell), and
+	 *        neighbouring cells re-seal each other's shells, so without this the same voxel is
+	 *        written many times over — all redundant, since every write is the same value.
 	 * @return Number of voxels placed.
 	 */
 	int32 PlaceOuterSeal(
@@ -130,7 +134,8 @@ private:
 		int32 Face,
 		float Thickness,
 		uint8 MaterialID,
-		uint8 BiomeID);
+		uint8 BiomeID,
+		TSet<FIntVector>& SealedVoxels);
 
 	/** True when a world position falls inside an open (traversable) dungeon cell. */
 	static bool IsInsideOpenCell(
