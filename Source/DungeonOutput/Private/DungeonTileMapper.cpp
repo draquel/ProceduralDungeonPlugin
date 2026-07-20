@@ -67,6 +67,16 @@ bool FDungeonTileMapper::NeedsWall(const FDungeonGrid& Grid, const FDungeonCell&
 			|| Type == EDungeonCellType::StaircaseHead;
 	};
 
+	// Door/Entrance opening toward hallway = no wall (the connection point between a room and its
+	// hallway). Without this the mapper walls every doorway shut while UDungeonVoxelStamper leaves
+	// the same face open — the room is carved and reachable in voxels but sealed by tile collision.
+	// These two predicates MUST agree; see the duplication note at the top of this pass.
+	if ((Current.CellType == EDungeonCellType::Door || Current.CellType == EDungeonCellType::Entrance)
+		&& IsHallwayFamily(Neighbor.CellType))
+	{
+		return false;
+	}
+
 	// Same room = no wall
 	if (IsRoomFamily(Current.CellType) && IsRoomFamily(Neighbor.CellType)
 		&& Current.RoomIndex == Neighbor.RoomIndex)
@@ -75,17 +85,16 @@ bool FDungeonTileMapper::NeedsWall(const FDungeonGrid& Grid, const FDungeonCell&
 	}
 
 	// Hallway-family ↔ hallway-family = no wall (hallways merge naturally at intersections).
-	// Exception: StaircaseHead cells only open toward same-staircase body/headroom cells.
+	// Exception: StaircaseHead cells only open toward the same staircase's cells — which includes
+	// the plain Hallway it exits into, keyed by HallwayIndex. Requiring BOTH sides to be
+	// staircase-family walled the top of every staircase off from its own exit corridor.
 	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType))
 	{
 		const bool bEitherIsHead = (Current.CellType == EDungeonCellType::StaircaseHead
 			|| Neighbor.CellType == EDungeonCellType::StaircaseHead);
 		if (bEitherIsHead)
 		{
-			const bool bBothStaircaseFamily =
-				(Current.CellType == EDungeonCellType::Staircase || Current.CellType == EDungeonCellType::StaircaseHead)
-				&& (Neighbor.CellType == EDungeonCellType::Staircase || Neighbor.CellType == EDungeonCellType::StaircaseHead);
-			return !(bBothStaircaseFamily && Current.HallwayIndex == Neighbor.HallwayIndex);
+			return Current.HallwayIndex != Neighbor.HallwayIndex;
 		}
 		return false;
 	}
@@ -109,6 +118,13 @@ bool FDungeonTileMapper::NeedsVerticalBoundary(const FDungeonGrid& Grid, const F
 		return true;
 	}
 
+	// Door/Entrance neighbors handle their own frames — don't floor/ceiling them off. Mirrors
+	// UDungeonVoxelStamper::NeedsVerticalBoundary; the two must agree or tiles seal a carved space.
+	if (Neighbor.CellType == EDungeonCellType::Door || Neighbor.CellType == EDungeonCellType::Entrance)
+	{
+		return false;
+	}
+
 	// Room-family cells (Room, Door, Entrance) — grouped by RoomIndex
 	auto IsRoomFamily = [](EDungeonCellType Type)
 	{
@@ -124,6 +140,14 @@ bool FDungeonTileMapper::NeedsVerticalBoundary(const FDungeonGrid& Grid, const F
 			|| Type == EDungeonCellType::Staircase
 			|| Type == EDungeonCellType::StaircaseHead;
 	};
+
+	// Door/Entrance opening toward hallway = no boundary (vertical connections, e.g. a doorway
+	// that drops straight onto a staircase).
+	if ((Current.CellType == EDungeonCellType::Door || Current.CellType == EDungeonCellType::Entrance)
+		&& IsHallwayFamily(Neighbor.CellType))
+	{
+		return false;
+	}
 
 	// Same room = no boundary (multi-floor room interior)
 	if (IsRoomFamily(Current.CellType) && IsRoomFamily(Neighbor.CellType)

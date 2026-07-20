@@ -550,13 +550,23 @@ void FHallwayPathfinder::CarveHallway(
 		if (Cell.CellType != EDungeonCellType::Room) continue;
 		if (Cell.RoomIndex != SourceRoomIdx && Cell.RoomIndex != DestRoomIdx) continue;
 
-		// Check if an adjacent path cell is a hallway
-		const bool bPrevIsHallway = (i > 0 && Grid.IsInBounds(Path[i - 1]) &&
-			Grid.GetCell(Path[i - 1]).CellType == EDungeonCellType::Hallway);
-		const bool bNextIsHallway = (i < Path.Num() - 1 && Grid.IsInBounds(Path[i + 1]) &&
-			Grid.GetCell(Path[i + 1]).CellType == EDungeonCellType::Hallway);
+		// Check if an adjacent path cell belongs to the hallway family. Testing only for plain
+		// Hallway left every connection that arrives via a staircase without a Door — and with no
+		// Door, both FDungeonTileMapper and UDungeonVoxelStamper classify room↔hallway as
+		// "different spaces" and wall the connection off, sealing the room from that corridor.
+		auto IsHallwayFamily = [](EDungeonCellType Type)
+		{
+			return Type == EDungeonCellType::Hallway
+				|| Type == EDungeonCellType::Staircase
+				|| Type == EDungeonCellType::StaircaseHead;
+		};
 
-		if (bPrevIsHallway || bNextIsHallway)
+		const bool bPrevConnects = (i > 0 && Grid.IsInBounds(Path[i - 1]) &&
+			IsHallwayFamily(Grid.GetCell(Path[i - 1]).CellType));
+		const bool bNextConnects = (i < Path.Num() - 1 && Grid.IsInBounds(Path[i + 1]) &&
+			IsHallwayFamily(Grid.GetCell(Path[i + 1]).CellType));
+
+		if (bPrevConnects || bNextConnects)
 		{
 			Cell.CellType = EDungeonCellType::Door;
 			Cell.HallwayIndex = HallwayIndex;

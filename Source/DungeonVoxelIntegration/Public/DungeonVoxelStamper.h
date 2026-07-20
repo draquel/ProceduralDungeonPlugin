@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "DungeonVoxelTypes.h"
+#include "DungeonVoxelLattice.h"
 #include "DungeonVoxelStamper.generated.h"
 
 struct FDungeonResult;
@@ -84,20 +85,56 @@ private:
 	/** Carve a single cell's voxel volume to air. Returns number of voxels modified. */
 	int32 CarveCell(
 		class UVoxelEditManager* EditManager,
+		const FDungeonVoxelLattice& Lattice,
 		const FVector& CellWorldMin,
-		int32 VoxelsPerCell,
-		float VoxelSize,
+		float CellWorldSize,
 		bool bOnlyIfSolid,
 		UVoxelChunkManager* ChunkManager);
 
-	/** Place boundary voxels on a cell face. Returns number of voxels placed. */
+	/**
+	 * Place boundary voxels on a cell face, INSIDE the open cell (the stone lining that makes a
+	 * VoxelCarved dungeon read as rock). Returns number of voxels placed.
+	 */
 	int32 PlaceBoundary(
 		class UVoxelEditManager* EditManager,
+		const FDungeonVoxelLattice& Lattice,
 		const FVector& CellWorldMin,
-		int32 VoxelsPerCell,
-		float VoxelSize,
+		float CellWorldSize,
 		int32 Face,
-		int32 Thickness,
+		float Thickness,
 		uint8 MaterialID,
 		uint8 BiomeID);
+
+	/**
+	 * Place seal voxels on a cell face, OUTSIDE the open cell.
+	 *
+	 * CarveOnly dungeons are lined by tile meshes, so the inward boundary pass is skipped — but
+	 * that also removed the only thing asserting the surrounding voxel field is solid. Dungeons
+	 * are deliberately anchored at the cave layer, so procedural cave voids intersect the volume
+	 * and breach it: terrain reads straight through the thin tiles. This writes the shell just
+	 * outside each boundary face instead, sealing the volume without occupying the cell where the
+	 * tiles stand.
+	 *
+	 * Voxels whose centre falls inside any open cell are skipped, so a seal can never plug a
+	 * neighbouring room or hallway.
+	 *
+	 * @return Number of voxels placed.
+	 */
+	int32 PlaceOuterSeal(
+		class UVoxelEditManager* EditManager,
+		const FDungeonVoxelLattice& Lattice,
+		const FDungeonResult& Result,
+		const FVector& WorldOffset,
+		const FVector& CellWorldMin,
+		float CellWorldSize,
+		int32 Face,
+		float Thickness,
+		uint8 MaterialID,
+		uint8 BiomeID);
+
+	/** True when a world position falls inside an open (traversable) dungeon cell. */
+	static bool IsInsideOpenCell(
+		const FDungeonResult& Result,
+		const FVector& WorldOffset,
+		const FVector& WorldPos);
 };

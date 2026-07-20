@@ -109,15 +109,26 @@ void ADungeonActor::GenerateDungeon()
 			continue;
 		}
 
-		// Create HISMC
+		// Create HISMC.
+		//
+		// Mobility must MATCH THE ROOT's: UE refuses to attach a Static component to a non-Static
+		// parent and aborts the attach outright ("AttachTo: 'Root' is not static, cannot attach
+		// 'X' which is static to it"). An editor-placed ADungeonActor has a Static root, but a
+		// POI-streamed one is spawned during play and gets a Movable root — so hard-coding Static
+		// silently dropped every tile component out of the actor's hierarchy, leaving orphaned
+		// components that clean up and cull incorrectly.
+		USceneComponent* Root = GetRootComponent();
+		const EComponentMobility::Type TileMobility =
+			Root ? Root->Mobility.GetValue() : EComponentMobility::Movable;
+
 		UHierarchicalInstancedStaticMeshComponent* HISMC = NewObject<UHierarchicalInstancedStaticMeshComponent>(
 			this, Slot.Name, RF_Transient);
 		HISMC->SetStaticMesh(LoadedMesh);
-		HISMC->SetMobility(EComponentMobility::Static);
+		HISMC->SetMobility(TileMobility);
 		HISMC->SetCastShadow(true);
 		HISMC->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		HISMC->SetCollisionResponseToAllChannels(ECR_Block);
-		HISMC->AttachToComponent(GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+		HISMC->AttachToComponent(Root, FAttachmentTransformRules::KeepRelativeTransform);
 		HISMC->RegisterComponent();
 
 		// Add all instances (world-space transforms)
