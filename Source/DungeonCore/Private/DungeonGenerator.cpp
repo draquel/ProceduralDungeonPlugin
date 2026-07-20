@@ -211,6 +211,58 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 	// =========================================================================
 	uint8 HallwayIdx = 1;
 
+	// Carve one hallway between two rooms, registering the staircases and connectivity it
+	// produces. Returns false when A* finds no path (the grid is too congested by then).
+	auto TryConnectRooms = [&](int32 RoomAIdx, int32 RoomBIdx, bool bIsMST) -> bool
+	{
+		const FDungeonRoom& RoomA = Result.Rooms[RoomAIdx];
+		const FDungeonRoom& RoomB = Result.Rooms[RoomBIdx];
+
+		// Use ground-floor center for pathfinding so hallways connect at
+		// the walkable level of multi-floor rooms, not the volumetric center.
+		const FIntVector StartPoint = RoomA.Position + FIntVector(RoomA.Size.X / 2, RoomA.Size.Y / 2, 0);
+		const FIntVector EndPoint = RoomB.Position + FIntVector(RoomB.Size.X / 2, RoomB.Size.Y / 2, 0);
+
+		TArray<FIntVector> PathCells;
+		if (!FHallwayPathfinder::FindPath(
+				Result.Grid, StartPoint, EndPoint, *Config,
+				RoomA.RoomIndex, RoomB.RoomIndex, PathCells))
+		{
+			return false;
+		}
+
+		TArray<FDungeonStaircase> HallwayStaircases;
+		FHallwayPathfinder::CarveHallway(
+			Result.Grid, PathCells, HallwayIdx,
+			RoomA.RoomIndex, RoomB.RoomIndex, *Config, HallwayStaircases);
+
+		UE_LOG(LogDungeonGenerator, Warning, TEXT("    SUCCESS: path=%d cells, staircases=%d"),
+			PathCells.Num(), HallwayStaircases.Num());
+
+		FDungeonHallway Hallway;
+		Hallway.HallwayIndex = HallwayIdx;
+		Hallway.RoomA = static_cast<uint8>(RoomAIdx);
+		Hallway.RoomB = static_cast<uint8>(RoomBIdx);
+		Hallway.PathCells = MoveTemp(PathCells);
+		Hallway.bIsFromMST = bIsMST;
+		Hallway.bHasStaircase = HallwayStaircases.Num() > 0;
+
+		// Collect staircases into result
+		for (FDungeonStaircase& Staircase : HallwayStaircases)
+		{
+			Result.Staircases.Add(MoveTemp(Staircase));
+		}
+
+		Result.Hallways.Add(MoveTemp(Hallway));
+
+		// Update room connectivity
+		Result.Rooms[RoomAIdx].ConnectedRoomIndices.AddUnique(static_cast<uint8>(RoomBIdx));
+		Result.Rooms[RoomBIdx].ConnectedRoomIndices.AddUnique(static_cast<uint8>(RoomAIdx));
+
+		HallwayIdx++;
+		return true;
+	};
+
 	for (const auto& Edge : Result.FinalEdges)
 	{
 		const int32 RoomAIdx = Edge.Key;
@@ -220,9 +272,6 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 		{
 			continue;
 		}
-
-		const FDungeonRoom& RoomA = Result.Rooms[RoomAIdx];
-		const FDungeonRoom& RoomB = Result.Rooms[RoomBIdx];
 
 		// Check if this is an MST edge
 		bool bIsMST = false;
@@ -236,51 +285,15 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 			}
 		}
 
-		// Use ground-floor center for pathfinding so hallways connect at
-		// the walkable level of multi-floor rooms, not the volumetric center.
-		const FIntVector StartPoint = RoomA.Position + FIntVector(RoomA.Size.X / 2, RoomA.Size.Y / 2, 0);
-		const FIntVector EndPoint = RoomB.Position + FIntVector(RoomB.Size.X / 2, RoomB.Size.Y / 2, 0);
-
+		const FDungeonRoom& LogRoomA = Result.Rooms[RoomAIdx];
+		const FDungeonRoom& LogRoomB = Result.Rooms[RoomBIdx];
 		UE_LOG(LogDungeonGenerator, Warning, TEXT("  Attempting hallway: room %d (%d,%d,%d) -> room %d (%d,%d,%d)"),
-			RoomAIdx, StartPoint.X, StartPoint.Y, StartPoint.Z,
-			RoomBIdx, EndPoint.X, EndPoint.Y, EndPoint.Z);
+			RoomAIdx,
+			LogRoomA.Position.X + LogRoomA.Size.X / 2, LogRoomA.Position.Y + LogRoomA.Size.Y / 2, LogRoomA.Position.Z,
+			RoomBIdx,
+			LogRoomB.Position.X + LogRoomB.Size.X / 2, LogRoomB.Position.Y + LogRoomB.Size.Y / 2, LogRoomB.Position.Z);
 
-		TArray<FIntVector> PathCells;
-		if (FHallwayPathfinder::FindPath(
-				Result.Grid, StartPoint, EndPoint, *Config,
-				RoomA.RoomIndex, RoomB.RoomIndex, PathCells))
-		{
-			TArray<FDungeonStaircase> HallwayStaircases;
-			FHallwayPathfinder::CarveHallway(
-				Result.Grid, PathCells, HallwayIdx,
-				RoomA.RoomIndex, RoomB.RoomIndex, *Config, HallwayStaircases);
-
-			UE_LOG(LogDungeonGenerator, Warning, TEXT("    SUCCESS: path=%d cells, staircases=%d"),
-				PathCells.Num(), HallwayStaircases.Num());
-
-			FDungeonHallway Hallway;
-			Hallway.HallwayIndex = HallwayIdx;
-			Hallway.RoomA = static_cast<uint8>(RoomAIdx);
-			Hallway.RoomB = static_cast<uint8>(RoomBIdx);
-			Hallway.PathCells = MoveTemp(PathCells);
-			Hallway.bIsFromMST = bIsMST;
-			Hallway.bHasStaircase = HallwayStaircases.Num() > 0;
-
-			// Collect staircases into result
-			for (FDungeonStaircase& Staircase : HallwayStaircases)
-			{
-				Result.Staircases.Add(MoveTemp(Staircase));
-			}
-
-			Result.Hallways.Add(MoveTemp(Hallway));
-
-			// Update room connectivity
-			Result.Rooms[RoomAIdx].ConnectedRoomIndices.AddUnique(static_cast<uint8>(RoomBIdx));
-			Result.Rooms[RoomBIdx].ConnectedRoomIndices.AddUnique(static_cast<uint8>(RoomAIdx));
-
-			HallwayIdx++;
-		}
-		else
+		if (!TryConnectRooms(RoomAIdx, RoomBIdx, bIsMST))
 		{
 			UE_LOG(LogDungeonGenerator, Warning,
 				TEXT("A* failed to find path between room %d and room %d"),
@@ -290,6 +303,133 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 
 	UE_LOG(LogDungeonGenerator, Warning, TEXT("Step 9: Carved %d hallways, %d total staircases"),
 		Result.Hallways.Num(), Result.Staircases.Num());
+
+	// =========================================================================
+	// Step 9b: Connectivity Repair
+	//
+	// The final graph is decided before any carving, so a room whose edges ALL fail A* is
+	// silently orphaned — unreachable from the entrance and, for a leaf room holding its
+	// single MST edge, permanently invisible to the player. Failures cluster on the last
+	// edges carved: by then earlier hallways and their reserved staircase headroom have
+	// consumed the empty cells a new staircase needs.
+	//
+	// Retry each orphan against the FULL Delaunay adjacency (the natural neighbours the MST
+	// pruned away), then against any already-reachable room, nearest first. Repeat while
+	// progress is made so a chain of orphans attaches one link at a time.
+	// =========================================================================
+	auto GatherReachableRooms = [&Result]() -> TSet<int32>
+	{
+		TSet<int32> Reachable;
+		if (!Result.Rooms.IsValidIndex(Result.EntranceRoomIndex))
+		{
+			return Reachable;
+		}
+
+		TArray<int32> Stack;
+		Stack.Add(Result.EntranceRoomIndex);
+		Reachable.Add(Result.EntranceRoomIndex);
+		while (Stack.Num() > 0)
+		{
+			const int32 Current = Stack.Pop();
+			for (const uint8 Neighbor : Result.Rooms[Current].ConnectedRoomIndices)
+			{
+				if (Result.Rooms.IsValidIndex(Neighbor) && !Reachable.Contains(Neighbor))
+				{
+					Reachable.Add(Neighbor);
+					Stack.Add(Neighbor);
+				}
+			}
+		}
+		return Reachable;
+	};
+
+	if (Result.Rooms.IsValidIndex(Result.EntranceRoomIndex))
+	{
+		bool bMadeProgress = true;
+		while (bMadeProgress)
+		{
+			bMadeProgress = false;
+
+			const TSet<int32> Reachable = GatherReachableRooms();
+			if (Reachable.Num() >= Result.Rooms.Num())
+			{
+				break;
+			}
+
+			for (int32 RoomIdx = 0; RoomIdx < Result.Rooms.Num(); ++RoomIdx)
+			{
+				if (Reachable.Contains(RoomIdx))
+				{
+					continue;
+				}
+
+				// Delaunay neighbours are the natural adjacency; prefer them, then fall back
+				// to any reachable room. Nearest first within each tier.
+				TSet<int32> DelaunayNeighbors;
+				for (const TPair<uint8, uint8>& Edge : Result.DelaunayEdges)
+				{
+					if (Edge.Key == RoomIdx)       { DelaunayNeighbors.Add(Edge.Value); }
+					else if (Edge.Value == RoomIdx) { DelaunayNeighbors.Add(Edge.Key); }
+				}
+
+				struct FRepairCandidate { int32 Index; int32 Tier; double DistSq; };
+				TArray<FRepairCandidate> Candidates;
+				const FVector OrphanCenter(Result.Rooms[RoomIdx].Center);
+				for (int32 Other = 0; Other < Result.Rooms.Num(); ++Other)
+				{
+					if (!Reachable.Contains(Other))
+					{
+						continue;
+					}
+					Candidates.Add({
+						Other,
+						DelaunayNeighbors.Contains(Other) ? 0 : 1,
+						FVector::DistSquared(OrphanCenter, FVector(Result.Rooms[Other].Center)) });
+				}
+
+				Candidates.Sort([](const FRepairCandidate& A, const FRepairCandidate& B)
+				{
+					return (A.Tier != B.Tier) ? (A.Tier < B.Tier) : (A.DistSq < B.DistSq);
+				});
+
+				for (const FRepairCandidate& Candidate : Candidates)
+				{
+					UE_LOG(LogDungeonGenerator, Warning,
+						TEXT("  Repair: retrying orphaned room %d -> room %d (tier %d)"),
+						RoomIdx, Candidate.Index, Candidate.Tier);
+
+					if (TryConnectRooms(RoomIdx, Candidate.Index, /*bIsMST=*/false))
+					{
+						Result.FinalEdges.Add(TPair<uint8, uint8>(
+							static_cast<uint8>(RoomIdx), static_cast<uint8>(Candidate.Index)));
+						bMadeProgress = true;
+						break;
+					}
+				}
+			}
+		}
+
+		const TSet<int32> FinalReachable = GatherReachableRooms();
+		if (FinalReachable.Num() < Result.Rooms.Num())
+		{
+			FString Orphans;
+			for (int32 RoomIdx = 0; RoomIdx < Result.Rooms.Num(); ++RoomIdx)
+			{
+				if (!FinalReachable.Contains(RoomIdx))
+				{
+					Orphans += FString::Printf(TEXT(" %d"), RoomIdx);
+				}
+			}
+			UE_LOG(LogDungeonGenerator, Error,
+				TEXT("Step 9b: %d/%d rooms unreachable after repair — no route exists for room(s):%s"),
+				Result.Rooms.Num() - FinalReachable.Num(), Result.Rooms.Num(), *Orphans);
+		}
+		else
+		{
+			UE_LOG(LogDungeonGenerator, Warning,
+				TEXT("Step 9b: all %d rooms reachable from the entrance"), Result.Rooms.Num());
+		}
+	}
 
 	// =========================================================================
 	// Step 10: Place Entrances & Doors (doors handled by CarveHallway)
