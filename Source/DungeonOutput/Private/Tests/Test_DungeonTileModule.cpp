@@ -68,7 +68,9 @@ bool FTileModuleUniformAnchor::RunTest(const FString& Parameters)
 
 	// RoomFloor is a module authored at 200; place at cell 400 -> uniform scale 2.0.
 	UDungeonTileModule* Module = MakeModule(/*ReferenceCellSize=*/200.0f, /*ElementCount=*/2);
-	TS->TileModules.Add(EDungeonTileType::RoomFloor, TSoftObjectPtr<UDungeonTileModule>(Module));
+	FDungeonTileSlot FloorSlot;
+	FloorSlot.Module = TSoftObjectPtr<UDungeonTileModule>(Module);
+	TS->Slots.Add(EDungeonTileType::RoomFloor, FloorSlot);
 
 	FDungeonResult Result = MakeSingleRoom(/*CellWorldSize=*/400.0f);
 	FDungeonTileMapResult TileMap = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector);

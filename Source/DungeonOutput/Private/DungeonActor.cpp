@@ -62,7 +62,7 @@ void ADungeonActor::GenerateDungeon()
 	FDungeonTileMapResult TileMap = FDungeonTileMapper::MapToTiles(
 		CachedResult, *TileSet, GetActorLocation(), bOpenEntranceCeiling);
 
-	// Resolve TileSet slots to mesh pointers (order must match EDungeonTileType)
+	// Resolve each tile type to its single mesh + a display name, from the consolidated slots.
 	struct FTileSlot
 	{
 		EDungeonTileType Type;
@@ -70,29 +70,15 @@ void ADungeonActor::GenerateDungeon()
 		FName Name;
 	};
 
-	const FTileSlot Slots[] =
+	TArray<FTileSlot> Slots;
+	Slots.Reserve(FDungeonTileMapResult::TypeCount);
+	const UEnum* TypeEnum = StaticEnum<EDungeonTileType>();
+	for (int32 i = 0; i < FDungeonTileMapResult::TypeCount; ++i)
 	{
-		{ EDungeonTileType::RoomFloor,      TileSet->RoomFloor,      TEXT("RoomFloor") },
-		{ EDungeonTileType::HallwayFloor,   TileSet->HallwayFloor,   TEXT("HallwayFloor") },
-		{ EDungeonTileType::RoomCeiling,    TileSet->RoomCeiling,    TEXT("RoomCeiling") },
-		{ EDungeonTileType::HallwayCeiling, TileSet->HallwayCeiling, TEXT("HallwayCeiling") },
-		{ EDungeonTileType::WallSegment,    TileSet->WallSegment,    TEXT("WallSegment") },
-		{ EDungeonTileType::DoorFrame,      TileSet->DoorFrame,      TEXT("DoorFrame") },
-		{ EDungeonTileType::EntranceFrame,  TileSet->EntranceFrame,  TEXT("EntranceFrame") },
-		{ EDungeonTileType::StaircaseMesh,  TileSet->StaircaseMesh,  TEXT("StaircaseMesh") },
-		// Hallway floor connectivity variants (null mesh = auto-skipped)
-		{ EDungeonTileType::HallwayFloorStraight,   TileSet->HallwayFloorStraight,   TEXT("HallwayFloorStraight") },
-		{ EDungeonTileType::HallwayFloorCorner,     TileSet->HallwayFloorCorner,     TEXT("HallwayFloorCorner") },
-		{ EDungeonTileType::HallwayFloorTJunction,  TileSet->HallwayFloorTJunction,  TEXT("HallwayFloorTJunction") },
-		{ EDungeonTileType::HallwayFloorCrossroad,  TileSet->HallwayFloorCrossroad,  TEXT("HallwayFloorCrossroad") },
-		{ EDungeonTileType::HallwayFloorEndCap,     TileSet->HallwayFloorEndCap,     TEXT("HallwayFloorEndCap") },
-		// Hallway ceiling connectivity variants (null mesh = auto-skipped)
-		{ EDungeonTileType::HallwayCeilingStraight,   TileSet->HallwayCeilingStraight,   TEXT("HallwayCeilingStraight") },
-		{ EDungeonTileType::HallwayCeilingCorner,     TileSet->HallwayCeilingCorner,     TEXT("HallwayCeilingCorner") },
-		{ EDungeonTileType::HallwayCeilingTJunction,  TileSet->HallwayCeilingTJunction,  TEXT("HallwayCeilingTJunction") },
-		{ EDungeonTileType::HallwayCeilingCrossroad,  TileSet->HallwayCeilingCrossroad,  TEXT("HallwayCeilingCrossroad") },
-		{ EDungeonTileType::HallwayCeilingEndCap,     TileSet->HallwayCeilingEndCap,     TEXT("HallwayCeilingEndCap") },
-	};
+		const EDungeonTileType Type = static_cast<EDungeonTileType>(i);
+		const FName Name = TypeEnum ? FName(*TypeEnum->GetNameStringByValue(i)) : NAME_None;
+		Slots.Add({ Type, TileSet->GetMesh(Type), Name });
+	}
 
 	// --- Resolve tiles to render batches (mesh + material identity), expanding modules ---
 	// One HISM is created per unique (mesh, material) across the whole tileset, so identical
@@ -129,15 +115,13 @@ void ADungeonActor::GenerateDungeon()
 		UDungeonTileModule* Module = nullptr;
 		if (Slot.Type != EDungeonTileType::StaircaseMesh)
 		{
-			if (const TSoftObjectPtr<UDungeonTileModule>* ModulePtr = TileSet->TileModules.Find(Slot.Type))
+			const TSoftObjectPtr<UDungeonTileModule> ModulePtr = TileSet->GetModule(Slot.Type);
+			if (!ModulePtr.IsNull())
 			{
-				if (!ModulePtr->IsNull())
+				UDungeonTileModule* Loaded = ModulePtr.LoadSynchronous();
+				if (Loaded && Loaded->HasGeometry())
 				{
-					UDungeonTileModule* Loaded = ModulePtr->LoadSynchronous();
-					if (Loaded && Loaded->HasGeometry())
-					{
-						Module = Loaded;
-					}
+					Module = Loaded;
 				}
 			}
 		}
