@@ -254,6 +254,34 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayCeilingTJunction)] = TileSet.HallwayCeilingTJunctionScaleMultiplier;
 	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayCeilingCrossroad)] = TileSet.HallwayCeilingCrossroadScaleMultiplier;
 	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayCeilingEndCap)]    = TileSet.HallwayCeilingEndCapScaleMultiplier;
+	// Base-slot scale multipliers (parity with the variants — a mesh authored at the wrong scale
+	// can be corrected in data instead of re-authored).
+	ScaleMultipliers[static_cast<int32>(EDungeonTileType::RoomFloor)]      = TileSet.RoomFloorScaleMultiplier;
+	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayFloor)]   = TileSet.HallwayFloorScaleMultiplier;
+	ScaleMultipliers[static_cast<int32>(EDungeonTileType::RoomCeiling)]    = TileSet.RoomCeilingScaleMultiplier;
+	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayCeiling)] = TileSet.HallwayCeilingScaleMultiplier;
+	ScaleMultipliers[static_cast<int32>(EDungeonTileType::WallSegment)]    = TileSet.WallSegmentScaleMultiplier;
+	ScaleMultipliers[static_cast<int32>(EDungeonTileType::DoorFrame)]      = TileSet.DoorFrameScaleMultiplier;
+	ScaleMultipliers[static_cast<int32>(EDungeonTileType::EntranceFrame)]  = TileSet.EntranceFrameScaleMultiplier;
+
+	// --- Per-base-slot rotation offsets (identity by default) ---
+	// Composed with the placement rotation so a mesh with a non-canonical orientation (e.g. a
+	// directional wall whose finished face points the wrong way) can be corrected in data.
+	FRotator BaseRotationOffsets[FDungeonTileMapResult::TypeCount];
+	for (int32 i = 0; i < FDungeonTileMapResult::TypeCount; ++i) BaseRotationOffsets[i] = FRotator::ZeroRotator;
+	BaseRotationOffsets[static_cast<int32>(EDungeonTileType::RoomFloor)]      = TileSet.RoomFloorRotationOffset;
+	BaseRotationOffsets[static_cast<int32>(EDungeonTileType::HallwayFloor)]   = TileSet.HallwayFloorRotationOffset;
+	BaseRotationOffsets[static_cast<int32>(EDungeonTileType::RoomCeiling)]    = TileSet.RoomCeilingRotationOffset;
+	BaseRotationOffsets[static_cast<int32>(EDungeonTileType::HallwayCeiling)] = TileSet.HallwayCeilingRotationOffset;
+	BaseRotationOffsets[static_cast<int32>(EDungeonTileType::WallSegment)]    = TileSet.WallSegmentRotationOffset;
+	BaseRotationOffsets[static_cast<int32>(EDungeonTileType::DoorFrame)]      = TileSet.DoorFrameRotationOffset;
+	BaseRotationOffsets[static_cast<int32>(EDungeonTileType::EntranceFrame)]  = TileSet.EntranceFrameRotationOffset;
+
+	// Compose a placement rotation with a slot's configured offset (offset applied mesh-local first).
+	auto ApplyRot = [&](EDungeonTileType Type, const FRotator& PlacementRot) -> FRotator
+	{
+		return (PlacementRot.Quaternion() * BaseRotationOffsets[static_cast<int32>(Type)].Quaternion()).Rotator();
+	};
 
 	// Floor/ceiling target: CS × CS × Thin — mesh local axes: X=CS, Y=CS, Z=Thin
 	// ScaleMultiplier is applied on top so users can fine-tune without fighting auto-fit.
@@ -267,8 +295,9 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	// Wall target: Thin × CS × CS — mesh local X=thin, Y=width, Z=height (pre-rotation)
 	auto WallScale = [&](EDungeonTileType Type) -> FVector
 	{
+		const FVector& M = ScaleMultipliers[static_cast<int32>(Type)];
 		const FVector& E = MeshInfos[static_cast<int32>(Type)].Extent;
-		return FVector(Thin / E.X, CS / E.Y, CS / E.Z);
+		return FVector(Thin / E.X * M.X, CS / E.Y * M.Y, CS / E.Z * M.Z);
 	};
 
 	// Pivot correction: offset placement so the mesh's bounding box center
@@ -467,10 +496,11 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					else
 					{
 						const FVector FS = FloorScale(EDungeonTileType::RoomFloor);
+						const FRotator FloorRot = ApplyRot(EDungeonTileType::RoomFloor, FRotator::ZeroRotator);
 						const float FloorHalfZ = MeshInfos[static_cast<int32>(EDungeonTileType::RoomFloor)].Extent.Z * FS.Z * 0.5f;
 						Out.Transforms[static_cast<int32>(EDungeonTileType::RoomFloor)].Emplace(
-							FTransform(FRotator::ZeroRotator,
-								CellCenter + PivotOffset(EDungeonTileType::RoomFloor, FS, FRotator::ZeroRotator) + FVector(0.0f, 0.0f, FloorHalfZ), FS));
+							FTransform(FloorRot,
+								CellCenter + PivotOffset(EDungeonTileType::RoomFloor, FS, FloorRot) + FVector(0.0f, 0.0f, FloorHalfZ), FS));
 					}
 				}
 
@@ -504,10 +534,11 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					else
 					{
 						const FVector CeilS = FloorScale(CeilingType);
+						const FRotator CeilRot = ApplyRot(CeilingType, FRotator::ZeroRotator);
 						const float CeilHalfZ = MeshInfos[static_cast<int32>(CeilingType)].Extent.Z * CeilS.Z * 0.5f;
 						Out.Transforms[static_cast<int32>(CeilingType)].Emplace(
-							FTransform(FRotator::ZeroRotator,
-								CeilingPos + PivotOffset(CeilingType, CeilS, FRotator::ZeroRotator) - FVector(0.0f, 0.0f, CeilHalfZ), CeilS));
+							FTransform(CeilRot,
+								CeilingPos + PivotOffset(CeilingType, CeilS, CeilRot) - FVector(0.0f, 0.0f, CeilHalfZ), CeilS));
 					}
 				}
 
@@ -532,6 +563,11 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					const int32 NX = X + WC.DX;
 					const int32 NY = Y + WC.DY;
 					const FRotator FaceRot(0.0f, WC.Yaw, 0.0f);
+					// Per-face placement rotation composed with each wall-family slot's offset, so a
+					// mesh whose finished face points the wrong way can be flipped in data (Yaw=180).
+					const FRotator WallRot = ApplyRot(EDungeonTileType::WallSegment, FaceRot);
+					const FRotator DoorRot = ApplyRot(EDungeonTileType::DoorFrame, FaceRot);
+					const FRotator EntranceRot = ApplyRot(EDungeonTileType::EntranceFrame, FaceRot);
 
 					if (bIsDoor || bIsEntrance)
 					{
@@ -550,8 +586,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 							{
 								const FVector WS = WallScale(EDungeonTileType::WallSegment);
 								Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-									FTransform(FaceRot,
-										CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, FaceRot), WS));
+									FTransform(WallRot,
+										CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 							}
 						}
 						else
@@ -566,6 +602,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 								const EDungeonTileType FrameType = bIsDoor
 									? EDungeonTileType::DoorFrame
 									: EDungeonTileType::EntranceFrame;
+								const FRotator FrameRot = bIsDoor ? DoorRot : EntranceRot;
 
 								const bool bHasFrameMesh = bIsDoor
 									? !TileSet.DoorFrame.IsNull()
@@ -575,8 +612,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 								{
 									const FVector FS = WallScale(FrameType);
 									Out.Transforms[static_cast<int32>(FrameType)].Emplace(
-										FTransform(FaceRot,
-											CellCenter + WC.Offset + PivotOffset(FrameType, FS, FaceRot), FS));
+										FTransform(FrameRot,
+											CellCenter + WC.Offset + PivotOffset(FrameType, FS, FrameRot), FS));
 								}
 							}
 						}
@@ -636,8 +673,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						{
 							const FVector WS = WallScale(EDungeonTileType::WallSegment);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-								FTransform(FaceRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, FaceRot), WS));
+								FTransform(WallRot,
+									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 						}
 					}
 					else if (bIsStaircaseHead)
@@ -676,8 +713,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						{
 							const FVector WS = WallScale(EDungeonTileType::WallSegment);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-								FTransform(FaceRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, FaceRot), WS));
+								FTransform(WallRot,
+									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 						}
 					}
 					else if (NeedsWall(Result.Grid, Cell, NX, NY, Z))
@@ -718,15 +755,15 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						{
 							const FVector FS = WallScale(EDungeonTileType::DoorFrame);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::DoorFrame)].Emplace(
-								FTransform(FaceRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::DoorFrame, FS, FaceRot), FS));
+								FTransform(DoorRot,
+									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::DoorFrame, FS, DoorRot), FS));
 						}
 						else if (!bStaircaseEntry && !TileSet.WallSegment.IsNull())
 						{
 							const FVector WS = WallScale(EDungeonTileType::WallSegment);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-								FTransform(FaceRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, FaceRot), WS));
+								FTransform(WallRot,
+									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 						}
 					}
 				}

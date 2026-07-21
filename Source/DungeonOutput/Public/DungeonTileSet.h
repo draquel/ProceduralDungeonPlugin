@@ -17,13 +17,33 @@ class DUNGEONOUTPUT_API UDungeonTileSet : public UDataAsset
 public:
 	UDungeonTileSet();
 
+	// Base-slot orientation corrections. These give the base tiles the same knobs the hallway
+	// variants already have: a mesh imported with a non-canonical orientation (e.g. a directional
+	// wall whose finished face points the wrong way) can be rotated/scaled in data rather than
+	// forcing a re-author. Defaults are identity (no change), so existing tilesets are unaffected.
+	// Convention reminders:
+	//   Floor/Ceiling mesh local axes: X=width, Y=depth, Z=thickness (flat slab).
+	//   Wall/Door/Entrance mesh local axes: X=depth(thin), Y=width, Z=height; finished face toward +X.
+
 	// --- Floors ---
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors")
 	TSoftObjectPtr<UStaticMesh> RoomFloor;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors")
+	FRotator RoomFloorRotationOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors")
+	FVector RoomFloorScaleMultiplier;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors")
 	TSoftObjectPtr<UStaticMesh> HallwayFloor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors")
+	FRotator HallwayFloorRotationOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Floors")
+	FVector HallwayFloorScaleMultiplier;
 
 	// --- Ceilings ---
 
@@ -31,22 +51,55 @@ public:
 	TSoftObjectPtr<UStaticMesh> RoomCeiling;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings")
+	FRotator RoomCeilingRotationOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings")
+	FVector RoomCeilingScaleMultiplier;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings")
 	TSoftObjectPtr<UStaticMesh> HallwayCeiling;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings")
+	FRotator HallwayCeilingRotationOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Ceilings")
+	FVector HallwayCeilingScaleMultiplier;
 
 	// --- Walls ---
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Walls")
 	TSoftObjectPtr<UStaticMesh> WallSegment;
 
+	/** Rotation offset for wall meshes with non-standard native orientation.
+	 *  Default convention: the finished face points toward +X (into the room). If your wall faces
+	 *  the wrong way, set Yaw=180 to flip it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Walls")
+	FRotator WallSegmentRotationOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Walls")
+	FVector WallSegmentScaleMultiplier;
+
 	// --- Doors ---
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Doors")
 	TSoftObjectPtr<UStaticMesh> DoorFrame;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Doors")
+	FRotator DoorFrameRotationOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Doors")
+	FVector DoorFrameScaleMultiplier;
+
 	// --- Entrance ---
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Entrance")
 	TSoftObjectPtr<UStaticMesh> EntranceFrame;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Entrance")
+	FRotator EntranceFrameRotationOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Entrance")
+	FVector EntranceFrameScaleMultiplier;
 
 	// --- Hallway Floor Variants (optional — null falls back to HallwayFloor) ---
 

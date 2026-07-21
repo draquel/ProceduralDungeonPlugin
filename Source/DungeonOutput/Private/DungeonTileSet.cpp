@@ -13,6 +13,21 @@ UDungeonTileSet::UDungeonTileSet()
 	EntranceFrame = TSoftObjectPtr<UStaticMesh>(DefaultCube);
 	StaircaseMesh = TSoftObjectPtr<UStaticMesh>(DefaultCube);
 	StaircaseMeshRotationOffset = FRotator::ZeroRotator;
+	// Base-slot orientation corrections (identity by default — no behavior change)
+	RoomFloorRotationOffset = FRotator::ZeroRotator;
+	RoomFloorScaleMultiplier = FVector::OneVector;
+	HallwayFloorRotationOffset = FRotator::ZeroRotator;
+	HallwayFloorScaleMultiplier = FVector::OneVector;
+	RoomCeilingRotationOffset = FRotator::ZeroRotator;
+	RoomCeilingScaleMultiplier = FVector::OneVector;
+	HallwayCeilingRotationOffset = FRotator::ZeroRotator;
+	HallwayCeilingScaleMultiplier = FVector::OneVector;
+	WallSegmentRotationOffset = FRotator::ZeroRotator;
+	WallSegmentScaleMultiplier = FVector::OneVector;
+	DoorFrameRotationOffset = FRotator::ZeroRotator;
+	DoorFrameScaleMultiplier = FVector::OneVector;
+	EntranceFrameRotationOffset = FRotator::ZeroRotator;
+	EntranceFrameScaleMultiplier = FVector::OneVector;
 	// Floor variant rotation offsets + scale multipliers
 	HallwayFloorStraightRotationOffset = FRotator::ZeroRotator;
 	HallwayFloorStraightScaleMultiplier = FVector::OneVector;
