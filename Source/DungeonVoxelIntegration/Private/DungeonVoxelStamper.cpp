@@ -132,10 +132,19 @@ bool UDungeonVoxelStamper::NeedsVerticalBoundary(const FDungeonGrid& Grid, const
 		return false;
 	}
 
+	// Same-hallway vertical opening applies ONLY to the staircase shaft; two stacked flat Hallway
+	// cells are separate walkable levels and each needs its floor/ceiling (mirrors
+	// FDungeonTileMapper::NeedsVerticalBoundary — the two must agree or tile/voxel floors disagree).
 	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType)
 		&& Current.HallwayIndex == Neighbor.HallwayIndex)
 	{
-		return false;
+		const bool bShaft =
+			Current.CellType == EDungeonCellType::Staircase || Current.CellType == EDungeonCellType::StaircaseHead
+			|| Neighbor.CellType == EDungeonCellType::Staircase || Neighbor.CellType == EDungeonCellType::StaircaseHead;
+		if (bShaft)
+		{
+			return false;
+		}
 	}
 
 	return true;

@@ -156,14 +156,23 @@ bool FDungeonTileMapper::NeedsVerticalBoundary(const FDungeonGrid& Grid, const F
 		return false;
 	}
 
-	// Same hallway = no boundary (staircase shaft stays open)
+	// Same-hallway vertical opening applies ONLY to the staircase shaft (a Staircase/StaircaseHead
+	// on at least one side): the ramp climbs through the open cells and must not be floored over.
+	// Two FLAT Hallway cells stacked at different Z are separate walkable levels — suppressing the
+	// boundary there drops the upper hallway's floor and opens a hole down into the level below.
 	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType)
 		&& Current.HallwayIndex == Neighbor.HallwayIndex)
 	{
-		return false;
+		const bool bShaft =
+			Current.CellType == EDungeonCellType::Staircase || Current.CellType == EDungeonCellType::StaircaseHead
+			|| Neighbor.CellType == EDungeonCellType::Staircase || Neighbor.CellType == EDungeonCellType::StaircaseHead;
+		if (bShaft)
+		{
+			return false;
+		}
 	}
 
-	// Different spaces = needs boundary
+	// Different spaces (or two stacked flat hallways) = needs boundary
 	return true;
 }
 
