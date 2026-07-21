@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DungeonTileMapper.generated.h"
 
 class UDungeonTileSet;
 struct FDungeonResult;
@@ -8,6 +9,7 @@ struct FDungeonGrid;
 struct FDungeonCell;
 
 /** Identifies each type of tile geometry placed in the dungeon. */
+UENUM(BlueprintType)
 enum class EDungeonTileType : uint8
 {
 	RoomFloor,
@@ -30,7 +32,7 @@ enum class EDungeonTileType : uint8
 	HallwayCeilingTJunction,
 	HallwayCeilingCrossroad,
 	HallwayCeilingEndCap,
-	COUNT
+	COUNT UMETA(Hidden)
 };
 
 /**

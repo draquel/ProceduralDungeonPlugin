@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "DungeonTileMapper.h" // EDungeonTileType
+#include "DungeonTileModule.h" // UDungeonTileModule (TMap value type)
 #include "DungeonTileSet.generated.h"
 
 /**
@@ -240,6 +242,17 @@ public:
 	 *  Default convention: mesh slopes down along +Y. E.g., if yours slopes down +X, set Yaw=-90. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Stairs")
 	FRotator StaircaseMeshRotationOffset;
+
+	// --- Modules ---
+
+	/**
+	 * Multi-mesh module override per tile type. A module assigned here REPLACES that type's single
+	 * mesh slot: instead of auto-fitting one mesh to the cell, the module's pieces are placed at a
+	 * single uniform cell scale (see UDungeonTileModule). Types with no entry use their mesh slot as
+	 * before. Modules bake to shared instances, so this stays instanced.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Modules")
+	TMap<EDungeonTileType, TSoftObjectPtr<UDungeonTileModule>> TileModules;
 
 	/** Returns true if at least one mesh slot is non-null. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "TileSet")
