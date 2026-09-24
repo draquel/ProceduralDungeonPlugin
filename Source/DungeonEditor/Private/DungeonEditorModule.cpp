@@ -51,8 +51,9 @@ void FDungeonEditorModule::RegisterMenus()
 		"CreateDungeonModuleFromSelection",
 		LOCTEXT("CreateModuleLabel", "Create Dungeon Module from Selection"),
 		LOCTEXT("CreateModuleTooltip",
-			"Capture the selected static-mesh actors (arranged around the world origin = the tile anchor) "
-			"into a new Dungeon Tile Module asset. Assign it to a tileset slot via TileModules."),
+			"Capture the selected static-mesh actors into a new Dungeon Tile Module asset. Include one "
+			"mesh-less actor (e.g. a Target Point) in the selection to mark the tile anchor; otherwise the "
+			"world origin is the anchor. Assign the module to a tileset slot's Module field."),
 		FSlateIcon(),
 		FUIAction(FExecuteAction::CreateLambda([]()
 		{

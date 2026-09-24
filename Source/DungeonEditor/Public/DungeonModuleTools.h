@@ -12,11 +12,16 @@ class UMaterialInterface;
 /**
  * Editor authoring helpers for the tile module system (P2).
  *
- * Workflow: arrange static-mesh actors inside one reference cell centred on the WORLD ORIGIN
- * (origin = the tile's placement anchor), select them, and run "Create Dungeon Module from
- * Selection" (level actor right-click menu, or CreateModuleFromSelection here). Each piece is
- * captured relative to the anchor into a new UDungeonTileModule asset. Assign that to a tileset
- * slot via UDungeonTileSet::TileModules.
+ * Workflow: arrange static-mesh actors inside one reference cell, add ONE mesh-less actor (a
+ * Target Point or empty Actor) at the tile's placement anchor, select them all, and run "Create
+ * Dungeon Module from Selection" (level actor right-click menu, or CreateModuleFromSelection
+ * here). Each piece is captured relative to the anchor actor (or the world origin when no such
+ * actor is selected) into a new UDungeonTileModule asset. Assign it to a tileset slot's Module.
+ *
+ * Anchor conventions (what the mapper hands the module at runtime, before uniform cell scale):
+ *   Wall / DoorFrame / EntranceFrame: face centre at half cell height; local +X = OUTWARD across
+ *     the face (into the neighbour), local Y along the face, Z up.
+ *   Floor: cell centre at floor level. Ceiling: cell centre at ceiling level.
  *
  * Capture/expansion round-trip: an element's RelativeTransform is ComponentWorld relative to the
  * anchor, and the runtime (ADungeonActor) places it at RelativeTransform * Anchor — so authoring at
@@ -59,9 +64,10 @@ public:
 		float ReferenceCellSize);
 
 	/**
-	 * Build a module from the current editor actor selection (anchor = world origin), prompting for
-	 * a save location. Returns the created asset, or null if nothing was selected or the user
-	 * cancelled. Also callable from Python/Blueprint.
+	 * Build a module from the current editor actor selection, prompting for a save location. A
+	 * selected actor with no static mesh marks the anchor (world origin otherwise). Returns the
+	 * created asset, or null if nothing was selected or the user cancelled. Also callable from
+	 * Python/Blueprint.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|Modules")
 	static UDungeonTileModule* CreateModuleFromSelection(float ReferenceCellSize = 400.0f);

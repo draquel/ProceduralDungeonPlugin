@@ -94,6 +94,18 @@ private:
 	/** One-time upgrade of a legacy tileset: copy the deprecated parallel fields into Slots. */
 	void MigrateLegacyFieldsToSlots();
 
+	/** Null out every deprecated field so the next save persists Slots alone. */
+	void ClearLegacyFields();
+
+	/**
+	 * Set once the legacy fields have been folded into Slots. Guards the migration so it can
+	 * never run twice: an asset saved after the first migration carries this flag (and empty
+	 * legacy fields), so its Slots are authoritative from then on. Without the guard a tileset
+	 * saved with BOTH layouts re-migrated on every load and silently threw away every edit made
+	 * to Slots (module assignments included).
+	 */
+	UPROPERTY() bool bMigratedToSlots = false;
+
 	// ========================================================================
 	// DEPRECATED — legacy parallel fields, kept ONLY so pre-Slots tilesets migrate on load.
 	// Not editable; do not author against these. Removed once all assets are re-saved.

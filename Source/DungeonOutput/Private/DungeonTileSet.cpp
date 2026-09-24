@@ -36,18 +36,41 @@ void UDungeonTileSet::PostLoad()
 	Super::PostLoad();
 
 	// A legacy tileset (authored before Slots existed) carries its data in the deprecated parallel
-	// fields. The current constructor never populates those, so any non-null legacy mesh / module
-	// means "this asset predates Slots" — migrate once. New assets have null legacy fields and are
-	// left alone.
+	// fields. Fold them into Slots exactly ONCE, then null them and raise bMigratedToSlots so the
+	// next save persists only the Slots layout. The flag is what makes this safe: the legacy
+	// fields stay serialized until the asset is re-saved, and re-running the migration on a
+	// tileset that already had Slots edits would wipe those edits (that is exactly what happened
+	// to the demo tileset's module assignments).
+	if (bMigratedToSlots)
+	{
+		return;
+	}
+
 	const bool bLegacyHasData =
 		!RoomFloor.IsNull() || !HallwayFloor.IsNull() || !RoomCeiling.IsNull() || !HallwayCeiling.IsNull()
 		|| !WallSegment.IsNull() || !DoorFrame.IsNull() || !EntranceFrame.IsNull() || !StaircaseMesh.IsNull()
 		|| TileModules.Num() > 0;
-
 	if (bLegacyHasData)
 	{
 		MigrateLegacyFieldsToSlots();
+		ClearLegacyFields();
 	}
+	bMigratedToSlots = true;
+}
+
+void UDungeonTileSet::ClearLegacyFields()
+{
+	TSoftObjectPtr<UStaticMesh>* MeshFields[] = {
+		&RoomFloor, &HallwayFloor, &RoomCeiling, &HallwayCeiling, &WallSegment, &DoorFrame, &EntranceFrame,
+		&HallwayFloorStraight, &HallwayFloorCorner, &HallwayFloorTJunction, &HallwayFloorCrossroad, &HallwayFloorEndCap,
+		&HallwayCeilingStraight, &HallwayCeilingCorner, &HallwayCeilingTJunction, &HallwayCeilingCrossroad, &HallwayCeilingEndCap,
+		&StaircaseMesh,
+	};
+	for (TSoftObjectPtr<UStaticMesh>* Field : MeshFields)
+	{
+		Field->Reset();
+	}
+	TileModules.Empty();
 }
 
 void UDungeonTileSet::MigrateLegacyFieldsToSlots()

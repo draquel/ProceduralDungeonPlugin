@@ -119,12 +119,55 @@ UDungeonTileModule* UDungeonModuleTools::CreateModuleFromSelection(float Referen
 	TArray<AActor*> SelectedActors;
 	GEditor->GetSelectedActors()->GetSelectedObjects<AActor>(SelectedActors);
 
+	// The anchor is a selected actor that carries NO static mesh (a Target Point, an empty Actor,
+	// a Note): its transform is the tile's placement point and it is excluded from capture. With
+	// no such actor selected the world origin is the anchor. This lets a module be authored
+	// anywhere in a level (next to reference geometry) instead of only at the origin.
+	FTransform Anchor = FTransform::Identity;
+	AActor* AnchorActor = nullptr;
+	TArray<AActor*> MeshActors;
+	for (AActor* Actor : SelectedActors)
+	{
+		if (!Actor)
+		{
+			continue;
+		}
+		TInlineComponentArray<UStaticMeshComponent*> MeshComponents;
+		Actor->GetComponents(MeshComponents);
+		bool bHasMesh = false;
+		for (const UStaticMeshComponent* SMC : MeshComponents)
+		{
+			if (SMC && SMC->GetStaticMesh() && !SMC->IsA<UInstancedStaticMeshComponent>())
+			{
+				bHasMesh = true;
+				break;
+			}
+		}
+		if (bHasMesh)
+		{
+			MeshActors.Add(Actor);
+		}
+		else if (!AnchorActor)
+		{
+			AnchorActor = Actor;
+		}
+	}
+	if (AnchorActor)
+	{
+		// Position + rotation only: a marker scaled up for visibility must not scale the pieces.
+		Anchor = AnchorActor->GetActorTransform();
+		Anchor.SetScale3D(FVector::OneVector);
+		UE_LOG(LogDungeonEditor, Log, TEXT("Module anchor = actor '%s' at %s"),
+			*AnchorActor->GetActorLabel(), *Anchor.GetLocation().ToString());
+	}
+
 	TArray<FDungeonModuleElement> Elements;
-	const int32 NumElements = CollectElements(SelectedActors, FTransform::Identity, Elements);
+	const int32 NumElements = CollectElements(MeshActors, Anchor, Elements);
 	if (NumElements == 0)
 	{
 		FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("NoMeshes",
-			"Select one or more static-mesh actors (arranged around the world origin) to build a dungeon module."));
+			"Select one or more static-mesh actors to build a dungeon module. Optionally include one "
+			"mesh-less actor (e.g. a Target Point) to mark the tile anchor; otherwise the world origin is used."));
 		return nullptr;
 	}
 
