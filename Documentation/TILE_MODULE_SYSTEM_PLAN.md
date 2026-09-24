@@ -276,8 +276,19 @@ Follow the existing `Dungeon.TileMapper.*` automation-test conventions.
 2. **P2 — Authoring utility.** The "Create Module from Selection" editor action (§7).
 3. **P3 — Slot consolidation (5b)** + migration of the demo tilesets, folding in the rotation/scale
    offsets from `fix/dungeon-accessibility`.
-4. **P4 — Content.** Author correct wall / corner / floor / ceiling modules for the demo tileset;
-   retire the flat-quad walls. Validate corners, doors, z-fighting all resolved.
+4. **P4 — Content.** DONE 2026-09-23 for the demo tileset (`Content/PluginTesting/DungeonModules`,
+   all at ReferenceCellSize 400): `TM_WallCrypt` (crypt wall, finished face 40 inside the cell plane,
+   body outward into the rock), `TM_CeilingArch` (flat brick slab + 4 centred arch borders, hung 40
+   below the ceiling plane), `TM_FloorFlagstone` (flagstone at native thickness, walkable top exactly
+   at TileThickness = 80), `DM_Door` (doorway quad + smooth frame + brick arch in the wall frame).
+   Verified in `DungeonTest`: corners are clean without a corner slot because the crypt mesh carries
+   its own end pilasters and the body extrudes OUTWARD, so perpendicular walls never share room
+   volume. **Authoring rules learned:** (a) wall pieces need yaw 180 (pack meshes finish toward +X;
+   the module frame has +X outward); (b) keep every finished face >= 40 cm (at 400) inside the cell
+   plane, because the voxel carve can leave rock up to half a voxel past the plane; (c) a floor
+   module's walkable top must sit at TileThickness or rooms step against hallway floors.
+   Known test-map artifact: light bleeds along the zero-thickness ceiling slab's border seams in
+   `DungeonTest` (no rock above); irrelevant inside a carved voxel dungeon.
 
 P1 alone unblocks the wall problem (author a wall+corner module); P2–P4 are polish/scale.
 
