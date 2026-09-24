@@ -2,144 +2,18 @@
 #include "DungeonVoxelConfig.h"
 #include "DungeonVoxelIntegration.h"
 #include "DungeonTypes.h"
+#include "DungeonBoundaryRules.h"
 #include "VoxelData.h"
 #include "VoxelEditManager.h"
 #include "VoxelChunkManager.h"
 #include "VoxelWorldConfiguration.h"
 
 // ============================================================================
-// Boundary Detection (replicates DungeonTileMapper logic)
+// Helpers
 // ============================================================================
 
-bool UDungeonVoxelStamper::IsOpenCell(EDungeonCellType CellType)
-{
-	return CellType == EDungeonCellType::Room
-		|| CellType == EDungeonCellType::Hallway
-		|| CellType == EDungeonCellType::Staircase
-		|| CellType == EDungeonCellType::StaircaseHead
-		|| CellType == EDungeonCellType::Door
-		|| CellType == EDungeonCellType::Entrance;
-}
-
-bool UDungeonVoxelStamper::NeedsWall(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ)
-{
-	if (!Grid.IsInBounds(NX, NY, NZ))
-	{
-		return true;
-	}
-
-	const FDungeonCell& Neighbor = Grid.GetCell(NX, NY, NZ);
-
-	if (Neighbor.CellType == EDungeonCellType::Empty || Neighbor.CellType == EDungeonCellType::RoomWall)
-	{
-		return true;
-	}
-
-	// Door/Entrance neighbors handle their own frames
-	if (Neighbor.CellType == EDungeonCellType::Door || Neighbor.CellType == EDungeonCellType::Entrance)
-	{
-		return false;
-	}
-
-	auto IsRoomFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Room
-			|| Type == EDungeonCellType::Door
-			|| Type == EDungeonCellType::Entrance;
-	};
-
-	auto IsHallwayFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Hallway
-			|| Type == EDungeonCellType::Staircase
-			|| Type == EDungeonCellType::StaircaseHead;
-	};
-
-	// Door/Entrance opening toward hallway = no wall (connection point between room and hallway)
-	if ((Current.CellType == EDungeonCellType::Door || Current.CellType == EDungeonCellType::Entrance)
-		&& IsHallwayFamily(Neighbor.CellType))
-	{
-		return false;
-	}
-
-	// Same room = no wall
-	if (IsRoomFamily(Current.CellType) && IsRoomFamily(Neighbor.CellType)
-		&& Current.RoomIndex == Neighbor.RoomIndex)
-	{
-		return false;
-	}
-
-	// Hallway-family merge: same hallway = open, different hallway = wall
-	// StaircaseHead cells must connect to their exit Hallway (same HallwayIndex)
-	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType))
-	{
-		const bool bEitherIsHead = (Current.CellType == EDungeonCellType::StaircaseHead
-			|| Neighbor.CellType == EDungeonCellType::StaircaseHead);
-		if (bEitherIsHead)
-		{
-			return Current.HallwayIndex != Neighbor.HallwayIndex;
-		}
-		return false;
-	}
-
-	return true;
-}
-
-bool UDungeonVoxelStamper::NeedsVerticalBoundary(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ)
-{
-	if (!Grid.IsInBounds(NX, NY, NZ))
-	{
-		return true;
-	}
-
-	const FDungeonCell& Neighbor = Grid.GetCell(NX, NY, NZ);
-
-	if (Neighbor.CellType == EDungeonCellType::Empty || Neighbor.CellType == EDungeonCellType::RoomWall)
-	{
-		return true;
-	}
-
-	// Door/Entrance neighbors — open
-	if (Neighbor.CellType == EDungeonCellType::Door || Neighbor.CellType == EDungeonCellType::Entrance)
-	{
-		return false;
-	}
-
-	auto IsRoomFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Room
-			|| Type == EDungeonCellType::Door
-			|| Type == EDungeonCellType::Entrance;
-	};
-
-	auto IsHallwayFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Hallway
-			|| Type == EDungeonCellType::Staircase
-			|| Type == EDungeonCellType::StaircaseHead;
-	};
-
-	// Door/Entrance opening toward hallway = no vertical boundary
-	if ((Current.CellType == EDungeonCellType::Door || Current.CellType == EDungeonCellType::Entrance)
-		&& IsHallwayFamily(Neighbor.CellType))
-	{
-		return false;
-	}
-
-	if (IsRoomFamily(Current.CellType) && IsRoomFamily(Neighbor.CellType)
-		&& Current.RoomIndex == Neighbor.RoomIndex)
-	{
-		return false;
-	}
-
-	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType)
-		&& Current.HallwayIndex == Neighbor.HallwayIndex)
-	{
-		return false;
-	}
-
-	return true;
-}
+// Which faces of a carved cell get a solid shell is decided by FDungeonBoundaryRules
+// (DungeonCore), the same predicates the tile mapper uses, so tiles and voxels always agree.
 
 EDungeonRoomType UDungeonVoxelStamper::GetRoomTypeForCell(const FDungeonCell& Cell, const FDungeonResult& Result)
 {
@@ -157,25 +31,29 @@ EDungeonRoomType UDungeonVoxelStamper::GetRoomTypeForCell(const FDungeonCell& Ce
 
 int32 UDungeonVoxelStamper::CarveCell(
 	UVoxelEditManager* EditManager,
+	const FDungeonVoxelLattice& Lattice,
 	const FVector& CellWorldMin,
-	int32 VoxelsPerCell,
-	float VoxelSize,
+	float CellWorldSize,
 	bool bOnlyIfSolid,
 	UVoxelChunkManager* ChunkManager)
 {
 	int32 Count = 0;
 	const FVoxelData AirVoxel = FVoxelData::Air();
 
-	for (int32 VZ = 0; VZ < VoxelsPerCell; ++VZ)
+	FIntVector Min, Max;
+	Lattice.RangeForBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), Min, Max);
+	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
 	{
-		for (int32 VY = 0; VY < VoxelsPerCell; ++VY)
+		return 0;
+	}
+
+	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
+	{
+		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
 		{
-			for (int32 VX = 0; VX < VoxelsPerCell; ++VX)
+			for (int32 IX = Min.X; IX <= Max.X; ++IX)
 			{
-				const FVector WorldPos = CellWorldMin + FVector(
-					(VX + 0.5f) * VoxelSize,
-					(VY + 0.5f) * VoxelSize,
-					(VZ + 0.5f) * VoxelSize);
+				const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
 
 				if (bOnlyIfSolid)
 				{
@@ -196,68 +74,165 @@ int32 UDungeonVoxelStamper::CarveCell(
 	return Count;
 }
 
+bool UDungeonVoxelStamper::IsInsideOpenCell(
+	const FDungeonResult& Result,
+	const FVector& WorldOffset,
+	const FVector& WorldPos)
+{
+	const FVector Local = (WorldPos - WorldOffset) / Result.CellWorldSize;
+	const FIntVector GridCoord(
+		FMath::FloorToInt32(Local.X),
+		FMath::FloorToInt32(Local.Y),
+		FMath::FloorToInt32(Local.Z));
+
+	return Result.Grid.IsInBounds(GridCoord) && FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(GridCoord).CellType);
+}
+
+/**
+ * World-space box covering one face slab of a cell.
+ *
+ * Faces: 0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z(ceiling), 5=-Z(floor).
+ *
+ * bOutward=false puts the slab INSIDE the cell (the stone lining). bOutward=true puts it just
+ * OUTSIDE and also widens the slab laterally by Thickness, so the six face slabs overlap at the
+ * cell's edges and corners and together form a closed shell.
+ */
+static void FaceSlabBox(
+	const FVector& CellWorldMin,
+	float CellWorldSize,
+	int32 Face,
+	float Thickness,
+	bool bOutward,
+	FVector& OutMin,
+	FVector& OutMax)
+{
+	const FVector CellMax = CellWorldMin + FVector(CellWorldSize);
+	const float Lateral = bOutward ? Thickness : 0.0f;
+
+	OutMin = CellWorldMin - FVector(Lateral);
+	OutMax = CellMax + FVector(Lateral);
+
+	switch (Face)
+	{
+	case 0: // +X
+		OutMin.X = bOutward ? CellMax.X : CellMax.X - Thickness;
+		OutMax.X = bOutward ? CellMax.X + Thickness : CellMax.X;
+		break;
+	case 1: // -X
+		OutMin.X = bOutward ? CellWorldMin.X - Thickness : CellWorldMin.X;
+		OutMax.X = bOutward ? CellWorldMin.X : CellWorldMin.X + Thickness;
+		break;
+	case 2: // +Y
+		OutMin.Y = bOutward ? CellMax.Y : CellMax.Y - Thickness;
+		OutMax.Y = bOutward ? CellMax.Y + Thickness : CellMax.Y;
+		break;
+	case 3: // -Y
+		OutMin.Y = bOutward ? CellWorldMin.Y - Thickness : CellWorldMin.Y;
+		OutMax.Y = bOutward ? CellWorldMin.Y : CellWorldMin.Y + Thickness;
+		break;
+	case 4: // +Z (ceiling)
+		OutMin.Z = bOutward ? CellMax.Z : CellMax.Z - Thickness;
+		OutMax.Z = bOutward ? CellMax.Z + Thickness : CellMax.Z;
+		break;
+	case 5: // -Z (floor)
+		OutMin.Z = bOutward ? CellWorldMin.Z - Thickness : CellWorldMin.Z;
+		OutMax.Z = bOutward ? CellWorldMin.Z : CellWorldMin.Z + Thickness;
+		break;
+	default:
+		OutMin = OutMax = FVector::ZeroVector;
+		break;
+	}
+}
+
 int32 UDungeonVoxelStamper::PlaceBoundary(
 	UVoxelEditManager* EditManager,
+	const FDungeonVoxelLattice& Lattice,
 	const FVector& CellWorldMin,
-	int32 VoxelsPerCell,
-	float VoxelSize,
+	float CellWorldSize,
 	int32 Face,
-	int32 Thickness,
+	float Thickness,
 	uint8 MaterialID,
 	uint8 BiomeID)
 {
 	int32 Count = 0;
 	const FVoxelData SolidVoxel = FVoxelData::Solid(MaterialID, BiomeID);
 
-	// Face directions: 0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z(ceiling), 5=-Z(floor)
-	for (int32 Layer = 0; Layer < Thickness; ++Layer)
-	{
-		for (int32 A = 0; A < VoxelsPerCell; ++A)
-		{
-			for (int32 B = 0; B < VoxelsPerCell; ++B)
-			{
-				int32 VX, VY, VZ;
+	FVector BoxMin, BoxMax;
+	FaceSlabBox(CellWorldMin, CellWorldSize, Face, Thickness, /*bOutward=*/false, BoxMin, BoxMax);
 
-				switch (Face)
+	FIntVector Min, Max;
+	Lattice.RangeForBox(BoxMin, BoxMax, Min, Max);
+	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+	{
+		return 0;
+	}
+
+	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
+	{
+		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
+		{
+			for (int32 IX = Min.X; IX <= Max.X; ++IX)
+			{
+				if (EditManager->ApplyEdit(Lattice.Center(FIntVector(IX, IY, IZ)), SolidVoxel, EEditMode::Set))
 				{
-				case 0: // +X face
-					VX = VoxelsPerCell - 1 - Layer;
-					VY = A;
-					VZ = B;
-					break;
-				case 1: // -X face
-					VX = Layer;
-					VY = A;
-					VZ = B;
-					break;
-				case 2: // +Y face
-					VX = A;
-					VY = VoxelsPerCell - 1 - Layer;
-					VZ = B;
-					break;
-				case 3: // -Y face
-					VX = A;
-					VY = Layer;
-					VZ = B;
-					break;
-				case 4: // +Z face (ceiling)
-					VX = A;
-					VY = B;
-					VZ = VoxelsPerCell - 1 - Layer;
-					break;
-				case 5: // -Z face (floor)
-					VX = A;
-					VY = B;
-					VZ = Layer;
-					break;
-				default:
+					++Count;
+				}
+			}
+		}
+	}
+	return Count;
+}
+
+int32 UDungeonVoxelStamper::PlaceOuterSeal(
+	UVoxelEditManager* EditManager,
+	const FDungeonVoxelLattice& Lattice,
+	const FDungeonResult& Result,
+	const FVector& WorldOffset,
+	const FVector& CellWorldMin,
+	float CellWorldSize,
+	int32 Face,
+	float Thickness,
+	uint8 MaterialID,
+	uint8 BiomeID,
+	TSet<FIntVector>& SealedVoxels)
+{
+	int32 Count = 0;
+	const FVoxelData SolidVoxel = FVoxelData::Solid(MaterialID, BiomeID);
+
+	FVector BoxMin, BoxMax;
+	FaceSlabBox(CellWorldMin, CellWorldSize, Face, Thickness, /*bOutward=*/true, BoxMin, BoxMax);
+
+	FIntVector Min, Max;
+	Lattice.RangeForBox(BoxMin, BoxMax, Min, Max);
+	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+	{
+		return 0;
+	}
+
+	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
+	{
+		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
+		{
+			for (int32 IX = Min.X; IX <= Max.X; ++IX)
+			{
+				const FIntVector Index(IX, IY, IZ);
+
+				// Already sealed by an adjoining face or cell — same value, so skip the work.
+				bool bAlreadySealed = false;
+				SealedVoxels.Add(Index, &bAlreadySealed);
+				if (bAlreadySealed)
+				{
 					continue;
 				}
 
-				const FVector WorldPos = CellWorldMin + FVector(
-					(VX + 0.5f) * VoxelSize,
-					(VY + 0.5f) * VoxelSize,
-					(VZ + 0.5f) * VoxelSize);
+				const FVector WorldPos = Lattice.Center(Index);
+
+				// Never plug a room, hallway or the cell this seal belongs to. The lateral
+				// widening that closes the corners is exactly what makes this reachable.
+				if (IsInsideOpenCell(Result, WorldOffset, WorldPos))
+				{
+					continue;
+				}
 
 				if (EditManager->ApplyEdit(WorldPos, SolidVoxel, EEditMode::Set))
 				{
@@ -277,10 +252,10 @@ static int32 PlaceStaircaseSteps(
 	UVoxelEditManager* EditManager,
 	UVoxelChunkManager* ChunkManager,
 	const FDungeonStaircase& Staircase,
+	const FDungeonVoxelLattice& Lattice,
 	const FVector& WorldOffset,
 	float CellWorldSize,
-	int32 VoxelsPerCell,
-	float VoxelSize,
+	int32 StepsPerCell,
 	uint8 MaterialID,
 	uint8 BiomeID,
 	TSet<FIntVector>& AffectedChunks)
@@ -288,7 +263,7 @@ static int32 PlaceStaircaseSteps(
 	int32 Count = 0;
 	const FVoxelData SolidVoxel = FVoxelData::Solid(MaterialID, BiomeID);
 
-	const int32 RiseToRun = Staircase.RiseRunRatio;
+	const int32 RiseToRun = FMath::Max(1, Staircase.RiseRunRatio);
 
 	// Climb direction: 0=+X, 1=-X, 2=+Y, 3=-Y
 	static const int32 CDX[] = {1, -1, 0, 0};
@@ -300,6 +275,11 @@ static int32 PlaceStaircaseSteps(
 	const bool bClimbAlongX = (ClimbDX != 0);
 	const bool bPositiveClimb = bClimbAlongX ? (ClimbDX > 0) : (ClimbDY > 0);
 
+	// The tread/riser grid stays defined in steps-per-cell (the authored stair profile); only the
+	// voxels realising it are resolved on the lattice, so the profile survives a CellWorldSize
+	// that is not an integer multiple of VoxelSize.
+	const double StepWorldSize = static_cast<double>(CellWorldSize) / StepsPerCell;
+
 	// Iterate body cells in climb order (ci=0 is nearest entry)
 	for (int32 ci = 0; ci < RiseToRun; ++ci)
 	{
@@ -310,36 +290,41 @@ static int32 PlaceStaircaseSteps(
 
 		const FVector CellWorldMin = WorldOffset + FVector(CellCoord) * CellWorldSize;
 
-		for (int32 LocalClimb = 0; LocalClimb < VoxelsPerCell; ++LocalClimb)
+		FIntVector Min, Max;
+		Lattice.RangeForBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), Min, Max);
+		if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
 		{
-			// Map local climb-axis position to global run index
-			const int32 RunWithinCell = bPositiveClimb ? LocalClimb : (VoxelsPerCell - 1 - LocalClimb);
-			const int32 GlobalRunIdx = ci * VoxelsPerCell + RunWithinCell;
+			continue;
+		}
 
-			// Step height: rises by 1 voxel every RiseToRun horizontal voxels
-			const int32 StepTop = GlobalRunIdx / RiseToRun; // 0 to VoxelsPerCell-1
-
-			// Fill solid from VZ=0 up to and including StepTop
-			for (int32 Perp = 0; Perp < VoxelsPerCell; ++Perp)
+		for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
+		{
+			for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
 			{
-				for (int32 VZ = 0; VZ <= StepTop; ++VZ)
+				for (int32 IX = Min.X; IX <= Max.X; ++IX)
 				{
-					int32 VX, VY;
-					if (bClimbAlongX)
-					{
-						VX = LocalClimb;
-						VY = Perp;
-					}
-					else
-					{
-						VX = Perp;
-						VY = LocalClimb;
-					}
+					const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
 
-					const FVector WorldPos = CellWorldMin + FVector(
-						(VX + 0.5f) * VoxelSize,
-						(VY + 0.5f) * VoxelSize,
-						(VZ + 0.5f) * VoxelSize);
+					// Distance along the climb axis measured from the entry side of the cell.
+					const double AlongAxis = bClimbAlongX
+						? WorldPos.X - CellWorldMin.X
+						: WorldPos.Y - CellWorldMin.Y;
+					const double AlongFromEntry = bPositiveClimb
+						? AlongAxis
+						: CellWorldSize - AlongAxis;
+
+					const int32 RunWithinCell = FMath::Clamp(
+						FMath::FloorToInt32(AlongFromEntry / StepWorldSize), 0, StepsPerCell - 1);
+					const int32 GlobalRunIdx = ci * StepsPerCell + RunWithinCell;
+
+					// Step height: rises one tread every RiseToRun runs.
+					const int32 StepTop = GlobalRunIdx / RiseToRun;
+					const double StepTopZ = CellWorldMin.Z + (StepTop + 1) * StepWorldSize;
+
+					if (WorldPos.Z >= StepTopZ)
+					{
+						continue;
+					}
 
 					if (EditManager->ApplyEdit(WorldPos, SolidVoxel, EEditMode::Set))
 					{
@@ -412,9 +397,16 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 	const float VoxelSize = VoxelConfig->VoxelSize;
 	const float CellWorldSize = Result.CellWorldSize;
 	const int32 VoxelsPerCell = Config->GetEffectiveVoxelsPerCell(CellWorldSize, VoxelSize);
-	const int32 WallThickness = Config->WallThickness;
 	const uint8 BiomeID = Config->DungeonBiomeID;
 	const bool bMergeMode = (StampMode == EDungeonStampMode::MergeAsStructure);
+
+	// Wall/lining/seal depth in world units. WallThickness is authored in voxel layers.
+	const float WallWorldThickness = Config->WallThickness * VoxelSize;
+
+	// Every voxel write below resolves through this lattice rather than stepping in cell space:
+	// the dungeon origin has an arbitrary phase against the voxel grid and CellWorldSize is not
+	// generally a multiple of VoxelSize, so cell-space stepping leaves an uncarved rind.
+	const FDungeonVoxelLattice Lattice(VoxelConfig->WorldOrigin, VoxelSize);
 
 	UE_LOG(LogDungeonVoxelIntegration, Log,
 		TEXT("StampDungeon: Grid=%dx%dx%d CellWorldSize=%.1f VoxelSize=%.1f VoxelsPerCell=%d Mode=%d"),
@@ -442,16 +434,20 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 				{
 					const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
 
-					for (int32 VZ = 0; VZ < VoxelsPerCell; ++VZ)
+					FIntVector VMin, VMax;
+					Lattice.RangeForBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), VMin, VMax);
+					if (!FDungeonVoxelLattice::IsRangeValid(VMin, VMax))
 					{
-						for (int32 VY = 0; VY < VoxelsPerCell; ++VY)
+						continue;
+					}
+
+					for (int32 IZ = VMin.Z; IZ <= VMax.Z; ++IZ)
+					{
+						for (int32 IY = VMin.Y; IY <= VMax.Y; ++IY)
 						{
-							for (int32 VX = 0; VX < VoxelsPerCell; ++VX)
+							for (int32 IX = VMin.X; IX <= VMax.X; ++IX)
 							{
-								const FVector WorldPos = CellWorldMin + FVector(
-									(VX + 0.5f) * VoxelSize,
-									(VY + 0.5f) * VoxelSize,
-									(VZ + 0.5f) * VoxelSize);
+								const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
 
 								if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
 								{
@@ -477,14 +473,14 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 			for (int32 GX = 0; GX < Grid.GridSize.X; ++GX)
 			{
 				const FDungeonCell& Cell = Grid.GetCell(GX, GY, GZ);
-				if (!IsOpenCell(Cell.CellType))
+				if (!FDungeonBoundaryRules::IsOpenCell(Cell.CellType))
 				{
 					continue;
 				}
 
 				const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
 
-				const int32 Carved = CarveCell(EditManager, CellWorldMin, VoxelsPerCell, VoxelSize,
+				const int32 Carved = CarveCell(EditManager, Lattice, CellWorldMin, CellWorldSize,
 					bMergeMode, bMergeMode ? ChunkManager : nullptr);
 				StampResult.VoxelsModified += Carved;
 
@@ -507,15 +503,27 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 		{0, 0, 1}, {0, 0, -1},
 	};
 
-	const int32 BoundaryPassGridZ = (StampMode == EDungeonStampMode::CarveOnly) ? 0 : Grid.GridSize.Z;
-	for (int32 GZ = 0; GZ < BoundaryPassGridZ; ++GZ)
+	// CarveOnly is lined by tile meshes, so the lining must NOT go inside the cell (it would bury
+	// the tiles). It still needs a seal: dungeons anchor at the cave layer, and without solid
+	// voxels asserted around the volume, procedural cave voids breach it and terrain reads through
+	// the tiles. Same boundary predicates, shell written OUTSIDE the cell instead.
+	const bool bOuterSeal = (StampMode == EDungeonStampMode::CarveOnly);
+
+	// Shared across every seal slab so each shell voxel is written exactly once.
+	TSet<FIntVector> SealedVoxels;
+	if (bOuterSeal)
+	{
+		SealedVoxels.Reserve(Grid.Cells.Num() * 4);
+	}
+
+	for (int32 GZ = 0; GZ < Grid.GridSize.Z; ++GZ)
 	{
 		for (int32 GY = 0; GY < Grid.GridSize.Y; ++GY)
 		{
 			for (int32 GX = 0; GX < Grid.GridSize.X; ++GX)
 			{
 				const FDungeonCell& Cell = Grid.GetCell(GX, GY, GZ);
-				if (!IsOpenCell(Cell.CellType))
+				if (!FDungeonBoundaryRules::IsOpenCell(Cell.CellType))
 				{
 					continue;
 				}
@@ -533,11 +541,11 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 					bool bNeedsBoundary;
 					if (Face < 4)
 					{
-						bNeedsBoundary = NeedsWall(Grid, Cell, NX, NY, NZ);
+						bNeedsBoundary = FDungeonBoundaryRules::NeedsWall(Grid, Cell, NX, NY, NZ);
 					}
 					else
 					{
-						bNeedsBoundary = NeedsVerticalBoundary(Grid, Cell, NX, NY, NZ);
+						bNeedsBoundary = FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, Cell, NX, NY, NZ);
 					}
 
 					if (!bNeedsBoundary)
@@ -547,8 +555,11 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 					const uint8 MatID = Config->GetMaterialForCell(Cell.CellType, RoomType, Face);
 
-					const int32 Placed = PlaceBoundary(EditManager, CellWorldMin, VoxelsPerCell,
-						VoxelSize, Face, WallThickness, MatID, BiomeID);
+					const int32 Placed = bOuterSeal
+						? PlaceOuterSeal(EditManager, Lattice, Result, WorldOffset, CellWorldMin,
+							CellWorldSize, Face, WallWorldThickness, MatID, BiomeID, SealedVoxels)
+						: PlaceBoundary(EditManager, Lattice, CellWorldMin, CellWorldSize,
+							Face, WallWorldThickness, MatID, BiomeID);
 					StampResult.VoxelsModified += Placed;
 
 					// Track chunk for boundary cell too
@@ -565,8 +576,8 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 	for (const FDungeonStaircase& Staircase : Result.Staircases)
 	{
 		const int32 StepVoxels = PlaceStaircaseSteps(
-			EditManager, ChunkManager, Staircase, WorldOffset,
-			CellWorldSize, VoxelsPerCell, VoxelSize,
+			EditManager, ChunkManager, Staircase, Lattice, WorldOffset,
+			CellWorldSize, VoxelsPerCell,
 			Config->StaircaseMaterialID, BiomeID, AffectedChunks);
 		StampResult.VoxelsModified += StepVoxels;
 	}
@@ -603,7 +614,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 							const int32 NX = GX + Directions[D].X;
 							const int32 NY = GY + Directions[D].Y;
 							const int32 NZ = GZ + Directions[D].Z;
-							if (Grid.IsInBounds(NX, NY, NZ) && IsOpenCell(Grid.GetCell(NX, NY, NZ).CellType))
+							if (Grid.IsInBounds(NX, NY, NZ) && FDungeonBoundaryRules::IsOpenCell(Grid.GetCell(NX, NY, NZ).CellType))
 							{
 								bIsShell = true;
 							}
@@ -617,16 +628,20 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 					const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
 
-					for (int32 VZ = 0; VZ < VoxelsPerCell; ++VZ)
+					FIntVector VMin, VMax;
+					Lattice.RangeForBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), VMin, VMax);
+					if (!FDungeonVoxelLattice::IsRangeValid(VMin, VMax))
 					{
-						for (int32 VY = 0; VY < VoxelsPerCell; ++VY)
+						continue;
+					}
+
+					for (int32 IZ = VMin.Z; IZ <= VMax.Z; ++IZ)
+					{
+						for (int32 IY = VMin.Y; IY <= VMax.Y; ++IY)
 						{
-							for (int32 VX = 0; VX < VoxelsPerCell; ++VX)
+							for (int32 IX = VMin.X; IX <= VMax.X; ++IX)
 							{
-								const FVector WorldPos = CellWorldMin + FVector(
-									(VX + 0.5f) * VoxelSize,
-									(VY + 0.5f) * VoxelSize,
-									(VZ + 0.5f) * VoxelSize);
+								const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
 
 								if (EditManager->ApplyEdit(WorldPos, WallVoxel, EEditMode::Set))
 								{

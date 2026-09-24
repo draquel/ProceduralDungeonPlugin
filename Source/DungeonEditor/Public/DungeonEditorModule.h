@@ -9,4 +9,8 @@ class FDungeonEditorModule : public IModuleInterface
 public:
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+
+private:
+	/** Registers the "Create Dungeon Module from Selection" entry in the level actor context menu. */
+	void RegisterMenus();
 };

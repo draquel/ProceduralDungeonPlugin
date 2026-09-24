@@ -21,6 +21,9 @@ public class DungeonEditor : ModuleRules
 			"PropertyEditor",
 			"EditorStyle",
 			"InputCore",
+			"ToolMenus",
+			"AssetRegistry",
+			"ContentBrowser",
 			"DungeonCore",
 			"DungeonOutput",
 		});

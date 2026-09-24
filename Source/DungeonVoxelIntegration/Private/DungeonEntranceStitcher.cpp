@@ -1,5 +1,6 @@
 #include "DungeonEntranceStitcher.h"
 #include "DungeonVoxelConfig.h"
+#include "DungeonVoxelLattice.h"
 #include "DungeonVoxelIntegration.h"
 #include "DungeonTypes.h"
 #include "VoxelData.h"
@@ -72,20 +73,41 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 	const float WallThickness = 2.0f * VoxelSize;
 	const float OuterExtent = HalfExtentXY + (bPlaceWalls ? WallThickness : 0.0f);
 
-	for (float Z = BottomZ; Z < TopZ; Z += VoxelSize)
+	const UVoxelWorldConfiguration* VoxelConfig = ChunkManager->GetConfiguration();
+	if (!VoxelConfig)
 	{
-		// The carve may overshoot the terrain surface (breaking the mouth open), but the wall
-		// shell must not follow it up: solid ring voxels placed in the air above the surface
-		// would build a knee-high collar the character cannot step over.
-		const bool bWallLayer = bPlaceWalls && Z < WallTopZ;
+		return 0;
+	}
 
-		for (float Y = Center.Y - OuterExtent; Y < Center.Y + OuterExtent; Y += VoxelSize)
+	// Resolve on the voxel lattice, not by float-stepping from the shaft centre: the shaft origin
+	// has an arbitrary phase against the voxel grid, so stepping by VoxelSize skips voxels and
+	// double-writes others, leaving an uncarved rind down the shaft wall.
+	const FDungeonVoxelLattice Lattice(VoxelConfig->WorldOrigin, VoxelSize);
+
+	FIntVector Min, Max;
+	Lattice.RangeForBox(
+		FVector(Center.X - OuterExtent, Center.Y - OuterExtent, BottomZ),
+		FVector(Center.X + OuterExtent, Center.Y + OuterExtent, TopZ),
+		Min, Max);
+	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+	{
+		return 0;
+	}
+
+	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
+	{
+		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
 		{
-			for (float X = Center.X - OuterExtent; X < Center.X + OuterExtent; X += VoxelSize)
+			for (int32 IX = Min.X; IX <= Max.X; ++IX)
 			{
-				const FVector WorldPos(X + VoxelSize * 0.5f, Y + VoxelSize * 0.5f, Z + VoxelSize * 0.5f);
+				const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
 				const float DistX = FMath::Abs(WorldPos.X - Center.X);
 				const float DistY = FMath::Abs(WorldPos.Y - Center.Y);
+
+				// The carve may overshoot the terrain surface (breaking the mouth open), but the
+				// wall shell must not follow it up: solid ring voxels placed in the air above the
+				// surface would build a knee-high collar the character cannot step over.
+				const bool bWallLayer = bPlaceWalls && WorldPos.Z < WallTopZ;
 
 				if (DistX < HalfExtentXY && DistY < HalfExtentXY)
 				{
@@ -95,7 +117,7 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 						++VoxelsModified;
 					}
 				}
-				else if (bWallLayer && DistX < OuterExtent && DistY < OuterExtent)
+				else if (bWallLayer)
 				{
 					// Shell — place wall
 					if (EditManager->ApplyEdit(WorldPos, WallVoxel, EEditMode::Set))
@@ -332,10 +354,33 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 	const float WallThickness = 2.0f * VoxelSize;
 	const float TotalHeight = CarveTopZ - EntranceZ;
 
-	for (float Z = EntranceZ; Z < CarveTopZ; Z += VoxelSize)
+	const UVoxelWorldConfiguration* VoxelConfig = ChunkManager->GetConfiguration();
+	if (!VoxelConfig)
 	{
-		// Noise displacement: use sin-based pseudo-noise for organic feel
-		const float ZNormalized = (Z - EntranceZ) / FMath::Max(TotalHeight, 1.0f);
+		EditManager->EndEditOperation();
+		return 0;
+	}
+	const FDungeonVoxelLattice Lattice(VoxelConfig->WorldOrigin, VoxelSize);
+
+	// Widest the displaced column can ever get, so one lattice range covers every Z slice.
+	const float MaxOuterRadius = BaseRadius * 1.3f + WallThickness + VoxelSize * 1.5f;
+
+	FIntVector Min, Max;
+	Lattice.RangeForBox(
+		FVector(EntranceCenter.X - MaxOuterRadius, EntranceCenter.Y - MaxOuterRadius, EntranceZ),
+		FVector(EntranceCenter.X + MaxOuterRadius, EntranceCenter.Y + MaxOuterRadius, CarveTopZ),
+		Min, Max);
+	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+	{
+		EditManager->EndEditOperation();
+		return 0;
+	}
+
+	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
+	{
+		// Per-Z-slice displacement, evaluated at the lattice plane's own Z.
+		const double Z = Lattice.Center(FIntVector(Min.X, Min.Y, IZ)).Z;
+		const float ZNormalized = static_cast<float>((Z - EntranceZ) / FMath::Max(TotalHeight, 1.0f));
 		const float NoiseX = FMath::Sin(Z * 0.03f) * VoxelSize * 1.5f;
 		const float NoiseY = FMath::Cos(Z * 0.037f) * VoxelSize * 1.5f;
 		// Radius tapers: wider at top (cave mouth), narrower at bottom
@@ -346,11 +391,11 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 		const float CenterX = EntranceCenter.X + NoiseX;
 		const float CenterY = EntranceCenter.Y + NoiseY;
 
-		for (float Y = CenterY - OuterRadius; Y < CenterY + OuterRadius; Y += VoxelSize)
+		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
 		{
-			for (float X = CenterX - OuterRadius; X < CenterX + OuterRadius; X += VoxelSize)
+			for (int32 IX = Min.X; IX <= Max.X; ++IX)
 			{
-				const FVector WorldPos(X + VoxelSize * 0.5f, Y + VoxelSize * 0.5f, Z + VoxelSize * 0.5f);
+				const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
 				const float DistXY = FMath::Sqrt(
 					FMath::Square(WorldPos.X - CenterX) + FMath::Square(WorldPos.Y - CenterY));
 
@@ -361,7 +406,7 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 						++VoxelsModified;
 					}
 				}
-				else if (DistXY < OuterRadius && Z < SurfaceZ) // no wall collar above ground
+				else if (DistXY < OuterRadius && WorldPos.Z < SurfaceZ) // no wall collar above ground
 				{
 					if (EditManager->ApplyEdit(WorldPos, WallVoxel, EEditMode::Set))
 					{

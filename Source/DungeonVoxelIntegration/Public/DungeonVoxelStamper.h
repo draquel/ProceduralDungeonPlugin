@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "DungeonVoxelTypes.h"
+#include "DungeonVoxelLattice.h"
 #include "DungeonVoxelStamper.generated.h"
 
 struct FDungeonResult;
@@ -69,14 +70,9 @@ public:
 		UDungeonVoxelConfig* Config);
 
 private:
-	/** Returns true if the cell type represents open/traversable space. */
-	static bool IsOpenCell(EDungeonCellType CellType);
-
-	/** Replicates DungeonTileMapper boundary detection for horizontal faces. */
-	static bool NeedsWall(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ);
-
-	/** Replicates DungeonTileMapper boundary detection for vertical faces. */
-	static bool NeedsVerticalBoundary(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ);
+	// Open-cell / wall / floor decisions come from FDungeonBoundaryRules (DungeonCore), shared
+	// with the tile mapper. Do not add local copies here: they drift, and a drifted rule means
+	// tiles seal space the voxels carved (or vice versa).
 
 	/** Returns the EDungeonRoomType for a cell based on its RoomIndex, or Generic for non-room cells. */
 	static EDungeonRoomType GetRoomTypeForCell(const FDungeonCell& Cell, const FDungeonResult& Result);
@@ -84,20 +80,61 @@ private:
 	/** Carve a single cell's voxel volume to air. Returns number of voxels modified. */
 	int32 CarveCell(
 		class UVoxelEditManager* EditManager,
+		const FDungeonVoxelLattice& Lattice,
 		const FVector& CellWorldMin,
-		int32 VoxelsPerCell,
-		float VoxelSize,
+		float CellWorldSize,
 		bool bOnlyIfSolid,
 		UVoxelChunkManager* ChunkManager);
 
-	/** Place boundary voxels on a cell face. Returns number of voxels placed. */
+	/**
+	 * Place boundary voxels on a cell face, INSIDE the open cell (the stone lining that makes a
+	 * VoxelCarved dungeon read as rock). Returns number of voxels placed.
+	 */
 	int32 PlaceBoundary(
 		class UVoxelEditManager* EditManager,
+		const FDungeonVoxelLattice& Lattice,
 		const FVector& CellWorldMin,
-		int32 VoxelsPerCell,
-		float VoxelSize,
+		float CellWorldSize,
 		int32 Face,
-		int32 Thickness,
+		float Thickness,
 		uint8 MaterialID,
 		uint8 BiomeID);
+
+	/**
+	 * Place seal voxels on a cell face, OUTSIDE the open cell.
+	 *
+	 * CarveOnly dungeons are lined by tile meshes, so the inward boundary pass is skipped — but
+	 * that also removed the only thing asserting the surrounding voxel field is solid. Dungeons
+	 * are deliberately anchored at the cave layer, so procedural cave voids intersect the volume
+	 * and breach it: terrain reads straight through the thin tiles. This writes the shell just
+	 * outside each boundary face instead, sealing the volume without occupying the cell where the
+	 * tiles stand.
+	 *
+	 * Voxels whose centre falls inside any open cell are skipped, so a seal can never plug a
+	 * neighbouring room or hallway.
+	 *
+	 * @param SealedVoxels Lattice indices already sealed by this stamp. The six face slabs of a
+	 *        cell overlap at its edges and corners (that overlap is what closes the shell), and
+	 *        neighbouring cells re-seal each other's shells, so without this the same voxel is
+	 *        written many times over — all redundant, since every write is the same value.
+	 * @return Number of voxels placed.
+	 */
+	int32 PlaceOuterSeal(
+		class UVoxelEditManager* EditManager,
+		const FDungeonVoxelLattice& Lattice,
+		const FDungeonResult& Result,
+		const FVector& WorldOffset,
+		const FVector& CellWorldMin,
+		float CellWorldSize,
+		int32 Face,
+		float Thickness,
+		uint8 MaterialID,
+		uint8 BiomeID,
+		TSet<FIntVector>& SealedVoxels);
+
+	/** True when a world position falls inside an open (traversable) dungeon cell. */
+	static bool IsInsideOpenCell(
+		const FDungeonResult& Result,
+		const FVector& WorldOffset,
+		const FVector& WorldPos);
 };

@@ -4,7 +4,10 @@
 #include "DungeonConfig.h"
 #include "DungeonTileSet.h"
 #include "DungeonTileMapper.h"
+#include "DungeonTileModule.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Materials/MaterialInterface.h"
+#include "Engine/StaticMesh.h"
 
 #if WITH_EDITOR
 #include "DrawDebugHelpers.h"
@@ -59,7 +62,7 @@ void ADungeonActor::GenerateDungeon()
 	FDungeonTileMapResult TileMap = FDungeonTileMapper::MapToTiles(
 		CachedResult, *TileSet, GetActorLocation(), bOpenEntranceCeiling);
 
-	// Resolve TileSet slots to mesh pointers (order must match EDungeonTileType)
+	// Resolve each tile type to its single mesh + a display name, from the consolidated slots.
 	struct FTileSlot
 	{
 		EDungeonTileType Type;
@@ -67,65 +70,143 @@ void ADungeonActor::GenerateDungeon()
 		FName Name;
 	};
 
-	const FTileSlot Slots[] =
+	TArray<FTileSlot> Slots;
+	Slots.Reserve(FDungeonTileMapResult::TypeCount);
+	const UEnum* TypeEnum = StaticEnum<EDungeonTileType>();
+	for (int32 i = 0; i < FDungeonTileMapResult::TypeCount; ++i)
 	{
-		{ EDungeonTileType::RoomFloor,      TileSet->RoomFloor,      TEXT("RoomFloor") },
-		{ EDungeonTileType::HallwayFloor,   TileSet->HallwayFloor,   TEXT("HallwayFloor") },
-		{ EDungeonTileType::RoomCeiling,    TileSet->RoomCeiling,    TEXT("RoomCeiling") },
-		{ EDungeonTileType::HallwayCeiling, TileSet->HallwayCeiling, TEXT("HallwayCeiling") },
-		{ EDungeonTileType::WallSegment,    TileSet->WallSegment,    TEXT("WallSegment") },
-		{ EDungeonTileType::DoorFrame,      TileSet->DoorFrame,      TEXT("DoorFrame") },
-		{ EDungeonTileType::EntranceFrame,  TileSet->EntranceFrame,  TEXT("EntranceFrame") },
-		{ EDungeonTileType::StaircaseMesh,  TileSet->StaircaseMesh,  TEXT("StaircaseMesh") },
-		// Hallway floor connectivity variants (null mesh = auto-skipped)
-		{ EDungeonTileType::HallwayFloorStraight,   TileSet->HallwayFloorStraight,   TEXT("HallwayFloorStraight") },
-		{ EDungeonTileType::HallwayFloorCorner,     TileSet->HallwayFloorCorner,     TEXT("HallwayFloorCorner") },
-		{ EDungeonTileType::HallwayFloorTJunction,  TileSet->HallwayFloorTJunction,  TEXT("HallwayFloorTJunction") },
-		{ EDungeonTileType::HallwayFloorCrossroad,  TileSet->HallwayFloorCrossroad,  TEXT("HallwayFloorCrossroad") },
-		{ EDungeonTileType::HallwayFloorEndCap,     TileSet->HallwayFloorEndCap,     TEXT("HallwayFloorEndCap") },
-		// Hallway ceiling connectivity variants (null mesh = auto-skipped)
-		{ EDungeonTileType::HallwayCeilingStraight,   TileSet->HallwayCeilingStraight,   TEXT("HallwayCeilingStraight") },
-		{ EDungeonTileType::HallwayCeilingCorner,     TileSet->HallwayCeilingCorner,     TEXT("HallwayCeilingCorner") },
-		{ EDungeonTileType::HallwayCeilingTJunction,  TileSet->HallwayCeilingTJunction,  TEXT("HallwayCeilingTJunction") },
-		{ EDungeonTileType::HallwayCeilingCrossroad,  TileSet->HallwayCeilingCrossroad,  TEXT("HallwayCeilingCrossroad") },
-		{ EDungeonTileType::HallwayCeilingEndCap,     TileSet->HallwayCeilingEndCap,     TEXT("HallwayCeilingEndCap") },
+		const EDungeonTileType Type = static_cast<EDungeonTileType>(i);
+		const FName Name = TypeEnum ? FName(*TypeEnum->GetNameStringByValue(i)) : NAME_None;
+		Slots.Add({ Type, TileSet->GetMesh(Type), Name });
+	}
+
+	// --- Resolve tiles to render batches (mesh + material identity), expanding modules ---
+	// One HISM is created per unique (mesh, material) across the whole tileset, so identical
+	// geometry — whether from different tile types or from module elements — shares one instanced
+	// component. Legacy single-mesh slots emit one instance each; a module slot expands to one
+	// instance per element at (ModuleElement.RelativeTransform * TileAnchor). See
+	// Documentation/TILE_MODULE_SYSTEM_PLAN.md.
+	struct FRenderBatch
+	{
+		UStaticMesh* Mesh = nullptr;
+		UMaterialInterface* Material = nullptr; // null = mesh defaults
+		TArray<FTransform> Instances;
 	};
+
+	auto BatchKey = [](const UStaticMesh* Mesh, const UMaterialInterface* Material) -> FName
+	{
+		const FString MeshPath = Mesh ? Mesh->GetPathName() : FString();
+		const FString MatPath = Material ? Material->GetPathName() : FString();
+		return FName(*(MeshPath + TEXT("|") + MatPath));
+	};
+
+	TMap<FName, FRenderBatch> Batches;
 
 	for (const FTileSlot& Slot : Slots)
 	{
-		const int32 TypeIdx = static_cast<int32>(Slot.Type);
-		const TArray<FTransform>& Transforms = TileMap.Transforms[TypeIdx];
-
-		if (Transforms.Num() == 0 || Slot.Mesh.IsNull())
+		const TArray<FTransform>& Transforms = TileMap.Transforms[static_cast<int32>(Slot.Type)];
+		if (Transforms.Num() == 0)
 		{
 			continue;
 		}
 
-		// Load mesh synchronously
-		UStaticMesh* LoadedMesh = Slot.Mesh.LoadSynchronous();
-		if (!LoadedMesh)
+		// Module override for this type? (StaircaseMesh is a bespoke ramp — mesh-only, matches the
+		// mapper's skip.)
+		UDungeonTileModule* Module = nullptr;
+		if (Slot.Type != EDungeonTileType::StaircaseMesh)
 		{
-			UE_LOG(LogDungeonOutput, Warning, TEXT("Failed to load mesh for tile type %s"), *Slot.Name.ToString());
+			const TSoftObjectPtr<UDungeonTileModule> ModulePtr = TileSet->GetModule(Slot.Type);
+			if (!ModulePtr.IsNull())
+			{
+				UDungeonTileModule* Loaded = ModulePtr.LoadSynchronous();
+				if (Loaded && Loaded->HasGeometry())
+				{
+					Module = Loaded;
+				}
+			}
+		}
+
+		if (Module)
+		{
+			for (const FDungeonModuleElement& Element : Module->Elements)
+			{
+				if (Element.Mesh.IsNull())
+				{
+					continue;
+				}
+				UStaticMesh* ElementMesh = Element.Mesh.LoadSynchronous();
+				if (!ElementMesh)
+				{
+					UE_LOG(LogDungeonOutput, Warning, TEXT("Module for %s: failed to load element mesh"), *Slot.Name.ToString());
+					continue;
+				}
+				UMaterialInterface* ElementMat = Element.MaterialOverride.IsNull()
+					? nullptr : Element.MaterialOverride.LoadSynchronous();
+
+				FRenderBatch& Batch = Batches.FindOrAdd(BatchKey(ElementMesh, ElementMat));
+				Batch.Mesh = ElementMesh;
+				Batch.Material = ElementMat;
+				Batch.Instances.Reserve(Batch.Instances.Num() + Transforms.Num());
+				for (const FTransform& Anchor : Transforms)
+				{
+					// child-local * parent-world = world; the anchor carries the uniform cell scale.
+					Batch.Instances.Add(Element.RelativeTransform * Anchor);
+				}
+			}
+		}
+		else
+		{
+			if (Slot.Mesh.IsNull())
+			{
+				continue;
+			}
+			UStaticMesh* LoadedMesh = Slot.Mesh.LoadSynchronous();
+			if (!LoadedMesh)
+			{
+				UE_LOG(LogDungeonOutput, Warning, TEXT("Failed to load mesh for tile type %s"), *Slot.Name.ToString());
+				continue;
+			}
+			FRenderBatch& Batch = Batches.FindOrAdd(BatchKey(LoadedMesh, nullptr));
+			Batch.Mesh = LoadedMesh;
+			Batch.Instances.Append(Transforms);
+		}
+	}
+
+	// --- Create one HISM per batch ---
+	// Mobility must MATCH THE ROOT's: UE refuses to attach a Static component to a non-Static parent
+	// and aborts the attach ("AttachTo: 'Root' is not static, cannot attach 'X'..."). An editor-
+	// placed ADungeonActor has a Static root, but a POI-streamed one is spawned during play with a
+	// Movable root — hard-coding Static silently orphaned every tile component.
+	USceneComponent* Root = GetRootComponent();
+	const EComponentMobility::Type TileMobility =
+		Root ? Root->Mobility.GetValue() : EComponentMobility::Movable;
+
+	for (TPair<FName, FRenderBatch>& Pair : Batches)
+	{
+		FRenderBatch& Batch = Pair.Value;
+		if (!Batch.Mesh || Batch.Instances.Num() == 0)
+		{
 			continue;
 		}
 
-		// Create HISMC
 		UHierarchicalInstancedStaticMeshComponent* HISMC = NewObject<UHierarchicalInstancedStaticMeshComponent>(
-			this, Slot.Name, RF_Transient);
-		HISMC->SetStaticMesh(LoadedMesh);
-		HISMC->SetMobility(EComponentMobility::Static);
+			this, NAME_None, RF_Transient);
+		HISMC->SetStaticMesh(Batch.Mesh);
+		if (Batch.Material)
+		{
+			HISMC->SetMaterial(0, Batch.Material);
+		}
+		HISMC->SetMobility(TileMobility);
 		HISMC->SetCastShadow(true);
 		HISMC->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		HISMC->SetCollisionResponseToAllChannels(ECR_Block);
-		HISMC->AttachToComponent(GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+		HISMC->AttachToComponent(Root, FAttachmentTransformRules::KeepRelativeTransform);
 		HISMC->RegisterComponent();
+		HISMC->AddInstances(Batch.Instances, false, true);
 
-		// Add all instances (world-space transforms)
-		HISMC->AddInstances(Transforms, false, true);
+		TileComponents.Add(Pair.Key, HISMC);
 
-		TileComponents.Add(static_cast<uint8>(Slot.Type), HISMC);
-
-		UE_LOG(LogDungeonOutput, Verbose, TEXT("  %s: %d instances"), *Slot.Name.ToString(), Transforms.Num());
+		UE_LOG(LogDungeonOutput, Verbose, TEXT("  batch %s: %d instances"), *Batch.Mesh->GetName(), Batch.Instances.Num());
 	}
 
 	bHasDungeon = true;

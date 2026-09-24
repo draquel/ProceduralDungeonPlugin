@@ -128,8 +128,9 @@ private:
 	UPROPERTY()
 	FDungeonResult CachedResult;
 
+	/** Live tile HISMs, keyed by render batch (mesh+material identity), one per unique batch. */
 	UPROPERTY(Transient)
-	TMap<uint8, TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> TileComponents;
+	TMap<FName, TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> TileComponents;
 
 	bool bHasDungeon = false;
 

@@ -1,6 +1,8 @@
 #include "DungeonTileMapper.h"
 #include "DungeonTileSet.h"
+#include "DungeonTileModule.h"
 #include "DungeonTypes.h"
+#include "DungeonBoundaryRules.h"
 #include "DungeonOutput.h"
 #include "Engine/StaticMesh.h"
 
@@ -30,118 +32,8 @@ void FDungeonTileMapResult::Reset()
 // FDungeonTileMapper
 // ============================================================================
 
-bool FDungeonTileMapper::NeedsWall(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ)
-{
-	if (!Grid.IsInBounds(NX, NY, NZ))
-	{
-		return true;
-	}
-
-	const FDungeonCell& Neighbor = Grid.GetCell(NX, NY, NZ);
-
-	// Solid neighbor always needs wall
-	if (Neighbor.CellType == EDungeonCellType::Empty || Neighbor.CellType == EDungeonCellType::RoomWall)
-	{
-		return true;
-	}
-
-	// Door/Entrance neighbors handle their own frames — don't wall them off
-	if (Neighbor.CellType == EDungeonCellType::Door || Neighbor.CellType == EDungeonCellType::Entrance)
-	{
-		return false;
-	}
-
-	// Room-family cells (Room, Door, Entrance) — grouped by RoomIndex
-	auto IsRoomFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Room
-			|| Type == EDungeonCellType::Door
-			|| Type == EDungeonCellType::Entrance;
-	};
-
-	// Hallway-family cells (Hallway, Staircase, StaircaseHead) — grouped by HallwayIndex
-	auto IsHallwayFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Hallway
-			|| Type == EDungeonCellType::Staircase
-			|| Type == EDungeonCellType::StaircaseHead;
-	};
-
-	// Same room = no wall
-	if (IsRoomFamily(Current.CellType) && IsRoomFamily(Neighbor.CellType)
-		&& Current.RoomIndex == Neighbor.RoomIndex)
-	{
-		return false;
-	}
-
-	// Hallway-family ↔ hallway-family = no wall (hallways merge naturally at intersections).
-	// Exception: StaircaseHead cells only open toward same-staircase body/headroom cells.
-	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType))
-	{
-		const bool bEitherIsHead = (Current.CellType == EDungeonCellType::StaircaseHead
-			|| Neighbor.CellType == EDungeonCellType::StaircaseHead);
-		if (bEitherIsHead)
-		{
-			const bool bBothStaircaseFamily =
-				(Current.CellType == EDungeonCellType::Staircase || Current.CellType == EDungeonCellType::StaircaseHead)
-				&& (Neighbor.CellType == EDungeonCellType::Staircase || Neighbor.CellType == EDungeonCellType::StaircaseHead);
-			return !(bBothStaircaseFamily && Current.HallwayIndex == Neighbor.HallwayIndex);
-		}
-		return false;
-	}
-
-	// Different spaces (room↔hallway, different rooms) = wall
-	return true;
-}
-
-bool FDungeonTileMapper::NeedsVerticalBoundary(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ)
-{
-	if (!Grid.IsInBounds(NX, NY, NZ))
-	{
-		return true;
-	}
-
-	const FDungeonCell& Neighbor = Grid.GetCell(NX, NY, NZ);
-
-	// Solid neighbor always needs boundary
-	if (Neighbor.CellType == EDungeonCellType::Empty || Neighbor.CellType == EDungeonCellType::RoomWall)
-	{
-		return true;
-	}
-
-	// Room-family cells (Room, Door, Entrance) — grouped by RoomIndex
-	auto IsRoomFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Room
-			|| Type == EDungeonCellType::Door
-			|| Type == EDungeonCellType::Entrance;
-	};
-
-	// Hallway-family cells (Hallway, Staircase, StaircaseHead) — grouped by HallwayIndex
-	auto IsHallwayFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Hallway
-			|| Type == EDungeonCellType::Staircase
-			|| Type == EDungeonCellType::StaircaseHead;
-	};
-
-	// Same room = no boundary (multi-floor room interior)
-	if (IsRoomFamily(Current.CellType) && IsRoomFamily(Neighbor.CellType)
-		&& Current.RoomIndex == Neighbor.RoomIndex)
-	{
-		return false;
-	}
-
-	// Same hallway = no boundary (staircase shaft stays open)
-	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType)
-		&& Current.HallwayIndex == Neighbor.HallwayIndex)
-	{
-		return false;
-	}
-
-	// Different spaces = needs boundary
-	return true;
-}
+// Wall / floor / ceiling decisions come from FDungeonBoundaryRules (DungeonCore), shared with
+// the voxel stamper so the two backends can never disagree about which faces are open.
 
 FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	const FDungeonResult& Result,
@@ -181,70 +73,112 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 		};
 	};
 
-	FMeshInfo MeshInfos[FDungeonTileMapResult::TypeCount];
-	MeshInfos[static_cast<int32>(EDungeonTileType::RoomFloor)]     = GetMeshInfo(TileSet.RoomFloor);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayFloor)]  = GetMeshInfo(TileSet.HallwayFloor);
-	MeshInfos[static_cast<int32>(EDungeonTileType::RoomCeiling)]   = GetMeshInfo(TileSet.RoomCeiling);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayCeiling)]= GetMeshInfo(TileSet.HallwayCeiling);
-	MeshInfos[static_cast<int32>(EDungeonTileType::WallSegment)]   = GetMeshInfo(TileSet.WallSegment);
-	MeshInfos[static_cast<int32>(EDungeonTileType::DoorFrame)]     = GetMeshInfo(TileSet.DoorFrame);
-	MeshInfos[static_cast<int32>(EDungeonTileType::EntranceFrame)] = GetMeshInfo(TileSet.EntranceFrame);
-	MeshInfos[static_cast<int32>(EDungeonTileType::StaircaseMesh)] = GetMeshInfo(TileSet.StaircaseMesh);
-
-	// Hallway floor variants: use variant mesh info if set, otherwise fall back to HallwayFloor's info
-	const FMeshInfo& HallwayFloorInfo = MeshInfos[static_cast<int32>(EDungeonTileType::HallwayFloor)];
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayFloorStraight)]  = TileSet.HallwayFloorStraight.IsNull()  ? HallwayFloorInfo : GetMeshInfo(TileSet.HallwayFloorStraight);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayFloorCorner)]    = TileSet.HallwayFloorCorner.IsNull()    ? HallwayFloorInfo : GetMeshInfo(TileSet.HallwayFloorCorner);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayFloorTJunction)] = TileSet.HallwayFloorTJunction.IsNull() ? HallwayFloorInfo : GetMeshInfo(TileSet.HallwayFloorTJunction);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayFloorCrossroad)] = TileSet.HallwayFloorCrossroad.IsNull() ? HallwayFloorInfo : GetMeshInfo(TileSet.HallwayFloorCrossroad);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayFloorEndCap)]    = TileSet.HallwayFloorEndCap.IsNull()    ? HallwayFloorInfo : GetMeshInfo(TileSet.HallwayFloorEndCap);
-
-	// Hallway ceiling variants: use variant mesh info if set, otherwise fall back to HallwayCeiling's info
-	const FMeshInfo& HallwayCeilingInfo = MeshInfos[static_cast<int32>(EDungeonTileType::HallwayCeiling)];
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayCeilingStraight)]  = TileSet.HallwayCeilingStraight.IsNull()  ? HallwayCeilingInfo : GetMeshInfo(TileSet.HallwayCeilingStraight);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayCeilingCorner)]    = TileSet.HallwayCeilingCorner.IsNull()    ? HallwayCeilingInfo : GetMeshInfo(TileSet.HallwayCeilingCorner);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayCeilingTJunction)] = TileSet.HallwayCeilingTJunction.IsNull() ? HallwayCeilingInfo : GetMeshInfo(TileSet.HallwayCeilingTJunction);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayCeilingCrossroad)] = TileSet.HallwayCeilingCrossroad.IsNull() ? HallwayCeilingInfo : GetMeshInfo(TileSet.HallwayCeilingCrossroad);
-	MeshInfos[static_cast<int32>(EDungeonTileType::HallwayCeilingEndCap)]    = TileSet.HallwayCeilingEndCap.IsNull()    ? HallwayCeilingInfo : GetMeshInfo(TileSet.HallwayCeilingEndCap);
-
-	// --- Per-variant scale multipliers (applied on top of auto-fit scale) ---
-	// Defaults to (1,1,1) for all types. Only hallway variants have user-configurable multipliers.
+	// Everything below reads from the consolidated per-type slots (TileSet.Slots) via getters.
+	// Resolve each type's single-mesh once into a flat array; the rest of the setup is array-driven.
+	TSoftObjectPtr<UStaticMesh> MeshForType[FDungeonTileMapResult::TypeCount];
 	FVector ScaleMultipliers[FDungeonTileMapResult::TypeCount];
-	for (int32 i = 0; i < FDungeonTileMapResult::TypeCount; ++i) ScaleMultipliers[i] = FVector::OneVector;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayFloorStraight)]  = TileSet.HallwayFloorStraightScaleMultiplier;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayFloorCorner)]    = TileSet.HallwayFloorCornerScaleMultiplier;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayFloorTJunction)] = TileSet.HallwayFloorTJunctionScaleMultiplier;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayFloorCrossroad)] = TileSet.HallwayFloorCrossroadScaleMultiplier;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayFloorEndCap)]    = TileSet.HallwayFloorEndCapScaleMultiplier;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayCeilingStraight)]  = TileSet.HallwayCeilingStraightScaleMultiplier;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayCeilingCorner)]    = TileSet.HallwayCeilingCornerScaleMultiplier;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayCeilingTJunction)] = TileSet.HallwayCeilingTJunctionScaleMultiplier;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayCeilingCrossroad)] = TileSet.HallwayCeilingCrossroadScaleMultiplier;
-	ScaleMultipliers[static_cast<int32>(EDungeonTileType::HallwayCeilingEndCap)]    = TileSet.HallwayCeilingEndCapScaleMultiplier;
+	FRotator BaseRotationOffsets[FDungeonTileMapResult::TypeCount];
+	FMeshInfo MeshInfos[FDungeonTileMapResult::TypeCount];
+	for (int32 i = 0; i < FDungeonTileMapResult::TypeCount; ++i)
+	{
+		const EDungeonTileType Type = static_cast<EDungeonTileType>(i);
+		MeshForType[i] = TileSet.GetMesh(Type);
+		ScaleMultipliers[i] = TileSet.GetScaleMultiplier(Type);
+		BaseRotationOffsets[i] = TileSet.GetRotationOffset(Type);
+		MeshInfos[i] = GetMeshInfo(MeshForType[i]);
+	}
+
+	// Hallway variants with no own mesh fall back to the base hallway floor/ceiling mesh info.
+	auto FallbackVariantInfo = [&MeshForType, &MeshInfos](EDungeonTileType Variant, EDungeonTileType Base)
+	{
+		if (MeshForType[static_cast<int32>(Variant)].IsNull())
+		{
+			MeshInfos[static_cast<int32>(Variant)] = MeshInfos[static_cast<int32>(Base)];
+		}
+	};
+	FallbackVariantInfo(EDungeonTileType::HallwayFloorStraight,  EDungeonTileType::HallwayFloor);
+	FallbackVariantInfo(EDungeonTileType::HallwayFloorCorner,    EDungeonTileType::HallwayFloor);
+	FallbackVariantInfo(EDungeonTileType::HallwayFloorTJunction, EDungeonTileType::HallwayFloor);
+	FallbackVariantInfo(EDungeonTileType::HallwayFloorCrossroad, EDungeonTileType::HallwayFloor);
+	FallbackVariantInfo(EDungeonTileType::HallwayFloorEndCap,    EDungeonTileType::HallwayFloor);
+	FallbackVariantInfo(EDungeonTileType::HallwayCeilingStraight,  EDungeonTileType::HallwayCeiling);
+	FallbackVariantInfo(EDungeonTileType::HallwayCeilingCorner,    EDungeonTileType::HallwayCeiling);
+	FallbackVariantInfo(EDungeonTileType::HallwayCeilingTJunction, EDungeonTileType::HallwayCeiling);
+	FallbackVariantInfo(EDungeonTileType::HallwayCeilingCrossroad, EDungeonTileType::HallwayCeiling);
+	FallbackVariantInfo(EDungeonTileType::HallwayCeilingEndCap,    EDungeonTileType::HallwayCeiling);
+
+	// Compose a placement rotation with a slot's configured offset (offset applied mesh-local first).
+	auto ApplyRot = [&](EDungeonTileType Type, const FRotator& PlacementRot) -> FRotator
+	{
+		return (PlacementRot.Quaternion() * BaseRotationOffsets[static_cast<int32>(Type)].Quaternion()).Rotator();
+	};
+
+	// --- Module overrides (per tile type) ---
+	// A type with a module is placed with a single UNIFORM cell scale (ActualCellSize / module
+	// ReferenceCellSize) and NO pivot correction / slab lift — the module author owns the pieces'
+	// positions. The scale/pivot/half-Z helpers below short-circuit for such types; ADungeonActor
+	// expands the module's elements at render time. The stored per-type transform is thus a clean
+	// anchor (position + rotation + uniform scale).
+	bool bTypeIsModule[FDungeonTileMapResult::TypeCount] = {};
+	float ModuleUniformScale[FDungeonTileMapResult::TypeCount];
+	for (int32 i = 0; i < FDungeonTileMapResult::TypeCount; ++i)
+	{
+		ModuleUniformScale[i] = 1.0f;
+		// StaircaseMesh is a bespoke ramp, not a per-cell tile — modules unsupported (actor mirrors this).
+		if (static_cast<EDungeonTileType>(i) == EDungeonTileType::StaircaseMesh) { continue; }
+		const TSoftObjectPtr<UDungeonTileModule> ModulePtr = TileSet.GetModule(static_cast<EDungeonTileType>(i));
+		if (ModulePtr.IsNull()) { continue; }
+		const UDungeonTileModule* Module = ModulePtr.LoadSynchronous();
+		if (Module && Module->HasGeometry())
+		{
+			bTypeIsModule[i] = true;
+			ModuleUniformScale[i] = Module->GetUniformScale(CS);
+		}
+	}
+
+	// A slot renders if it has a module OR a non-null mesh.
+	auto SlotActive = [&](EDungeonTileType Type) -> bool
+	{
+		return bTypeIsModule[static_cast<int32>(Type)] || !MeshForType[static_cast<int32>(Type)].IsNull();
+	};
 
 	// Floor/ceiling target: CS × CS × Thin — mesh local axes: X=CS, Y=CS, Z=Thin
 	// ScaleMultiplier is applied on top so users can fine-tune without fighting auto-fit.
 	auto FloorScale = [&](EDungeonTileType Type) -> FVector
 	{
-		const FVector& E = MeshInfos[static_cast<int32>(Type)].Extent;
-		const FVector& M = ScaleMultipliers[static_cast<int32>(Type)];
+		const int32 Idx = static_cast<int32>(Type);
+		if (bTypeIsModule[Idx]) { return FVector(ModuleUniformScale[Idx]); }
+		const FVector& E = MeshInfos[Idx].Extent;
+		const FVector& M = ScaleMultipliers[Idx];
 		return FVector(CS / E.X * M.X, CS / E.Y * M.Y, Thin / E.Z * M.Z);
 	};
 
 	// Wall target: Thin × CS × CS — mesh local X=thin, Y=width, Z=height (pre-rotation)
 	auto WallScale = [&](EDungeonTileType Type) -> FVector
 	{
-		const FVector& E = MeshInfos[static_cast<int32>(Type)].Extent;
-		return FVector(Thin / E.X, CS / E.Y, CS / E.Z);
+		const int32 Idx = static_cast<int32>(Type);
+		if (bTypeIsModule[Idx]) { return FVector(ModuleUniformScale[Idx]); }
+		const FVector& M = ScaleMultipliers[Idx];
+		const FVector& E = MeshInfos[Idx].Extent;
+		return FVector(Thin / E.X * M.X, CS / E.Y * M.Y, CS / E.Z * M.Z);
 	};
 
 	// Pivot correction: offset placement so the mesh's bounding box center
 	// lands at the intended position, regardless of where the pivot is.
-	// PivotOffset = -Rotation.RotateVector(BoundsCenter * Scale)
+	// PivotOffset = -Rotation.RotateVector(BoundsCenter * Scale). Zero for modules (author owns pivots).
 	auto PivotOffset = [&](EDungeonTileType Type, const FVector& Scale, const FRotator& Rotation) -> FVector
 	{
+		if (bTypeIsModule[static_cast<int32>(Type)]) { return FVector::ZeroVector; }
 		const FVector& C = MeshInfos[static_cast<int32>(Type)].Center;
 		return -Rotation.RotateVector(C * Scale);
+	};
+
+	// Half the slab thickness along Z, used to seat floor/ceiling meshes flush with the cell
+	// boundary. Zero for modules (the author positions pieces relative to the anchor).
+	auto SlabHalfZ = [&](EDungeonTileType Type, const FVector& Scale) -> float
+	{
+		if (bTypeIsModule[static_cast<int32>(Type)]) { return 0.0f; }
+		return MeshInfos[static_cast<int32>(Type)].Extent.Z * Scale.Z * 0.5f;
 	};
 
 	// Helper: returns true if a cell type is "hallway-connected" for floor variant classification.
@@ -302,13 +236,13 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					? EDungeonTileType::HallwayCeiling
 					: EDungeonTileType::RoomCeiling;
 
-				// Check mesh availability
+				// Check slot availability (mesh OR module)
 				const bool bHasFloorMesh = bIsHallway
-					? !TileSet.HallwayFloor.IsNull()
-					: !TileSet.RoomFloor.IsNull();
+					? SlotActive(EDungeonTileType::HallwayFloor)
+					: SlotActive(EDungeonTileType::RoomFloor);
 				const bool bHasCeilingMesh = bIsHallway
-					? !TileSet.HallwayCeiling.IsNull()
-					: !TileSet.RoomCeiling.IsNull();
+					? SlotActive(EDungeonTileType::HallwayCeiling)
+					: SlotActive(EDungeonTileType::RoomCeiling);
 
 				// --- Hallway connectivity detection (shared by floor + ceiling variants) ---
 				// Computed once per hallway cell, used by both floor and ceiling placement.
@@ -376,33 +310,31 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 				};
 
 				// --- Helper: select variant type + yaw for a given shape ---
-				// Selects from the given variant mesh set, falling back to baseType if variant is null.
-				// Each variant has its own rotation offset composed with the connectivity-derived yaw.
+				// A variant is used if its slot has a module OR a mesh; else fall back to baseType.
+				// Each variant's own rotation offset (from its slot) composes with the connectivity yaw.
 				auto SelectVariant = [&](
 					EDungeonTileType BaseType,
-					EDungeonTileType StraightType, const TSoftObjectPtr<UStaticMesh>& StraightMesh, const FRotator& StraightOffset,
-					EDungeonTileType CornerType, const TSoftObjectPtr<UStaticMesh>& CornerMesh, const FRotator& CornerOffset,
-					EDungeonTileType TJuncType, const TSoftObjectPtr<UStaticMesh>& TJuncMesh, const FRotator& TJuncOffset,
-					EDungeonTileType CrossType, const TSoftObjectPtr<UStaticMesh>& CrossMesh, const FRotator& CrossOffset,
-					EDungeonTileType EndCapType, const TSoftObjectPtr<UStaticMesh>& EndCapMesh, const FRotator& EndCapOffset)
+					EDungeonTileType StraightType, EDungeonTileType CornerType, EDungeonTileType TJuncType,
+					EDungeonTileType CrossType, EDungeonTileType EndCapType)
 					-> TPair<EDungeonTileType, float>
 				{
+					auto Off = [&](EDungeonTileType T) -> const FRotator& { return BaseRotationOffsets[static_cast<int32>(T)]; };
 					switch (HallwayShape)
 					{
 					case ShapeEndCap:
-						if (!EndCapMesh.IsNull()) return {EndCapType, ComposeYaw(BaseEndCapYaw, EndCapOffset)};
+						if (SlotActive(EndCapType)) return {EndCapType, ComposeYaw(BaseEndCapYaw, Off(EndCapType))};
 						break;
 					case ShapeStraight:
-						if (!StraightMesh.IsNull()) return {StraightType, ComposeYaw(BaseStraightYaw, StraightOffset)};
+						if (SlotActive(StraightType)) return {StraightType, ComposeYaw(BaseStraightYaw, Off(StraightType))};
 						break;
 					case ShapeCorner:
-						if (!CornerMesh.IsNull()) return {CornerType, ComposeYaw(BaseCornerYaw, CornerOffset)};
+						if (SlotActive(CornerType)) return {CornerType, ComposeYaw(BaseCornerYaw, Off(CornerType))};
 						break;
 					case ShapeTJunction:
-						if (!TJuncMesh.IsNull()) return {TJuncType, ComposeYaw(BaseTJuncYaw, TJuncOffset)};
+						if (SlotActive(TJuncType)) return {TJuncType, ComposeYaw(BaseTJuncYaw, Off(TJuncType))};
 						break;
 					case ShapeCrossroad:
-						if (!CrossMesh.IsNull()) return {CrossType, ComposeYaw(BaseCrossroadYaw, CrossOffset)};
+						if (SlotActive(CrossType)) return {CrossType, ComposeYaw(BaseCrossroadYaw, Off(CrossType))};
 						break;
 					default:
 						break;
@@ -412,21 +344,19 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 
 				// Floor: place if cell below is a different space, solid, or OOB.
 				// Bottom face of the floor mesh is aligned flush with the cell's lower boundary.
-				if (bHasFloorMesh && NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z - 1))
+				if (bHasFloorMesh && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z - 1))
 				{
 					if (bIsHallway)
 					{
 						const auto [VariantType, VariantYaw] = SelectVariant(
 							EDungeonTileType::HallwayFloor,
-							EDungeonTileType::HallwayFloorStraight,  TileSet.HallwayFloorStraight,  TileSet.HallwayFloorStraightRotationOffset,
-							EDungeonTileType::HallwayFloorCorner,    TileSet.HallwayFloorCorner,    TileSet.HallwayFloorCornerRotationOffset,
-							EDungeonTileType::HallwayFloorTJunction, TileSet.HallwayFloorTJunction, TileSet.HallwayFloorTJunctionRotationOffset,
-							EDungeonTileType::HallwayFloorCrossroad, TileSet.HallwayFloorCrossroad, TileSet.HallwayFloorCrossroadRotationOffset,
-							EDungeonTileType::HallwayFloorEndCap,    TileSet.HallwayFloorEndCap,    TileSet.HallwayFloorEndCapRotationOffset);
+							EDungeonTileType::HallwayFloorStraight,  EDungeonTileType::HallwayFloorCorner,
+							EDungeonTileType::HallwayFloorTJunction, EDungeonTileType::HallwayFloorCrossroad,
+							EDungeonTileType::HallwayFloorEndCap);
 
 						const FRotator FloorRot(0.0f, VariantYaw, 0.0f);
 						const FVector FS = FloorScale(VariantType);
-						const float FloorHalfZ = MeshInfos[static_cast<int32>(VariantType)].Extent.Z * FS.Z * 0.5f;
+						const float FloorHalfZ = SlabHalfZ(VariantType, FS);
 						Out.Transforms[static_cast<int32>(VariantType)].Emplace(
 							FTransform(FloorRot,
 								CellCenter + PivotOffset(VariantType, FS, FloorRot) + FVector(0.0f, 0.0f, FloorHalfZ), FS));
@@ -434,10 +364,11 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					else
 					{
 						const FVector FS = FloorScale(EDungeonTileType::RoomFloor);
-						const float FloorHalfZ = MeshInfos[static_cast<int32>(EDungeonTileType::RoomFloor)].Extent.Z * FS.Z * 0.5f;
+						const FRotator FloorRot = ApplyRot(EDungeonTileType::RoomFloor, FRotator::ZeroRotator);
+						const float FloorHalfZ = SlabHalfZ(EDungeonTileType::RoomFloor, FS);
 						Out.Transforms[static_cast<int32>(EDungeonTileType::RoomFloor)].Emplace(
-							FTransform(FRotator::ZeroRotator,
-								CellCenter + PivotOffset(EDungeonTileType::RoomFloor, FS, FRotator::ZeroRotator) + FVector(0.0f, 0.0f, FloorHalfZ), FS));
+							FTransform(FloorRot,
+								CellCenter + PivotOffset(EDungeonTileType::RoomFloor, FS, FloorRot) + FVector(0.0f, 0.0f, FloorHalfZ), FS));
 					}
 				}
 
@@ -447,7 +378,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 				// enters from above (bOpenEntranceCeiling).
 				const bool bIsOpenEntranceCeiling = bOpenEntranceCeiling
 					&& X == Result.EntranceCell.X && Y == Result.EntranceCell.Y && Z == Result.EntranceCell.Z;
-				if (bHasCeilingMesh && !bIsOpenEntranceCeiling && NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z + 1))
+				if (bHasCeilingMesh && !bIsOpenEntranceCeiling && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z + 1))
 				{
 					const FVector CeilingPos = CellCenter + FVector(0.0f, 0.0f, CS);
 
@@ -455,15 +386,13 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					{
 						const auto [VariantType, VariantYaw] = SelectVariant(
 							EDungeonTileType::HallwayCeiling,
-							EDungeonTileType::HallwayCeilingStraight,  TileSet.HallwayCeilingStraight,  TileSet.HallwayCeilingStraightRotationOffset,
-							EDungeonTileType::HallwayCeilingCorner,    TileSet.HallwayCeilingCorner,    TileSet.HallwayCeilingCornerRotationOffset,
-							EDungeonTileType::HallwayCeilingTJunction, TileSet.HallwayCeilingTJunction, TileSet.HallwayCeilingTJunctionRotationOffset,
-							EDungeonTileType::HallwayCeilingCrossroad, TileSet.HallwayCeilingCrossroad, TileSet.HallwayCeilingCrossroadRotationOffset,
-							EDungeonTileType::HallwayCeilingEndCap,    TileSet.HallwayCeilingEndCap,    TileSet.HallwayCeilingEndCapRotationOffset);
+							EDungeonTileType::HallwayCeilingStraight,  EDungeonTileType::HallwayCeilingCorner,
+							EDungeonTileType::HallwayCeilingTJunction, EDungeonTileType::HallwayCeilingCrossroad,
+							EDungeonTileType::HallwayCeilingEndCap);
 
 						const FRotator CeilRot(0.0f, VariantYaw, 0.0f);
 						const FVector CeilS = FloorScale(VariantType);
-						const float CeilHalfZ = MeshInfos[static_cast<int32>(VariantType)].Extent.Z * CeilS.Z * 0.5f;
+						const float CeilHalfZ = SlabHalfZ(VariantType, CeilS);
 						Out.Transforms[static_cast<int32>(VariantType)].Emplace(
 							FTransform(CeilRot,
 								CeilingPos + PivotOffset(VariantType, CeilS, CeilRot) - FVector(0.0f, 0.0f, CeilHalfZ), CeilS));
@@ -471,10 +400,11 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					else
 					{
 						const FVector CeilS = FloorScale(CeilingType);
-						const float CeilHalfZ = MeshInfos[static_cast<int32>(CeilingType)].Extent.Z * CeilS.Z * 0.5f;
+						const FRotator CeilRot = ApplyRot(CeilingType, FRotator::ZeroRotator);
+						const float CeilHalfZ = SlabHalfZ(CeilingType, CeilS);
 						Out.Transforms[static_cast<int32>(CeilingType)].Emplace(
-							FTransform(FRotator::ZeroRotator,
-								CeilingPos + PivotOffset(CeilingType, CeilS, FRotator::ZeroRotator) - FVector(0.0f, 0.0f, CeilHalfZ), CeilS));
+							FTransform(CeilRot,
+								CeilingPos + PivotOffset(CeilingType, CeilS, CeilRot) - FVector(0.0f, 0.0f, CeilHalfZ), CeilS));
 					}
 				}
 
@@ -499,6 +429,11 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					const int32 NX = X + WC.DX;
 					const int32 NY = Y + WC.DY;
 					const FRotator FaceRot(0.0f, WC.Yaw, 0.0f);
+					// Per-face placement rotation composed with each wall-family slot's offset, so a
+					// mesh whose finished face points the wrong way can be flipped in data (Yaw=180).
+					const FRotator WallRot = ApplyRot(EDungeonTileType::WallSegment, FaceRot);
+					const FRotator DoorRot = ApplyRot(EDungeonTileType::DoorFrame, FaceRot);
+					const FRotator EntranceRot = ApplyRot(EDungeonTileType::EntranceFrame, FaceRot);
 
 					if (bIsDoor || bIsEntrance)
 					{
@@ -513,12 +448,12 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 
 						if (bIsSolid)
 						{
-							if (!TileSet.WallSegment.IsNull())
+							if (SlotActive(EDungeonTileType::WallSegment))
 							{
 								const FVector WS = WallScale(EDungeonTileType::WallSegment);
 								Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-									FTransform(FaceRot,
-										CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, FaceRot), WS));
+									FTransform(WallRot,
+										CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 							}
 						}
 						else
@@ -533,17 +468,18 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 								const EDungeonTileType FrameType = bIsDoor
 									? EDungeonTileType::DoorFrame
 									: EDungeonTileType::EntranceFrame;
+								const FRotator FrameRot = bIsDoor ? DoorRot : EntranceRot;
 
 								const bool bHasFrameMesh = bIsDoor
-									? !TileSet.DoorFrame.IsNull()
-									: !TileSet.EntranceFrame.IsNull();
+									? SlotActive(EDungeonTileType::DoorFrame)
+									: SlotActive(EDungeonTileType::EntranceFrame);
 
 								if (bHasFrameMesh)
 								{
 									const FVector FS = WallScale(FrameType);
 									Out.Transforms[static_cast<int32>(FrameType)].Emplace(
-										FTransform(FaceRot,
-											CellCenter + WC.Offset + PivotOffset(FrameType, FS, FaceRot), FS));
+										FTransform(FrameRot,
+											CellCenter + WC.Offset + PivotOffset(FrameType, FS, FrameRot), FS));
 								}
 							}
 						}
@@ -564,7 +500,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						{
 							// Entry: defer to standard logic, but open toward room-family cells
 							// (staircase can attach directly to a room without an intermediate hallway)
-							bPlaceWall = NeedsWall(Result.Grid, Cell, NX, NY, Z);
+							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, Cell, NX, NY, Z);
 							if (bPlaceWall && Result.Grid.IsInBounds(NX, NY, Z))
 							{
 								const EDungeonCellType NType = Result.Grid.GetCell(NX, NY, Z).CellType;
@@ -599,12 +535,12 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 							bPlaceWall = true;
 						}
 
-						if (bPlaceWall && !TileSet.WallSegment.IsNull())
+						if (bPlaceWall && SlotActive(EDungeonTileType::WallSegment))
 						{
 							const FVector WS = WallScale(EDungeonTileType::WallSegment);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-								FTransform(FaceRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, FaceRot), WS));
+								FTransform(WallRot,
+									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 						}
 					}
 					else if (bIsStaircaseHead)
@@ -620,7 +556,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						if (bIsClimbFace || bIsEntryFace)
 						{
 							// Open toward hallway-family, room-family, or same-staircase
-							bPlaceWall = NeedsWall(Result.Grid, Cell, NX, NY, Z);
+							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, Cell, NX, NY, Z);
 							if (bPlaceWall && Result.Grid.IsInBounds(NX, NY, Z))
 							{
 								const EDungeonCellType NType = Result.Grid.GetCell(NX, NY, Z).CellType;
@@ -636,18 +572,18 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						else
 						{
 							// Side faces: defer to NeedsWall (StaircaseHead restriction applies)
-							bPlaceWall = NeedsWall(Result.Grid, Cell, NX, NY, Z);
+							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, Cell, NX, NY, Z);
 						}
 
-						if (bPlaceWall && !TileSet.WallSegment.IsNull())
+						if (bPlaceWall && SlotActive(EDungeonTileType::WallSegment))
 						{
 							const FVector WS = WallScale(EDungeonTileType::WallSegment);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-								FTransform(FaceRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, FaceRot), WS));
+								FTransform(WallRot,
+									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 						}
 					}
-					else if (NeedsWall(Result.Grid, Cell, NX, NY, Z))
+					else if (FDungeonBoundaryRules::NeedsWall(Result.Grid, Cell, NX, NY, Z))
 					{
 						// Check if neighbor is a staircase with its entry facing us — door frame instead of wall
 						bool bStaircaseEntry = false;
@@ -681,19 +617,19 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						{
 							// Don't place wall — StaircaseHead's climb/entry face is open
 						}
-						else if (bStaircaseEntry && !TileSet.DoorFrame.IsNull())
+						else if (bStaircaseEntry && SlotActive(EDungeonTileType::DoorFrame))
 						{
 							const FVector FS = WallScale(EDungeonTileType::DoorFrame);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::DoorFrame)].Emplace(
-								FTransform(FaceRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::DoorFrame, FS, FaceRot), FS));
+								FTransform(DoorRot,
+									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::DoorFrame, FS, DoorRot), FS));
 						}
-						else if (!bStaircaseEntry && !TileSet.WallSegment.IsNull())
+						else if (!bStaircaseEntry && SlotActive(EDungeonTileType::WallSegment))
 						{
 							const FVector WS = WallScale(EDungeonTileType::WallSegment);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-								FTransform(FaceRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, FaceRot), WS));
+								FTransform(WallRot,
+									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 						}
 					}
 				}
@@ -707,7 +643,9 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	//   - Width along local X
 	//   - Rise along local Z
 	//   - Pivot at high-end corner (minX, minY, minZ)
-	if (!TileSet.StaircaseMesh.IsNull())
+	const TSoftObjectPtr<UStaticMesh> StaircaseMeshPtr = TileSet.GetMesh(EDungeonTileType::StaircaseMesh);
+	const FRotator StaircaseRotationOffset = TileSet.GetRotationOffset(EDungeonTileType::StaircaseMesh);
+	if (!StaircaseMeshPtr.IsNull())
 	{
 		for (const FDungeonStaircase& Staircase : Result.Staircases)
 		{
@@ -735,13 +673,13 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 			// Compose directional yaw with user-configured mesh rotation offset.
 			// Offset is applied first (mesh-local), then directional yaw (world-space).
 			const FRotator DirectionalRot(0.0f, StairYaw, 0.0f);
-			const FRotator StairRot = (DirectionalRot.Quaternion() * TileSet.StaircaseMeshRotationOffset.Quaternion()).Rotator();
+			const FRotator StairRot = (DirectionalRot.Quaternion() * StaircaseRotationOffset.Quaternion()).Rotator();
 
 			// Scale: target dimensions in standard convention are X=width(CS), Y=run(RunWorld), Z=rise(RiseWorld).
 			// When StaircaseMeshRotationOffset is set, the mesh axes are rotated relative to convention,
 			// so we rotate the target dimensions into mesh-local space before dividing by extent.
 			const FVector& StairE = MeshInfos[static_cast<int32>(EDungeonTileType::StaircaseMesh)].Extent;
-			const FQuat InvOffsetQuat = TileSet.StaircaseMeshRotationOffset.Quaternion().Inverse();
+			const FQuat InvOffsetQuat = StaircaseRotationOffset.Quaternion().Inverse();
 			const FVector TargetLocal = InvOffsetQuat.RotateVector(FVector(CS, RunWorld, RiseWorld));
 			const FVector StairScale(
 				FMath::Abs(TargetLocal.X) / StairE.X,
