@@ -41,6 +41,7 @@ DungeonVoxelIntegration → Optional VoxelWorlds bridge (disabled by default)
 - `FDungeonSeed` — Deterministic RNG wrapper with fork support
 - `FDungeonGrid` — 3D integer grid holding all cell data
 - `UDungeonConfiguration` — Data asset with all generation parameters
+- `FDungeonBoundaryRules` — THE wall / floor / ceiling predicates (`NeedsWall`, `NeedsVerticalBoundary`, `IsOpenCell`). Every output backend (tile mapper, voxel stamper, world mode) must call these; never re-implement them in a backend — they drifted three times and each drift sealed a doorway or dropped a floor. Rule-per-test coverage in `Dungeon.BoundaryRules.*`
 
 ### Algorithm Classes
 - `FDelaunayTetrahedralization` — 3D Bowyer-Watson (ported from Vazgriz C#)

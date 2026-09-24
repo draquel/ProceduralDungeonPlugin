@@ -86,18 +86,7 @@ struct DUNGEONOUTPUT_API FDungeonTileMapper
 		bool bOpenEntranceCeiling = false);
 
 private:
-	/**
-	 * Returns true if a wall is needed on the current cell's face toward the horizontal neighbor.
-	 * Walls are placed when the neighbor is solid, OOB, or belongs to a different logical space
-	 * (different room, different hallway, room↔hallway boundary).
-	 * Returns false for Door/Entrance neighbors — those cells handle their own frames.
-	 */
-	static bool NeedsWall(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ);
-
-	/**
-	 * Returns true if a floor/ceiling boundary is needed between the current cell and a vertical neighbor.
-	 * A boundary is needed when the neighbor is solid, OOB, or belongs to a different logical space
-	 * (different room, different hallway, or different space type).
-	 */
-	static bool NeedsVerticalBoundary(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ);
+	// Boundary decisions (wall / floor / ceiling between two cells) are NOT implemented here.
+	// They live in FDungeonBoundaryRules (DungeonCore) and are shared with the voxel stamper;
+	// re-implementing them per backend is how doorways ended up walled shut.
 };

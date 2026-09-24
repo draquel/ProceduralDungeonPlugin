@@ -1,6 +1,7 @@
 #include "VoxelDungeonWorldMode.h"
 #include "DungeonVoxelConfig.h"
 #include "DungeonVoxelIntegration.h"
+#include "DungeonBoundaryRules.h"
 
 FVoxelDungeonWorldMode::FVoxelDungeonWorldMode()
 {
@@ -57,12 +58,7 @@ void FVoxelDungeonWorldMode::Initialize(
 
 bool FVoxelDungeonWorldMode::IsOpenCell(EDungeonCellType CellType)
 {
-	return CellType == EDungeonCellType::Room
-		|| CellType == EDungeonCellType::Hallway
-		|| CellType == EDungeonCellType::Staircase
-		|| CellType == EDungeonCellType::StaircaseHead
-		|| CellType == EDungeonCellType::Door
-		|| CellType == EDungeonCellType::Entrance;
+	return FDungeonBoundaryRules::IsOpenCell(CellType);
 }
 
 bool FVoxelDungeonWorldMode::WorldToGridCoord(const FVector& WorldPos, FIntVector& OutGridCoord) const
@@ -183,29 +179,8 @@ float FVoxelDungeonWorldMode::GetDensityAt(
 		DistToMaxZ, DistToMinZ,
 	};
 
-	auto NeedsWallCheck = [this, &Cell](const FIntVector& GC, int32 NX, int32 NY, int32 NZ) -> bool
-	{
-		if (!Grid.IsInBounds(NX, NY, NZ))
-		{
-			return true;
-		}
-		const FDungeonCell& Neighbor = Grid.GetCell(NX, NY, NZ);
-		if (!IsOpenCell(Neighbor.CellType))
-		{
-			return true;
-		}
-		// Simplified: different room/hallway indices need boundary
-		if (Cell.RoomIndex != 0 && Neighbor.RoomIndex != 0 && Cell.RoomIndex == Neighbor.RoomIndex)
-		{
-			return false;
-		}
-		if (Cell.HallwayIndex != 0 && Neighbor.HallwayIndex != 0 && Cell.HallwayIndex == Neighbor.HallwayIndex)
-		{
-			return false;
-		}
-		return Cell.RoomIndex != Neighbor.RoomIndex || Cell.HallwayIndex != Neighbor.HallwayIndex;
-	};
-
+	// Boundary decisions use the shared FDungeonBoundaryRules so the SDF agrees with the tile
+	// mapper and the stamper: faces 0-3 are horizontal (walls), 4-5 vertical (floor/ceiling).
 	for (int32 Face = 0; Face < 6; ++Face)
 	{
 		const FIntVector& Dir = Directions[Face];
@@ -213,7 +188,10 @@ float FVoxelDungeonWorldMode::GetDensityAt(
 		const int32 NY = GridCoord.Y + Dir.Y;
 		const int32 NZ = GridCoord.Z + Dir.Z;
 
-		if (NeedsWallCheck(GridCoord, NX, NY, NZ))
+		const bool bNeedsBoundary = (Face < 4)
+			? FDungeonBoundaryRules::NeedsWall(Grid, Cell, NX, NY, NZ)
+			: FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, Cell, NX, NY, NZ);
+		if (bNeedsBoundary)
 		{
 			MinDistToBoundary = FMath::Min(MinDistToBoundary, FaceDistances[Face]);
 		}

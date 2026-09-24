@@ -70,14 +70,9 @@ public:
 		UDungeonVoxelConfig* Config);
 
 private:
-	/** Returns true if the cell type represents open/traversable space. */
-	static bool IsOpenCell(EDungeonCellType CellType);
-
-	/** Replicates DungeonTileMapper boundary detection for horizontal faces. */
-	static bool NeedsWall(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ);
-
-	/** Replicates DungeonTileMapper boundary detection for vertical faces. */
-	static bool NeedsVerticalBoundary(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ);
+	// Open-cell / wall / floor decisions come from FDungeonBoundaryRules (DungeonCore), shared
+	// with the tile mapper. Do not add local copies here: they drift, and a drifted rule means
+	// tiles seal space the voxels carved (or vice versa).
 
 	/** Returns the EDungeonRoomType for a cell based on its RoomIndex, or Generic for non-room cells. */
 	static EDungeonRoomType GetRoomTypeForCell(const FDungeonCell& Cell, const FDungeonResult& Result);

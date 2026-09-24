@@ -677,6 +677,20 @@ public:
 
 The `FDungeonTileMapper` iterates the grid, examines each cell and its neighbors, selects the appropriate mesh, computes rotation, and spawns `UStaticMeshComponent` instances (or `UInstancedStaticMeshComponent` for repeated tiles like floors).
 
+### Boundary Rules (shared by every backend)
+
+Walls, floors and ceilings are not stored in the grid. Each backend derives them per cell face by asking whether the cell and its neighbour belong to different logical spaces. That question is answered in exactly one place, `FDungeonBoundaryRules` in DungeonCore:
+
+| Predicate | Face | Answers |
+|-----------|------|---------|
+| `NeedsWall(Grid, Cell, NX, NY, NZ)` | horizontal | Does this face get a wall? |
+| `NeedsVerticalBoundary(Grid, Cell, NX, NY, NZ)` | vertical | Does this face get a floor / ceiling? |
+| `IsOpenCell(Type)` | — | Is the type traversable (not Empty / RoomWall)? |
+
+Rules, in order: out-of-bounds or solid neighbour → boundary; Door / Entrance neighbour → open (it owns its frame); Door / Entrance facing the hallway family → open (the doorway itself); same room → open; hallway family on both sides → open, except a StaircaseHead only opens toward its own hallway index; otherwise boundary. Vertically the hallway rule is narrower: only the staircase shaft is open, and two flat hallway cells stacked at different Z each keep their floor.
+
+The tile mapper uses the answers to place meshes; the voxel stamper uses them to decide which faces of the carved void get a solid shell; the instanced world mode uses them for its SDF. **Never re-implement these in a backend.** They were duplicated once and drifted three times, and every drift produced a wall tile across a carved doorway or a hole under a tiled floor. Each rule has a dedicated automation test under `Dungeon.BoundaryRules.*`.
+
 ### ADungeonActor
 
 The runtime actor that owns and displays a dungeon:

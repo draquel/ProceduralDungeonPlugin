@@ -2,153 +2,18 @@
 #include "DungeonVoxelConfig.h"
 #include "DungeonVoxelIntegration.h"
 #include "DungeonTypes.h"
+#include "DungeonBoundaryRules.h"
 #include "VoxelData.h"
 #include "VoxelEditManager.h"
 #include "VoxelChunkManager.h"
 #include "VoxelWorldConfiguration.h"
 
 // ============================================================================
-// Boundary Detection (replicates DungeonTileMapper logic)
+// Helpers
 // ============================================================================
 
-bool UDungeonVoxelStamper::IsOpenCell(EDungeonCellType CellType)
-{
-	return CellType == EDungeonCellType::Room
-		|| CellType == EDungeonCellType::Hallway
-		|| CellType == EDungeonCellType::Staircase
-		|| CellType == EDungeonCellType::StaircaseHead
-		|| CellType == EDungeonCellType::Door
-		|| CellType == EDungeonCellType::Entrance;
-}
-
-bool UDungeonVoxelStamper::NeedsWall(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ)
-{
-	if (!Grid.IsInBounds(NX, NY, NZ))
-	{
-		return true;
-	}
-
-	const FDungeonCell& Neighbor = Grid.GetCell(NX, NY, NZ);
-
-	if (Neighbor.CellType == EDungeonCellType::Empty || Neighbor.CellType == EDungeonCellType::RoomWall)
-	{
-		return true;
-	}
-
-	// Door/Entrance neighbors handle their own frames
-	if (Neighbor.CellType == EDungeonCellType::Door || Neighbor.CellType == EDungeonCellType::Entrance)
-	{
-		return false;
-	}
-
-	auto IsRoomFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Room
-			|| Type == EDungeonCellType::Door
-			|| Type == EDungeonCellType::Entrance;
-	};
-
-	auto IsHallwayFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Hallway
-			|| Type == EDungeonCellType::Staircase
-			|| Type == EDungeonCellType::StaircaseHead;
-	};
-
-	// Door/Entrance opening toward hallway = no wall (connection point between room and hallway)
-	if ((Current.CellType == EDungeonCellType::Door || Current.CellType == EDungeonCellType::Entrance)
-		&& IsHallwayFamily(Neighbor.CellType))
-	{
-		return false;
-	}
-
-	// Same room = no wall
-	if (IsRoomFamily(Current.CellType) && IsRoomFamily(Neighbor.CellType)
-		&& Current.RoomIndex == Neighbor.RoomIndex)
-	{
-		return false;
-	}
-
-	// Hallway-family merge: same hallway = open, different hallway = wall
-	// StaircaseHead cells must connect to their exit Hallway (same HallwayIndex)
-	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType))
-	{
-		const bool bEitherIsHead = (Current.CellType == EDungeonCellType::StaircaseHead
-			|| Neighbor.CellType == EDungeonCellType::StaircaseHead);
-		if (bEitherIsHead)
-		{
-			return Current.HallwayIndex != Neighbor.HallwayIndex;
-		}
-		return false;
-	}
-
-	return true;
-}
-
-bool UDungeonVoxelStamper::NeedsVerticalBoundary(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ)
-{
-	if (!Grid.IsInBounds(NX, NY, NZ))
-	{
-		return true;
-	}
-
-	const FDungeonCell& Neighbor = Grid.GetCell(NX, NY, NZ);
-
-	if (Neighbor.CellType == EDungeonCellType::Empty || Neighbor.CellType == EDungeonCellType::RoomWall)
-	{
-		return true;
-	}
-
-	// Door/Entrance neighbors — open
-	if (Neighbor.CellType == EDungeonCellType::Door || Neighbor.CellType == EDungeonCellType::Entrance)
-	{
-		return false;
-	}
-
-	auto IsRoomFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Room
-			|| Type == EDungeonCellType::Door
-			|| Type == EDungeonCellType::Entrance;
-	};
-
-	auto IsHallwayFamily = [](EDungeonCellType Type)
-	{
-		return Type == EDungeonCellType::Hallway
-			|| Type == EDungeonCellType::Staircase
-			|| Type == EDungeonCellType::StaircaseHead;
-	};
-
-	// Door/Entrance opening toward hallway = no vertical boundary
-	if ((Current.CellType == EDungeonCellType::Door || Current.CellType == EDungeonCellType::Entrance)
-		&& IsHallwayFamily(Neighbor.CellType))
-	{
-		return false;
-	}
-
-	if (IsRoomFamily(Current.CellType) && IsRoomFamily(Neighbor.CellType)
-		&& Current.RoomIndex == Neighbor.RoomIndex)
-	{
-		return false;
-	}
-
-	// Same-hallway vertical opening applies ONLY to the staircase shaft; two stacked flat Hallway
-	// cells are separate walkable levels and each needs its floor/ceiling (mirrors
-	// FDungeonTileMapper::NeedsVerticalBoundary — the two must agree or tile/voxel floors disagree).
-	if (IsHallwayFamily(Current.CellType) && IsHallwayFamily(Neighbor.CellType)
-		&& Current.HallwayIndex == Neighbor.HallwayIndex)
-	{
-		const bool bShaft =
-			Current.CellType == EDungeonCellType::Staircase || Current.CellType == EDungeonCellType::StaircaseHead
-			|| Neighbor.CellType == EDungeonCellType::Staircase || Neighbor.CellType == EDungeonCellType::StaircaseHead;
-		if (bShaft)
-		{
-			return false;
-		}
-	}
-
-	return true;
-}
+// Which faces of a carved cell get a solid shell is decided by FDungeonBoundaryRules
+// (DungeonCore), the same predicates the tile mapper uses, so tiles and voxels always agree.
 
 EDungeonRoomType UDungeonVoxelStamper::GetRoomTypeForCell(const FDungeonCell& Cell, const FDungeonResult& Result)
 {
@@ -220,7 +85,7 @@ bool UDungeonVoxelStamper::IsInsideOpenCell(
 		FMath::FloorToInt32(Local.Y),
 		FMath::FloorToInt32(Local.Z));
 
-	return Result.Grid.IsInBounds(GridCoord) && IsOpenCell(Result.Grid.GetCell(GridCoord).CellType);
+	return Result.Grid.IsInBounds(GridCoord) && FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(GridCoord).CellType);
 }
 
 /**
@@ -608,7 +473,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 			for (int32 GX = 0; GX < Grid.GridSize.X; ++GX)
 			{
 				const FDungeonCell& Cell = Grid.GetCell(GX, GY, GZ);
-				if (!IsOpenCell(Cell.CellType))
+				if (!FDungeonBoundaryRules::IsOpenCell(Cell.CellType))
 				{
 					continue;
 				}
@@ -658,7 +523,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 			for (int32 GX = 0; GX < Grid.GridSize.X; ++GX)
 			{
 				const FDungeonCell& Cell = Grid.GetCell(GX, GY, GZ);
-				if (!IsOpenCell(Cell.CellType))
+				if (!FDungeonBoundaryRules::IsOpenCell(Cell.CellType))
 				{
 					continue;
 				}
@@ -676,11 +541,11 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 					bool bNeedsBoundary;
 					if (Face < 4)
 					{
-						bNeedsBoundary = NeedsWall(Grid, Cell, NX, NY, NZ);
+						bNeedsBoundary = FDungeonBoundaryRules::NeedsWall(Grid, Cell, NX, NY, NZ);
 					}
 					else
 					{
-						bNeedsBoundary = NeedsVerticalBoundary(Grid, Cell, NX, NY, NZ);
+						bNeedsBoundary = FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, Cell, NX, NY, NZ);
 					}
 
 					if (!bNeedsBoundary)
@@ -749,7 +614,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 							const int32 NX = GX + Directions[D].X;
 							const int32 NY = GY + Directions[D].Y;
 							const int32 NZ = GZ + Directions[D].Z;
-							if (Grid.IsInBounds(NX, NY, NZ) && IsOpenCell(Grid.GetCell(NX, NY, NZ).CellType))
+							if (Grid.IsInBounds(NX, NY, NZ) && FDungeonBoundaryRules::IsOpenCell(Grid.GetCell(NX, NY, NZ).CellType))
 							{
 								bIsShell = true;
 							}
