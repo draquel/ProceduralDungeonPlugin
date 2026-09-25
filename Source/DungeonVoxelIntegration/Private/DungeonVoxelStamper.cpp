@@ -1,4 +1,5 @@
 #include "DungeonVoxelStamper.h"
+#include "DungeonVoxelStampPlan.h"
 #include "DungeonVoxelConfig.h"
 #include "DungeonVoxelIntegration.h"
 #include "DungeonTypes.h"
@@ -74,75 +75,8 @@ int32 UDungeonVoxelStamper::CarveCell(
 	return Count;
 }
 
-bool UDungeonVoxelStamper::IsInsideOpenCell(
-	const FDungeonResult& Result,
-	const FVector& WorldOffset,
-	const FVector& WorldPos)
-{
-	const FVector Local = (WorldPos - WorldOffset) / Result.CellWorldSize;
-	const FIntVector GridCoord(
-		FMath::FloorToInt32(Local.X),
-		FMath::FloorToInt32(Local.Y),
-		FMath::FloorToInt32(Local.Z));
-
-	return Result.Grid.IsInBounds(GridCoord) && FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(GridCoord).CellType);
-}
-
-/**
- * World-space box covering one face slab of a cell.
- *
- * Faces: 0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z(ceiling), 5=-Z(floor).
- *
- * bOutward=false puts the slab INSIDE the cell (the stone lining). bOutward=true puts it just
- * OUTSIDE and also widens the slab laterally by Thickness, so the six face slabs overlap at the
- * cell's edges and corners and together form a closed shell.
- */
-static void FaceSlabBox(
-	const FVector& CellWorldMin,
-	float CellWorldSize,
-	int32 Face,
-	float Thickness,
-	bool bOutward,
-	FVector& OutMin,
-	FVector& OutMax)
-{
-	const FVector CellMax = CellWorldMin + FVector(CellWorldSize);
-	const float Lateral = bOutward ? Thickness : 0.0f;
-
-	OutMin = CellWorldMin - FVector(Lateral);
-	OutMax = CellMax + FVector(Lateral);
-
-	switch (Face)
-	{
-	case 0: // +X
-		OutMin.X = bOutward ? CellMax.X : CellMax.X - Thickness;
-		OutMax.X = bOutward ? CellMax.X + Thickness : CellMax.X;
-		break;
-	case 1: // -X
-		OutMin.X = bOutward ? CellWorldMin.X - Thickness : CellWorldMin.X;
-		OutMax.X = bOutward ? CellWorldMin.X : CellWorldMin.X + Thickness;
-		break;
-	case 2: // +Y
-		OutMin.Y = bOutward ? CellMax.Y : CellMax.Y - Thickness;
-		OutMax.Y = bOutward ? CellMax.Y + Thickness : CellMax.Y;
-		break;
-	case 3: // -Y
-		OutMin.Y = bOutward ? CellWorldMin.Y - Thickness : CellWorldMin.Y;
-		OutMax.Y = bOutward ? CellWorldMin.Y : CellWorldMin.Y + Thickness;
-		break;
-	case 4: // +Z (ceiling)
-		OutMin.Z = bOutward ? CellMax.Z : CellMax.Z - Thickness;
-		OutMax.Z = bOutward ? CellMax.Z + Thickness : CellMax.Z;
-		break;
-	case 5: // -Z (floor)
-		OutMin.Z = bOutward ? CellWorldMin.Z - Thickness : CellWorldMin.Z;
-		OutMax.Z = bOutward ? CellWorldMin.Z : CellWorldMin.Z + Thickness;
-		break;
-	default:
-		OutMin = OutMax = FVector::ZeroVector;
-		break;
-	}
-}
+// Face slab geometry (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z ceiling, 5=-Z floor) and the outer seal's
+// sample selection live in FDungeonVoxelStampPlan so they can be unit tested without a voxel world.
 
 int32 UDungeonVoxelStamper::PlaceBoundary(
 	UVoxelEditManager* EditManager,
@@ -158,7 +92,7 @@ int32 UDungeonVoxelStamper::PlaceBoundary(
 	const FVoxelData SolidVoxel = FVoxelData::Solid(MaterialID, BiomeID);
 
 	FVector BoxMin, BoxMax;
-	FaceSlabBox(CellWorldMin, CellWorldSize, Face, Thickness, /*bOutward=*/false, BoxMin, BoxMax);
+	FDungeonVoxelStampPlan::FaceSlabBox(CellWorldMin, CellWorldSize, Face, Thickness, /*bOutward=*/false, BoxMin, BoxMax);
 
 	FIntVector Min, Max;
 	Lattice.RangeForBox(BoxMin, BoxMax, Min, Max);
@@ -186,59 +120,27 @@ int32 UDungeonVoxelStamper::PlaceBoundary(
 int32 UDungeonVoxelStamper::PlaceOuterSeal(
 	UVoxelEditManager* EditManager,
 	const FDungeonVoxelLattice& Lattice,
-	const FDungeonResult& Result,
-	const FVector& WorldOffset,
 	const FVector& CellWorldMin,
 	float CellWorldSize,
 	int32 Face,
 	float Thickness,
 	uint8 MaterialID,
 	uint8 BiomeID,
+	const TSet<FIntVector>& OpenCellSamples,
 	TSet<FIntVector>& SealedVoxels)
 {
 	int32 Count = 0;
 	const FVoxelData SolidVoxel = FVoxelData::Solid(MaterialID, BiomeID);
 
-	FVector BoxMin, BoxMax;
-	FaceSlabBox(CellWorldMin, CellWorldSize, Face, Thickness, /*bOutward=*/true, BoxMin, BoxMax);
+	TArray<FIntVector> ToWrite;
+	FDungeonVoxelStampPlan::CollectOuterSealSamples(
+		Lattice, CellWorldMin, CellWorldSize, Face, Thickness, OpenCellSamples, SealedVoxels, ToWrite);
 
-	FIntVector Min, Max;
-	Lattice.RangeForBox(BoxMin, BoxMax, Min, Max);
-	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+	for (const FIntVector& Index : ToWrite)
 	{
-		return 0;
-	}
-
-	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
-	{
-		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
+		if (EditManager->ApplyEdit(Lattice.EditPosition(Index), SolidVoxel, EEditMode::Set))
 		{
-			for (int32 IX = Min.X; IX <= Max.X; ++IX)
-			{
-				const FIntVector Index(IX, IY, IZ);
-
-				// Already sealed by an adjoining face or cell — same value, so skip the work.
-				bool bAlreadySealed = false;
-				SealedVoxels.Add(Index, &bAlreadySealed);
-				if (bAlreadySealed)
-				{
-					continue;
-				}
-
-				const FVector WorldPos = Lattice.EditPosition(Index);
-
-				// Never plug a room, hallway or the cell this seal belongs to. The lateral
-				// widening that closes the corners is exactly what makes this reachable.
-				if (IsInsideOpenCell(Result, WorldOffset, WorldPos))
-				{
-					continue;
-				}
-
-				if (EditManager->ApplyEdit(WorldPos, SolidVoxel, EEditMode::Set))
-				{
-					++Count;
-				}
-			}
+			++Count;
 		}
 	}
 	return Count;
@@ -403,6 +305,14 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 	// Wall/lining/seal depth in world units. WallThickness is authored in voxel layers.
 	const float WallWorldThickness = Config->WallThickness * VoxelSize;
 
+	// CarveOnly only: the void is carved CarveMargin past every cell plane so the meshed rock
+	// surface (midway between the last carved sample and the first solid one) can never stand
+	// inside the cell behind the tiles. The voxel-lined modes keep the exact cell box — their
+	// stone lining IS the wall. The open-sample set and the seal slabs use the same expanded box.
+	const float CarveMargin = (StampMode == EDungeonStampMode::CarveOnly)
+		? FMath::Clamp(Config->CarveMarginVoxels, 0.0f, 1.0f) * VoxelSize
+		: 0.0f;
+
 	// Every voxel write below resolves through this lattice rather than stepping in cell space:
 	// the dungeon origin has an arbitrary phase against the voxel grid and CellWorldSize is not
 	// generally a multiple of VoxelSize, so cell-space stepping leaves an uncarved rind.
@@ -480,7 +390,8 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 				const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
 
-				const int32 Carved = CarveCell(EditManager, Lattice, CellWorldMin, CellWorldSize,
+				const int32 Carved = CarveCell(EditManager, Lattice,
+					CellWorldMin - FVector(CarveMargin), CellWorldSize + 2.0f * CarveMargin,
 					bMergeMode, bMergeMode ? ChunkManager : nullptr);
 				StampResult.VoxelsModified += Carved;
 
@@ -511,9 +422,15 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 	// Shared across every seal slab so each shell voxel is written exactly once.
 	TSet<FIntVector> SealedVoxels;
+
+	// Every sample Pass 1 carved, by lattice index. The seal slabs reach into the void (lateral
+	// widening at edges and corners, and faces shared with another open cell lie entirely inside
+	// it), and a sample that belongs to any open cell must never be written solid again.
+	TSet<FIntVector> OpenCellSamples;
 	if (bOuterSeal)
 	{
 		SealedVoxels.Reserve(Grid.Cells.Num() * 4);
+		FDungeonVoxelStampPlan::CollectOpenCellSamples(Grid, Lattice, WorldOffset, CellWorldSize, CarveMargin, OpenCellSamples);
 	}
 
 	for (int32 GZ = 0; GZ < Grid.GridSize.Z; ++GZ)
@@ -556,8 +473,9 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 					const uint8 MatID = Config->GetMaterialForCell(Cell.CellType, RoomType, Face);
 
 					const int32 Placed = bOuterSeal
-						? PlaceOuterSeal(EditManager, Lattice, Result, WorldOffset, CellWorldMin,
-							CellWorldSize, Face, WallWorldThickness, MatID, BiomeID, SealedVoxels)
+						? PlaceOuterSeal(EditManager, Lattice,
+							CellWorldMin - FVector(CarveMargin), CellWorldSize + 2.0f * CarveMargin,
+							Face, WallWorldThickness, MatID, BiomeID, OpenCellSamples, SealedVoxels)
 						: PlaceBoundary(EditManager, Lattice, CellWorldMin, CellWorldSize,
 							Face, WallWorldThickness, MatID, BiomeID);
 					StampResult.VoxelsModified += Placed;

@@ -47,6 +47,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scale", meta = (ClampMin = "1", ClampMax = "8"))
 	int32 WallThickness = 1;
 
+	/**
+	 * CarveOnly (tile-dressed) dungeons only: how far past every cell plane the void is carved, in
+	 * voxels. The meshed rock surface sits midway between the last carved sample and the first
+	 * solid one, so with 0 it lies within half a voxel of the plane on EITHER side and can stand
+	 * up to VoxelSize / 2 inside the cell, behind the tiles. 0.5 moves the whole band outward: the
+	 * surface then lies in [plane, plane + VoxelSize) and rock never crosses a cell plane inward,
+	 * so module faces (and recesses behind them, such as wall niches) may sit at any inset. The
+	 * outer seal moves out with it, so its thickness is unchanged. Ignored by the voxel-lined
+	 * modes, whose stone lining defines the walls.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scale", meta = (ClampMin = "0", ClampMax = "1"))
+	float CarveMarginVoxels = 0.0f;
+
 	/** Biome ID assigned to all dungeon voxels. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Biome")
 	uint8 DungeonBiomeID = 0;

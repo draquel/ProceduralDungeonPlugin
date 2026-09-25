@@ -250,6 +250,23 @@ The stamper and the module renderer stay independent; the only shared contract i
 `FDungeonTileMapper::TileThickness` (the walkable-floor-top metric), which modules should respect so
 collision and the carved void agree — document this as a module-authoring constraint.
 
+**Where the rock surface actually is** (measured 2026-09-24 in the demo, 400 cm cells on a 75 cm
+corner-sampled lattice): the void is carved on `FDungeonVoxelLattice` (every sample whose position
+lies in the cell box), so the meshed surface is the midpoint between the last carved sample and the
+first solid one and lies within **half a voxel of every cell plane, on either side** — a module face
+inset ≥ `VoxelSize / 2` is never buried, but a recess behind the face (the crypt wall's niches) can
+still catch rock at an unlucky phase. Two things guard this band:
+- The outer seal (`FDungeonVoxelStampPlan`) excludes carved samples **by lattice index**. It used to
+  classify by edit position (sample + half a voxel), which attributed the last sample layer before
+  every +X/+Y/+Z plane to the next cell over and let a vertically adjacent cell's floor/ceiling seal
+  (WallThickness of lateral widening) re-solidify one voxel of rock inside the room, varying with
+  height. `Dungeon.VoxelStampPlan.*` pins this.
+- `UDungeonVoxelConfig::CarveMarginVoxels` (CarveOnly only) carves that far past every plane. At 0.5
+  the band becomes `[plane, plane + VoxelSize)`: rock never crosses a plane inward, so faces and
+  recesses may sit at any inset, and modules stay independent of the voxel size. This is the
+  preferred answer to the niche problem; a deeper module inset would cost interior width in every
+  crypt module and would still need re-tuning per voxel size.
+
 ---
 
 ## 11. Testing strategy

@@ -302,6 +302,44 @@ int32 ADungeonActor::GetTotalInstanceCount() const
 	return Total;
 }
 
+FString ADungeonActor::DescribeGridRegion(FIntVector MinCell, FIntVector MaxCell) const
+{
+	if (!bHasDungeon)
+	{
+		return FString();
+	}
+
+	static const TCHAR* TypeNames[] = {
+		TEXT("Empty"), TEXT("Room"), TEXT("RoomWall"), TEXT("Hallway"),
+		TEXT("Staircase"), TEXT("StaircaseHead"), TEXT("Door"), TEXT("Entrance"),
+	};
+
+	const FDungeonGrid& Grid = CachedResult.Grid;
+	FString Out;
+	for (int32 Z = MinCell.Z; Z <= MaxCell.Z; ++Z)
+	{
+		for (int32 Y = MinCell.Y; Y <= MaxCell.Y; ++Y)
+		{
+			for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
+			{
+				if (!Grid.IsInBounds(X, Y, Z))
+				{
+					Out += FString::Printf(TEXT("(%d,%d,%d) OOB\n"), X, Y, Z);
+					continue;
+				}
+
+				const FDungeonCell& Cell = Grid.GetCell(X, Y, Z);
+				const int32 TypeIndex = static_cast<int32>(Cell.CellType);
+				const TCHAR* TypeName = (TypeIndex >= 0 && TypeIndex < UE_ARRAY_COUNT(TypeNames))
+					? TypeNames[TypeIndex] : TEXT("?");
+				Out += FString::Printf(TEXT("(%d,%d,%d) %s room=%d hall=%d floor=%d stair=%d\n"),
+					X, Y, Z, TypeName, Cell.RoomIndex, Cell.HallwayIndex, Cell.FloorIndex, Cell.StaircaseDirection);
+			}
+		}
+	}
+	return Out;
+}
+
 void ADungeonActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
