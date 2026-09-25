@@ -74,6 +74,19 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
 	int32 GetTotalInstanceCount() const;
 
+	/**
+	 * Debug dump of the grid cells in an inclusive grid-coordinate box, one line per cell:
+	 * "(x,y,z) Type room=R hall=H floor=F stair=S". The grid itself is C++ only (too large for
+	 * Blueprint), so this is the way to inspect cell neighbourhoods from Blueprint or Python when
+	 * diagnosing tile / voxel boundary decisions. Out-of-bounds coordinates are reported as OOB.
+	 *
+	 * @param MinCell Inclusive min grid coordinate.
+	 * @param MaxCell Inclusive max grid coordinate.
+	 * @return Multi-line description; empty when no dungeon has been generated.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Debug")
+	FString DescribeGridRegion(FIntVector MinCell, FIntVector MaxCell) const;
+
 #if WITH_EDITORONLY_DATA
 	/** Master toggle for debug visualization in the viewport. */
 	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization")

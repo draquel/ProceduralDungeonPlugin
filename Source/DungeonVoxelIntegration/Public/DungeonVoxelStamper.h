@@ -110,9 +110,11 @@ private:
 	 * outside each boundary face instead, sealing the volume without occupying the cell where the
 	 * tiles stand.
 	 *
-	 * Voxels whose centre falls inside any open cell are skipped, so a seal can never plug a
-	 * neighbouring room or hallway.
+	 * Which lattice samples the slab writes is decided by FDungeonVoxelStampPlan: every sample
+	 * that Pass 1 carved (any open cell) is excluded by index, so a seal can never plug a
+	 * neighbouring room or hallway, nor re-solidify a layer of the cell it belongs to.
 	 *
+	 * @param OpenCellSamples Lattice indices of every sample inside any open cell, as carved.
 	 * @param SealedVoxels Lattice indices already sealed by this stamp. The six face slabs of a
 	 *        cell overlap at its edges and corners (that overlap is what closes the shell), and
 	 *        neighbouring cells re-seal each other's shells, so without this the same voxel is
@@ -122,19 +124,12 @@ private:
 	int32 PlaceOuterSeal(
 		class UVoxelEditManager* EditManager,
 		const FDungeonVoxelLattice& Lattice,
-		const FDungeonResult& Result,
-		const FVector& WorldOffset,
 		const FVector& CellWorldMin,
 		float CellWorldSize,
 		int32 Face,
 		float Thickness,
 		uint8 MaterialID,
 		uint8 BiomeID,
+		const TSet<FIntVector>& OpenCellSamples,
 		TSet<FIntVector>& SealedVoxels);
-
-	/** True when a world position falls inside an open (traversable) dungeon cell. */
-	static bool IsInsideOpenCell(
-		const FDungeonResult& Result,
-		const FVector& WorldOffset,
-		const FVector& WorldPos);
 };
