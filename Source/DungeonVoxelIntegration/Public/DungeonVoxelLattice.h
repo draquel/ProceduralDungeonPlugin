@@ -30,7 +30,10 @@
  *
  * Contract for tile authoring: with this convention the meshed rock surface lies within half a
  * voxel of every cell plane (it is the midpoint between the last carved sample and the first
- * solid one). Module faces inset by >= VoxelSize / 2 from the cell plane are never buried.
+ * solid one). Module faces inset by >= VoxelSize / 2 from the cell plane are never buried. With
+ * UDungeonVoxelConfig::CarveMarginVoxels = 0.5 the band moves outward to [plane, plane + VoxelSize)
+ * and rock never crosses a plane inward, so faces and the recesses behind them may sit at any
+ * inset (the outer seal moves out by the same margin, so its thickness is unchanged).
  */
 struct FDungeonVoxelLattice
 {

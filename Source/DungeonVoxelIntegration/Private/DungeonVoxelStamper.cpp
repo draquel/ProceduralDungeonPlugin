@@ -305,6 +305,14 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 	// Wall/lining/seal depth in world units. WallThickness is authored in voxel layers.
 	const float WallWorldThickness = Config->WallThickness * VoxelSize;
 
+	// CarveOnly only: the void is carved CarveMargin past every cell plane so the meshed rock
+	// surface (midway between the last carved sample and the first solid one) can never stand
+	// inside the cell behind the tiles. The voxel-lined modes keep the exact cell box — their
+	// stone lining IS the wall. The open-sample set and the seal slabs use the same expanded box.
+	const float CarveMargin = (StampMode == EDungeonStampMode::CarveOnly)
+		? FMath::Clamp(Config->CarveMarginVoxels, 0.0f, 1.0f) * VoxelSize
+		: 0.0f;
+
 	// Every voxel write below resolves through this lattice rather than stepping in cell space:
 	// the dungeon origin has an arbitrary phase against the voxel grid and CellWorldSize is not
 	// generally a multiple of VoxelSize, so cell-space stepping leaves an uncarved rind.
@@ -382,7 +390,8 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 				const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
 
-				const int32 Carved = CarveCell(EditManager, Lattice, CellWorldMin, CellWorldSize,
+				const int32 Carved = CarveCell(EditManager, Lattice,
+					CellWorldMin - FVector(CarveMargin), CellWorldSize + 2.0f * CarveMargin,
 					bMergeMode, bMergeMode ? ChunkManager : nullptr);
 				StampResult.VoxelsModified += Carved;
 
@@ -421,7 +430,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 	if (bOuterSeal)
 	{
 		SealedVoxels.Reserve(Grid.Cells.Num() * 4);
-		FDungeonVoxelStampPlan::CollectOpenCellSamples(Grid, Lattice, WorldOffset, CellWorldSize, OpenCellSamples);
+		FDungeonVoxelStampPlan::CollectOpenCellSamples(Grid, Lattice, WorldOffset, CellWorldSize, CarveMargin, OpenCellSamples);
 	}
 
 	for (int32 GZ = 0; GZ < Grid.GridSize.Z; ++GZ)
@@ -464,7 +473,8 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 					const uint8 MatID = Config->GetMaterialForCell(Cell.CellType, RoomType, Face);
 
 					const int32 Placed = bOuterSeal
-						? PlaceOuterSeal(EditManager, Lattice, CellWorldMin, CellWorldSize,
+						? PlaceOuterSeal(EditManager, Lattice,
+							CellWorldMin - FVector(CarveMargin), CellWorldSize + 2.0f * CarveMargin,
 							Face, WallWorldThickness, MatID, BiomeID, OpenCellSamples, SealedVoxels)
 						: PlaceBoundary(EditManager, Lattice, CellWorldMin, CellWorldSize,
 							Face, WallWorldThickness, MatID, BiomeID);

@@ -129,7 +129,7 @@ bool FDungeonStampPlanSealNeverInsideOpenCell::RunTest(const FString& Parameters
 		const FDungeonVoxelLattice Lattice(FVector(12345.0, 54321.0, 0.0), PlanVoxelSize);
 
 		TSet<FIntVector> OpenSamples;
-		FDungeonVoxelStampPlan::CollectOpenCellSamples(Grid, Lattice, Offset, PlanCellSize, OpenSamples);
+		FDungeonVoxelStampPlan::CollectOpenCellSamples(Grid, Lattice, Offset, PlanCellSize, 0.0f, OpenSamples);
 		TestTrue(FString::Printf(TEXT("Phase %d: open cells yield samples"), Step), OpenSamples.Num() > 0);
 
 		// Every collected sample really lies in an open cell, by the world-space oracle.
@@ -253,5 +253,93 @@ bool FDungeonStampPlanSealNeverInsideOpenCell::RunTest(const FString& Parameters
 		}
 	}
 
+	return true;
+}
+
+// ============================================================================
+// A half-voxel carve margin keeps the rock surface outside the cell on every axis, and the seal
+// follows the expanded box (nothing carved is re-solidified, the first solid sample is sealed)
+// ============================================================================
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDungeonStampPlanCarveMargin, "Dungeon.VoxelStampPlan.HalfVoxelMarginKeepsSurfaceOutsideCell",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeonStampPlanCarveMargin::RunTest(const FString& Parameters)
+{
+	FDungeonGrid Grid;
+	Grid.Initialize(FIntVector(3, 3, 3));
+	const FIntVector Open(1, 1, 1);
+	Grid.GetCell(Open).CellType = EDungeonCellType::Room;
+	Grid.GetCell(Open).RoomIndex = 1;
+
+	const float Margin = 0.5f * static_cast<float>(PlanVoxelSize);
+
+	for (int32 Step = 0; Step < 32; ++Step)
+	{
+		const double Phase = Step * (PlanVoxelSize / 32.0);
+		const FVector Offset = PlanUnalignedOffset + FVector(Phase, -Phase * 0.5, Phase * 0.25);
+		const FDungeonVoxelLattice Lattice(FVector(12345.0, 54321.0, 0.0), PlanVoxelSize);
+
+		TSet<FIntVector> OpenSamples;
+		FDungeonVoxelStampPlan::CollectOpenCellSamples(Grid, Lattice, Offset, PlanCellSize, Margin, OpenSamples);
+		TestTrue(FString::Printf(TEXT("Phase %d: samples collected"), Step), OpenSamples.Num() > 0);
+
+		const FVector CellMin = Offset + FVector(Open) * PlanCellSize;
+		const FVector CellMax = CellMin + FVector(PlanCellSize);
+
+		// Extreme open sample per axis, from the set itself.
+		FIntVector Lo(TNumericLimits<int32>::Max()), Hi(TNumericLimits<int32>::Min());
+		for (const FIntVector& I : OpenSamples)
+		{
+			Lo = FIntVector(FMath::Min(Lo.X, I.X), FMath::Min(Lo.Y, I.Y), FMath::Min(Lo.Z, I.Z));
+			Hi = FIntVector(FMath::Max(Hi.X, I.X), FMath::Max(Hi.Y, I.Y), FMath::Max(Hi.Z, I.Z));
+		}
+
+		for (int32 Axis = 0; Axis < 3; ++Axis)
+		{
+			const double LastOpen = Lattice.SamplePosition(Hi)[Axis];
+			const double FirstSolidAbove = LastOpen + PlanVoxelSize;
+			const double SurfaceHi = 0.5 * (LastOpen + FirstSolidAbove);
+			TestTrue(FString::Printf(TEXT("Phase %d axis %d: +surface (%.1f) at or beyond the plane (%.1f)"), Step, Axis, SurfaceHi, CellMax[Axis]),
+				SurfaceHi >= CellMax[Axis] - 1e-6);
+			TestTrue(FString::Printf(TEXT("Phase %d axis %d: +surface (%.1f) within a voxel of the plane (%.1f)"), Step, Axis, SurfaceHi, CellMax[Axis]),
+				SurfaceHi < CellMax[Axis] + PlanVoxelSize + 1e-6);
+
+			const double FirstOpen = Lattice.SamplePosition(Lo)[Axis];
+			const double LastSolidBelow = FirstOpen - PlanVoxelSize;
+			const double SurfaceLo = 0.5 * (FirstOpen + LastSolidBelow);
+			TestTrue(FString::Printf(TEXT("Phase %d axis %d: -surface (%.1f) at or beyond the plane (%.1f)"), Step, Axis, SurfaceLo, CellMin[Axis]),
+				SurfaceLo <= CellMin[Axis] + 1e-6);
+			TestTrue(FString::Printf(TEXT("Phase %d axis %d: -surface (%.1f) within a voxel of the plane (%.1f)"), Step, Axis, SurfaceLo, CellMin[Axis]),
+				SurfaceLo > CellMin[Axis] - PlanVoxelSize - 1e-6);
+		}
+
+		// The seal is planned on the same expanded box: it never touches a carved sample and it
+		// does cover the first solid sample past the void on every face.
+		TSet<FIntVector> Sealed;
+		const FVector BoxMin = CellMin - FVector(Margin);
+		const float BoxSize = PlanCellSize + 2.0f * Margin;
+		for (int32 Face = 0; Face < FDungeonVoxelStampPlan::NumFaces; ++Face)
+		{
+			TArray<FIntVector> ToWrite;
+			FDungeonVoxelStampPlan::CollectOuterSealSamples(
+				Lattice, BoxMin, BoxSize, Face, PlanSealThickness, OpenSamples, Sealed, ToWrite);
+			for (const FIntVector& I : ToWrite)
+			{
+				if (OpenSamples.Contains(I))
+				{
+					AddError(FString::Printf(TEXT("Phase %d face %d: seal re-solidifies carved sample (%d,%d,%d)"), Step, Face, I.X, I.Y, I.Z));
+					return false;
+				}
+			}
+		}
+		const FIntVector Centre = (Lo + Hi) / 2;
+		for (int32 Axis = 0; Axis < 3; ++Axis)
+		{
+			FIntVector Above = Centre; Above[Axis] = Hi[Axis] + 1;
+			FIntVector Below = Centre; Below[Axis] = Lo[Axis] - 1;
+			TestTrue(FString::Printf(TEXT("Phase %d axis %d: first solid sample past +face is sealed"), Step, Axis), Sealed.Contains(Above));
+			TestTrue(FString::Printf(TEXT("Phase %d axis %d: first solid sample past -face is sealed"), Step, Axis), Sealed.Contains(Below));
+		}
+	}
 	return true;
 }

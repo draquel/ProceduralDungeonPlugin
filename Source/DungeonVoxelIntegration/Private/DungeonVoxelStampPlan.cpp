@@ -54,6 +54,7 @@ void FDungeonVoxelStampPlan::CollectOpenCellSamples(
 	const FDungeonVoxelLattice& Lattice,
 	const FVector& WorldOffset,
 	float CellWorldSize,
+	float CarveMargin,
 	TSet<FIntVector>& OutSamples)
 {
 	for (int32 GZ = 0; GZ < Grid.GridSize.Z; ++GZ)
@@ -68,9 +69,11 @@ void FDungeonVoxelStampPlan::CollectOpenCellSamples(
 				}
 
 				const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
+				const FVector BoxMin = CellWorldMin - FVector(CarveMargin);
+				const FVector BoxMax = CellWorldMin + FVector(CellWorldSize + CarveMargin);
 
 				FIntVector Min, Max;
-				Lattice.RangeForBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), Min, Max);
+				Lattice.RangeForBox(BoxMin, BoxMax, Min, Max);
 				if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
 				{
 					continue;

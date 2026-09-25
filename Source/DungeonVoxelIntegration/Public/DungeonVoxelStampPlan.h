@@ -57,12 +57,15 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonVoxelStampPlan
 
 	/**
 	 * Add the lattice index of every sample inside every open cell of the grid to OutSamples.
-	 * Mirrors CarveCell's enumeration exactly (same lattice, same half-open cell boxes).
+	 * Mirrors CarveCell's enumeration exactly (same lattice, same half-open cell boxes, each
+	 * expanded by CarveMargin on every side).
 	 *
 	 * @param Grid          Dungeon grid.
 	 * @param Lattice       Target voxel world's lattice.
 	 * @param WorldOffset   World position of grid cell (0,0,0)'s min corner.
 	 * @param CellWorldSize Cell edge length in world units.
+	 * @param CarveMargin   How far past every cell plane the void is carved, in world units
+	 *                      (UDungeonVoxelConfig::CarveMarginVoxels * VoxelSize; 0 = the cell box).
 	 * @param OutSamples    Receives the indices (existing entries are kept).
 	 */
 	static void CollectOpenCellSamples(
@@ -70,6 +73,7 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonVoxelStampPlan
 		const FDungeonVoxelLattice& Lattice,
 		const FVector& WorldOffset,
 		float CellWorldSize,
+		float CarveMargin,
 		TSet<FIntVector>& OutSamples);
 
 	/**
