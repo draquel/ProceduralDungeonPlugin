@@ -5,25 +5,39 @@
 /**
  * The target voxel world's sampling lattice.
  *
- * Voxel centres sit at WorldOrigin + (Index + 0.5) * VoxelSize — the same mapping
- * UVoxelEditManager::WorldToLocalPos applies when it floors (WorldPos - WorldOrigin) / VoxelSize
- * to resolve an edit to a voxel.
+ * VoxelWorlds is a CORNER-sampled grid: the density for index I is generated at
+ * WorldOrigin + I * VoxelSize (GenerateVoxelDensity.usf), the meshers place geometry for index I
+ * at I * VoxelSize (P0 = float3(VX,VY,VZ) * VoxelSize), and UVoxelEditManager::WorldToLocalPos
+ * resolves a world position W to index Floor((W - WorldOrigin) / VoxelSize), i.e. the half-open
+ * interval [I*s, (I+1)*s) resolves to I. There is no "+0.5": index I IS the world point I*s.
  *
- * Why this exists: a dungeon grid is laid out from an arbitrary WorldOffset (pad centre minus the
- * entrance-cell offset), so the cell grid has no fixed phase against this lattice, and
- * CellWorldSize is rarely an integer multiple of VoxelSize (the demo runs 400 / 75). Enumerating
- * edit positions in CELL space — CellMin + (V + 0.5) * VoxelSize for V in [0, VoxelsPerCell) —
- * therefore both misses voxels at the far edge of every cell and writes others twice, leaving a
- * ragged solid rind through every carved room. Enumerate in LATTICE space instead: each voxel
- * belongs to exactly one cell by centre containment, so adjacent cells tile with no gaps and no
+ * The first version of this lattice assumed centre sampling (I + 0.5) * VoxelSize. Every carve
+ * then landed half a voxel low on each axis, so the rock surface ranged over +/- a full voxel
+ * around each cell plane instead of +/- half a voxel: rock intruded up to 70 cm past the +X/+Y
+ * walls of the demo dungeon (measured by line trace on 2026-09-24) and receded on the -X/-Y
+ * walls. SamplePosition / RangeForBox now use the corner convention; EditPosition keeps the
+ * half-voxel offset purely so the engine's Floor resolves it to the intended index without
+ * floating-point risk at the interval boundary.
+ *
+ * Why the lattice exists at all: a dungeon grid is laid out from an arbitrary WorldOffset (pad
+ * centre minus the entrance-cell offset), so the cell grid has no fixed phase against this
+ * lattice, and CellWorldSize is rarely an integer multiple of VoxelSize (the demo runs 400 / 75).
+ * Enumerating edit positions in CELL space (CellMin + (V + 0.5) * VoxelSize for V in
+ * [0, VoxelsPerCell)) both misses voxels at the far edge of every cell and writes others twice,
+ * leaving a ragged solid rind through every carved room. Enumerating in LATTICE space assigns
+ * each sample to exactly one cell by containment, so adjacent cells tile with no gaps and no
  * double writes, and the union of the open cells carves clean.
+ *
+ * Contract for tile authoring: with this convention the meshed rock surface lies within half a
+ * voxel of every cell plane (it is the midpoint between the last carved sample and the first
+ * solid one). Module faces inset by >= VoxelSize / 2 from the cell plane are never buried.
  */
 struct FDungeonVoxelLattice
 {
-	/** Lattice anchor — the voxel world's WorldOrigin. */
+	/** Lattice anchor: the voxel world's WorldOrigin. */
 	FVector Origin = FVector::ZeroVector;
 
-	/** Lattice pitch — the voxel world's VoxelSize. */
+	/** Lattice pitch: the voxel world's VoxelSize. */
 	double VoxelSize = 100.0;
 
 	FDungeonVoxelLattice() = default;
@@ -34,27 +48,36 @@ struct FDungeonVoxelLattice
 	{
 	}
 
-	/** World-space centre of the voxel at Index. */
-	FVector Center(const FIntVector& Index) const
+	/** World-space point the sample at Index represents: where it is generated and meshed. */
+	FVector SamplePosition(const FIntVector& Index) const
+	{
+		return Origin + FVector(Index) * VoxelSize;
+	}
+
+	/**
+	 * World-space position to hand UVoxelEditManager::ApplyEdit so that it resolves to Index.
+	 * The engine floors (W - Origin) / VoxelSize, so the middle of the index's interval is the
+	 * safest point: exact multiples can round to the neighbour below in floating point.
+	 */
+	FVector EditPosition(const FIntVector& Index) const
 	{
 		return Origin + (FVector(Index) + FVector(0.5)) * VoxelSize;
 	}
 
 	/**
-	 * Inclusive index range of every voxel whose CENTRE lies in [BoxMin, BoxMax).
+	 * Inclusive index range of every sample whose position lies in [BoxMin, BoxMax).
 	 * Half-open on the max side so abutting boxes partition the lattice exactly.
 	 */
 	void RangeForBox(const FVector& BoxMin, const FVector& BoxMax, FIntVector& OutMin, FIntVector& OutMax) const
 	{
 		OutMin = FIntVector(
-			FirstCentreAtOrAfter(BoxMin.X, Origin.X),
-			FirstCentreAtOrAfter(BoxMin.Y, Origin.Y),
-			FirstCentreAtOrAfter(BoxMin.Z, Origin.Z));
-
+			FirstSampleAtOrAfter(BoxMin.X, Origin.X),
+			FirstSampleAtOrAfter(BoxMin.Y, Origin.Y),
+			FirstSampleAtOrAfter(BoxMin.Z, Origin.Z));
 		OutMax = FIntVector(
-			FirstCentreAtOrAfter(BoxMax.X, Origin.X) - 1,
-			FirstCentreAtOrAfter(BoxMax.Y, Origin.Y) - 1,
-			FirstCentreAtOrAfter(BoxMax.Z, Origin.Z) - 1);
+			FirstSampleAtOrAfter(BoxMax.X, Origin.X) - 1,
+			FirstSampleAtOrAfter(BoxMax.Y, Origin.Y) - 1,
+			FirstSampleAtOrAfter(BoxMax.Z, Origin.Z) - 1);
 	}
 
 	/** True when the range is non-empty on every axis. */
@@ -64,9 +87,9 @@ struct FDungeonVoxelLattice
 	}
 
 private:
-	/** Lowest index on one axis whose centre is >= Bound. */
-	int32 FirstCentreAtOrAfter(double Bound, double OriginAxis) const
+	/** Lowest index on one axis whose sample position is >= Bound. */
+	int32 FirstSampleAtOrAfter(double Bound, double OriginAxis) const
 	{
-		return FMath::CeilToInt32((Bound - OriginAxis) / VoxelSize - 0.5);
+		return FMath::CeilToInt32((Bound - OriginAxis) / VoxelSize);
 	}
 };

@@ -100,7 +100,9 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 		{
 			for (int32 IX = Min.X; IX <= Max.X; ++IX)
 			{
-				const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
+				const FIntVector Index(IX, IY, IZ);
+				const FVector WorldPos = Lattice.SamplePosition(Index); // where this voxel is generated / meshed
+				const FVector EditPos = Lattice.EditPosition(Index);    // what resolves to it in ApplyEdit
 				const float DistX = FMath::Abs(WorldPos.X - Center.X);
 				const float DistY = FMath::Abs(WorldPos.Y - Center.Y);
 
@@ -112,7 +114,7 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 				if (DistX < HalfExtentXY && DistY < HalfExtentXY)
 				{
 					// Interior — carve to air
-					if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
+					if (EditManager->ApplyEdit(EditPos, AirVoxel, EEditMode::Set))
 					{
 						++VoxelsModified;
 					}
@@ -120,7 +122,7 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 				else if (bWallLayer)
 				{
 					// Shell — place wall
-					if (EditManager->ApplyEdit(WorldPos, WallVoxel, EEditMode::Set))
+					if (EditManager->ApplyEdit(EditPos, WallVoxel, EEditMode::Set))
 					{
 						++VoxelsModified;
 					}
@@ -379,7 +381,7 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
 	{
 		// Per-Z-slice displacement, evaluated at the lattice plane's own Z.
-		const double Z = Lattice.Center(FIntVector(Min.X, Min.Y, IZ)).Z;
+		const double Z = Lattice.SamplePosition(FIntVector(Min.X, Min.Y, IZ)).Z;
 		const float ZNormalized = static_cast<float>((Z - EntranceZ) / FMath::Max(TotalHeight, 1.0f));
 		const float NoiseX = FMath::Sin(Z * 0.03f) * VoxelSize * 1.5f;
 		const float NoiseY = FMath::Cos(Z * 0.037f) * VoxelSize * 1.5f;
@@ -395,20 +397,22 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 		{
 			for (int32 IX = Min.X; IX <= Max.X; ++IX)
 			{
-				const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
+				const FIntVector Index(IX, IY, IZ);
+				const FVector WorldPos = Lattice.SamplePosition(Index); // where this voxel is generated / meshed
+				const FVector EditPos = Lattice.EditPosition(Index);    // what resolves to it in ApplyEdit
 				const float DistXY = FMath::Sqrt(
 					FMath::Square(WorldPos.X - CenterX) + FMath::Square(WorldPos.Y - CenterY));
 
 				if (DistXY < Radius)
 				{
-					if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
+					if (EditManager->ApplyEdit(EditPos, AirVoxel, EEditMode::Set))
 					{
 						++VoxelsModified;
 					}
 				}
 				else if (DistXY < OuterRadius && WorldPos.Z < SurfaceZ) // no wall collar above ground
 				{
-					if (EditManager->ApplyEdit(WorldPos, WallVoxel, EEditMode::Set))
+					if (EditManager->ApplyEdit(EditPos, WallVoxel, EEditMode::Set))
 					{
 						++VoxelsModified;
 					}

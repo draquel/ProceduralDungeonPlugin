@@ -53,7 +53,7 @@ int32 UDungeonVoxelStamper::CarveCell(
 		{
 			for (int32 IX = Min.X; IX <= Max.X; ++IX)
 			{
-				const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
+				const FVector WorldPos = Lattice.EditPosition(FIntVector(IX, IY, IZ));
 
 				if (bOnlyIfSolid)
 				{
@@ -173,7 +173,7 @@ int32 UDungeonVoxelStamper::PlaceBoundary(
 		{
 			for (int32 IX = Min.X; IX <= Max.X; ++IX)
 			{
-				if (EditManager->ApplyEdit(Lattice.Center(FIntVector(IX, IY, IZ)), SolidVoxel, EEditMode::Set))
+				if (EditManager->ApplyEdit(Lattice.EditPosition(FIntVector(IX, IY, IZ)), SolidVoxel, EEditMode::Set))
 				{
 					++Count;
 				}
@@ -225,7 +225,7 @@ int32 UDungeonVoxelStamper::PlaceOuterSeal(
 					continue;
 				}
 
-				const FVector WorldPos = Lattice.Center(Index);
+				const FVector WorldPos = Lattice.EditPosition(Index);
 
 				// Never plug a room, hallway or the cell this seal belongs to. The lateral
 				// widening that closes the corners is exactly what makes this reachable.
@@ -303,7 +303,7 @@ static int32 PlaceStaircaseSteps(
 			{
 				for (int32 IX = Min.X; IX <= Max.X; ++IX)
 				{
-					const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
+					const FVector WorldPos = Lattice.EditPosition(FIntVector(IX, IY, IZ));
 
 					// Distance along the climb axis measured from the entry side of the cell.
 					const double AlongAxis = bClimbAlongX
@@ -447,7 +447,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 						{
 							for (int32 IX = VMin.X; IX <= VMax.X; ++IX)
 							{
-								const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
+								const FVector WorldPos = Lattice.EditPosition(FIntVector(IX, IY, IZ));
 
 								if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
 								{
@@ -641,7 +641,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 						{
 							for (int32 IX = VMin.X; IX <= VMax.X; ++IX)
 							{
-								const FVector WorldPos = Lattice.Center(FIntVector(IX, IY, IZ));
+								const FVector WorldPos = Lattice.EditPosition(FIntVector(IX, IY, IZ));
 
 								if (EditManager->ApplyEdit(WorldPos, WallVoxel, EEditMode::Set))
 								{
