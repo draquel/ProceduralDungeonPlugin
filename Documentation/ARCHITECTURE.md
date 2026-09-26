@@ -419,10 +419,13 @@ public:
 
     // --- Seed ---
     UPROPERTY(EditAnywhere, Category="Seed")
-    bool bUseFixedSeed = false;
+    bool bUseFixedSeed = false;  // Seed-0 generations use FixedSeed instead of the clock (explicit seeds always win)
 
     UPROPERTY(EditAnywhere, Category="Seed", meta=(EditCondition="bUseFixedSeed"))
     int64 FixedSeed = 0;
+
+    /** Explicit non-zero RequestedSeed > FixedSeed (when bUseFixedSeed) > 0 (generator uses the clock). */
+    int64 ResolveSeed(int64 RequestedSeed) const;
 };
 ```
 
@@ -962,6 +965,16 @@ Every step in the pipeline must obey:
 3. **No floating-point instability** — use integer math for grid operations; float only for Delaunay circumsphere tests (which are deterministic given identical inputs)
 4. **Fork seeds per sub-system** — room placement uses `Seed.Fork(1)`, edge re-addition uses `Seed.Fork(2)`, etc. This ensures changing one system's iteration count doesn't cascade to others.
 5. **Platform-identical results** — `FRandomStream` is deterministic cross-platform in UE. Avoid platform-specific float rounding.
+
+### Seed Resolution
+
+`UDungeonGenerator::Generate(Config, Seed)` resolves the seed through `UDungeonConfiguration::ResolveSeed`:
+
+1. A non-zero `Seed` argument is always used as-is. A configuration must never silently override a caller's seed (`ADungeonActor::Seed`, `RandomizeSeed()`, POI placement seeds).
+2. `Seed == 0` with `bUseFixedSeed` on and a non-zero `FixedSeed` uses `FixedSeed`.
+3. Otherwise a clock-derived seed is used (non-deterministic; a warning is logged when `bUseFixedSeed` is on but `FixedSeed` is 0).
+
+`FDungeonResult::Seed` records the seed actually used. Reproducing a layout needs that seed **and** the same configuration values: the grid size, room bounds, buffer and attempt count all feed the RNG consumption order, so a cached result generated under an earlier configuration will not match a regeneration with the same seed.
 
 ### Seed in Multiplayer
 

@@ -31,7 +31,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon")
 	TObjectPtr<UDungeonTileSet> TileSet;
 
-	/** Random seed. 0 = use current time. */
+	/**
+	 * Random seed. A non-zero value is always used as-is. 0 = use the config's FixedSeed when its
+	 * bUseFixedSeed is on, otherwise the current time (see UDungeonConfiguration::ResolveSeed).
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon")
 	int64 Seed = 0;
 

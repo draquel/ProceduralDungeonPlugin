@@ -80,7 +80,7 @@ If using VoxelWorlds integration, enable both plugins and set `DungeonVoxelInteg
 1. Place an `ADungeonActor` in your level
 2. Assign a `UDungeonConfiguration` data asset
 3. Assign a `UDungeonTileSet` data asset
-4. Set a seed (or leave 0 for random)
+4. Set a seed (or leave 0: the config's `FixedSeed` when `bUseFixedSeed` is on, otherwise random)
 5. Call `GenerateDungeon()` — from Blueprint, on BeginPlay, or from the editor
 
 ### Basic Usage (C++)
@@ -142,8 +142,18 @@ Stitcher->StitchEntrance(
 | Staircases | `StaircaseRiseToRun` | 2 | Horizontal cells per vertical cell |
 | Staircases | `StaircaseHeadroom` | 2 | Open cells above staircase body |
 | Entrance | `EntrancePlacement` | BoundaryEdge | Where the entrance room is placed |
-| Seed | `bUseFixedSeed` | false | Use deterministic seed |
-| Seed | `FixedSeed` | 0 | Seed value when fixed |
+| Seed | `bUseFixedSeed` | false | When on, generating with seed 0 uses `FixedSeed` instead of the clock |
+| Seed | `FixedSeed` | 0 | Seed used for seed-0 generations while `bUseFixedSeed` is on |
+
+### Seed Resolution
+
+`UDungeonGenerator::Generate(Config, Seed)` picks its seed in this order (`UDungeonConfiguration::ResolveSeed`):
+
+1. A non-zero `Seed` argument is always used as-is. `ADungeonActor::Seed`, `RandomizeSeed()` and POI placement seeds are never overridden by the config.
+2. If `Seed` is 0 and `bUseFixedSeed` is on with a non-zero `FixedSeed`, that fixed seed is used.
+3. Otherwise a clock-derived seed is used (non-deterministic). `bUseFixedSeed` with `FixedSeed` 0 logs a warning.
+
+`FDungeonResult::Seed` always records the seed that was actually used, so any layout can be reproduced by passing it back explicitly with the same configuration. Note that every configuration value (grid size included) feeds the layout: the same seed on a changed config is a different dungeon.
 
 ### Room Type Rules
 
