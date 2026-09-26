@@ -189,8 +189,8 @@ float FVoxelDungeonWorldMode::GetDensityAt(
 		const int32 NZ = GridCoord.Z + Dir.Z;
 
 		const bool bNeedsBoundary = (Face < 4)
-			? FDungeonBoundaryRules::NeedsWall(Grid, Cell, NX, NY, NZ)
-			: FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, Cell, NX, NY, NZ);
+			? FDungeonBoundaryRules::NeedsWall(Grid, GridCoord, NX, NY, NZ)
+			: FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, GridCoord, NX, NY, NZ);
 		if (bNeedsBoundary)
 		{
 			MinDistToBoundary = FMath::Min(MinDistToBoundary, FaceDistances[Face]);

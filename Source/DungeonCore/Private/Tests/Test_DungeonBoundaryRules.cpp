@@ -46,8 +46,8 @@ namespace DungeonBoundaryRulesTestHelpers
 			return *this;
 		}
 
-		bool Wall() const { return FDungeonBoundaryRules::NeedsWall(Grid, Grid.GetCell(CX, CY, CZ), CX + 1, CY, CZ); }
-		bool Ceiling() const { return FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, Grid.GetCell(CX, CY, CZ), CX, CY, CZ + 1); }
+		bool Wall() const { return FDungeonBoundaryRules::NeedsWall(Grid, FIntVector(CX, CY, CZ), CX + 1, CY, CZ); }
+		bool Ceiling() const { return FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, FIntVector(CX, CY, CZ), CX, CY, CZ + 1); }
 	};
 }
 
@@ -66,9 +66,9 @@ BOUNDARY_TEST(FBoundaryOOB, "Dungeon.BoundaryRules.Wall.OutOfBoundsIsWall")
 bool FBoundaryOOB::RunTest(const FString& Parameters)
 {
 	FPair P; P.Cur(ECT::Room, 1);
-	TestTrue(TEXT("+X OOB"), FDungeonBoundaryRules::NeedsWall(P.Grid, P.Current(), 3, 1, 1));
-	TestTrue(TEXT("-X OOB"), FDungeonBoundaryRules::NeedsWall(P.Grid, P.Current(), -1, 1, 1));
-	TestTrue(TEXT("+Z OOB"), FDungeonBoundaryRules::NeedsVerticalBoundary(P.Grid, P.Current(), 1, 1, 3));
+	TestTrue(TEXT("+X OOB"), FDungeonBoundaryRules::NeedsWall(P.Grid, FIntVector(1, 1, 1), 3, 1, 1));
+	TestTrue(TEXT("-X OOB"), FDungeonBoundaryRules::NeedsWall(P.Grid, FIntVector(1, 1, 1), -1, 1, 1));
+	TestTrue(TEXT("+Z OOB"), FDungeonBoundaryRules::NeedsVerticalBoundary(P.Grid, FIntVector(1, 1, 1), 1, 1, 3));
 	return true;
 }
 
@@ -205,5 +205,79 @@ bool FBoundaryFamilies::RunTest(const FString& Parameters)
 	{
 		TestFalse(TEXT("solid: no family"), FDungeonBoundaryRules::IsRoomFamily(T) || FDungeonBoundaryRules::IsHallwayFamily(T));
 	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Rule 5 (horizontal): staircase flanks are walls from both sides
+// ---------------------------------------------------------------------------
+
+namespace DungeonBoundaryRulesTestHelpers
+{
+	/** Set the current cell as a stair-family cell with a climb direction (0=+X, 1=-X, 2=+Y, 3=-Y). */
+	FPair& CurStair(FPair& P, EDungeonCellType Type, uint8 HallwayIndex, uint8 Direction)
+	{
+		P.Cur(Type, 0, HallwayIndex);
+		P.Current().StaircaseDirection = Direction;
+		return P;
+	}
+
+	/** Set the +X neighbour as a stair-family cell with a climb direction. */
+	FPair& SideStair(FPair& P, EDungeonCellType Type, uint8 HallwayIndex, uint8 Direction)
+	{
+		P.Side(Type, 0, HallwayIndex);
+		P.Grid.GetCell(FPair::CX + 1, FPair::CY, FPair::CZ).StaircaseDirection = Direction;
+		return P;
+	}
+}
+
+BOUNDARY_TEST(FBoundaryStairSideFace, "Dungeon.BoundaryRules.Wall.StairSideFacePredicate")
+bool FBoundaryStairSideFace::RunTest(const FString& Parameters)
+{
+	FDungeonCell C;
+	C.CellType = ECT::Staircase;
+	for (uint8 Dir = 0; Dir < 4; ++Dir)
+	{
+		C.StaircaseDirection = Dir;
+		const bool bAlongX = (Dir <= 1);
+		TestEqual(FString::Printf(TEXT("dir %d: +X face is flank iff climb along Y"), Dir), FDungeonBoundaryRules::IsStairSideFace(C, 1, 0), !bAlongX);
+		TestEqual(FString::Printf(TEXT("dir %d: -X face is flank iff climb along Y"), Dir), FDungeonBoundaryRules::IsStairSideFace(C, -1, 0), !bAlongX);
+		TestEqual(FString::Printf(TEXT("dir %d: +Y face is flank iff climb along X"), Dir), FDungeonBoundaryRules::IsStairSideFace(C, 0, 1), bAlongX);
+		TestEqual(FString::Printf(TEXT("dir %d: -Y face is flank iff climb along X"), Dir), FDungeonBoundaryRules::IsStairSideFace(C, 0, -1), bAlongX);
+	}
+	C.CellType = ECT::StaircaseHead;
+	C.StaircaseDirection = 0;
+	TestTrue(TEXT("head: +Y is a flank"), FDungeonBoundaryRules::IsStairSideFace(C, 0, 1));
+	C.CellType = ECT::Hallway;
+	TestFalse(TEXT("hallway has no flanks"), FDungeonBoundaryRules::IsStairSideFace(C, 0, 1));
+	return true;
+}
+
+BOUNDARY_TEST(FBoundaryStairFlanks, "Dungeon.BoundaryRules.Wall.StaircaseFlanksAreWalls")
+bool FBoundaryStairFlanks::RunTest(const FString& Parameters)
+{
+	// The +X face of a stair that climbs along Y is a flank: walled against any hallway, from
+	// either side, whatever the index.
+	{ FPair P; TestTrue(TEXT("Staircase(+Y) -> Hallway same"), CurStair(P, ECT::Staircase, 1, 2).Side(ECT::Hallway, 0, 1).Wall()); }
+	{ FPair P; TestTrue(TEXT("Staircase(+Y) -> Hallway other"), CurStair(P, ECT::Staircase, 1, 2).Side(ECT::Hallway, 0, 2).Wall()); }
+	{ FPair P; P.Cur(ECT::Hallway, 0, 1); TestTrue(TEXT("Hallway -> Staircase(-Y) flank"), SideStair(P, ECT::Staircase, 1, 3).Wall()); }
+	{ FPair P; TestTrue(TEXT("Head(+Y) -> Hallway same index"), CurStair(P, ECT::StaircaseHead, 1, 2).Side(ECT::Hallway, 0, 1).Wall()); }
+	{ FPair P; P.Cur(ECT::Hallway, 0, 1); TestTrue(TEXT("Hallway -> Head(+Y) same index"), SideStair(P, ECT::StaircaseHead, 1, 2).Wall()); }
+	// Two staircases side by side (never generated, but the rule must hold): wall.
+	{ FPair P; TestTrue(TEXT("Staircase(+Y) -> Staircase(+Y) same index"), SideStair(CurStair(P, ECT::Staircase, 1, 2), ECT::Staircase, 1, 2).Wall()); }
+	// A landing cell (plain Hallway) beside a shaft of the same hallway: still walled.
+	{ FPair P; P.Cur(ECT::Hallway, 0, 5); TestTrue(TEXT("landing -> Head(-Y) flank"), SideStair(P, ECT::StaircaseHead, 5, 3).Wall()); }
+	return true;
+}
+
+BOUNDARY_TEST(FBoundaryStairAxisFaces, "Dungeon.BoundaryRules.Wall.StaircaseAxisFacesUnchanged")
+bool FBoundaryStairAxisFaces::RunTest(const FString& Parameters)
+{
+	// The +X face of a stair climbing along X is its climb or entry face: rule 6 still applies.
+	{ FPair P; TestFalse(TEXT("Staircase(+X) -> Hallway (climb face, merge)"), CurStair(P, ECT::Staircase, 1, 0).Side(ECT::Hallway, 0, 2).Wall()); }
+	{ FPair P; TestFalse(TEXT("Staircase(-X) -> Staircase(-X) same (continuation)"), SideStair(CurStair(P, ECT::Staircase, 1, 1), ECT::Staircase, 1, 1).Wall()); }
+	{ FPair P; TestFalse(TEXT("Head(+X) -> Hallway same index (exit)"), CurStair(P, ECT::StaircaseHead, 1, 0).Side(ECT::Hallway, 0, 1).Wall()); }
+	{ FPair P; TestTrue(TEXT("Head(+X) -> Hallway other index"), CurStair(P, ECT::StaircaseHead, 1, 0).Side(ECT::Hallway, 0, 2).Wall()); }
+	{ FPair P; TestTrue(TEXT("Staircase(+X) -> Room (different space)"), CurStair(P, ECT::Staircase, 1, 0).Side(ECT::Room, 3, 0).Wall()); }
 	return true;
 }

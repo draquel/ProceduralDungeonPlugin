@@ -344,7 +344,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 
 				// Floor: place if cell below is a different space, solid, or OOB.
 				// Bottom face of the floor mesh is aligned flush with the cell's lower boundary.
-				if (bHasFloorMesh && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z - 1))
+				if (bHasFloorMesh && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, FIntVector(X, Y, Z), X, Y, Z - 1))
 				{
 					if (bIsHallway)
 					{
@@ -378,7 +378,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 				// enters from above (bOpenEntranceCeiling).
 				const bool bIsOpenEntranceCeiling = bOpenEntranceCeiling
 					&& X == Result.EntranceCell.X && Y == Result.EntranceCell.Y && Z == Result.EntranceCell.Z;
-				if (bHasCeilingMesh && !bIsOpenEntranceCeiling && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z + 1))
+				if (bHasCeilingMesh && !bIsOpenEntranceCeiling && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, FIntVector(X, Y, Z), X, Y, Z + 1))
 				{
 					const FVector CeilingPos = CellCenter + FVector(0.0f, 0.0f, CS);
 
@@ -489,7 +489,10 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						// Staircase cells: wall all faces except entry approach and same-staircase continuation.
 						// Entry face (bottom approach): use normal NeedsWall (open to hallways, walled against solid).
 						// Climb face (high/exit side): walled unless same-staircase or underpass enabled.
-						// Side faces: always walled (prevents hallways clipping into staircase sides).
+						// Flank faces: FDungeonBoundaryRules (rule 5) walls them from both sides; the stair
+						// cell itself only places that wall against a solid neighbour. An open neighbour
+						// places the wall on ITS face, so a wall module inset into this cell never cuts
+						// through the ramp mesh.
 						const uint8 Dir = Cell.StaircaseDirection;
 						const bool bIsClimbFace = (WC.DX == DX[Dir] && WC.DY == DY[Dir]);
 						const bool bIsEntryFace = (WC.DX == -DX[Dir] && WC.DY == -DY[Dir]);
@@ -500,7 +503,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						{
 							// Entry: defer to standard logic, but open toward room-family cells
 							// (staircase can attach directly to a room without an intermediate hallway)
-							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, Cell, NX, NY, Z);
+							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z);
 							if (bPlaceWall && Result.Grid.IsInBounds(NX, NY, Z))
 							{
 								const EDungeonCellType NType = Result.Grid.GetCell(NX, NY, Z).CellType;
@@ -531,8 +534,10 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						}
 						else
 						{
-							// Side face: always wall
-							bPlaceWall = true;
+							// Flank: shared rule, own wall only against solid / OOB (see above).
+							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z)
+								&& !(Result.Grid.IsInBounds(NX, NY, Z)
+									&& FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(NX, NY, Z).CellType));
 						}
 
 						if (bPlaceWall && SlotActive(EDungeonTileType::WallSegment))
@@ -546,7 +551,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					else if (bIsStaircaseHead)
 					{
 						// StaircaseHead cells: climb/entry faces open to hallways, rooms, and same-staircase.
-						// Side faces: restricted (only open to same-staircase cells).
+						// Flank faces: always walls (shared rule 5); as for Staircase cells, the head only
+						// places its own flank wall against a solid neighbour.
 						const uint8 Dir = Cell.StaircaseDirection;
 						const bool bIsClimbFace = (WC.DX == DX[Dir] && WC.DY == DY[Dir]);
 						const bool bIsEntryFace = (WC.DX == -DX[Dir] && WC.DY == -DY[Dir]);
@@ -556,7 +562,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						if (bIsClimbFace || bIsEntryFace)
 						{
 							// Open toward hallway-family, room-family, or same-staircase
-							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, Cell, NX, NY, Z);
+							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z);
 							if (bPlaceWall && Result.Grid.IsInBounds(NX, NY, Z))
 							{
 								const EDungeonCellType NType = Result.Grid.GetCell(NX, NY, Z).CellType;
@@ -571,8 +577,10 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 						}
 						else
 						{
-							// Side faces: defer to NeedsWall (StaircaseHead restriction applies)
-							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, Cell, NX, NY, Z);
+							// Flank: shared rule, own wall only against solid / OOB.
+							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z)
+								&& !(Result.Grid.IsInBounds(NX, NY, Z)
+									&& FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(NX, NY, Z).CellType));
 						}
 
 						if (bPlaceWall && SlotActive(EDungeonTileType::WallSegment))
@@ -583,7 +591,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 						}
 					}
-					else if (FDungeonBoundaryRules::NeedsWall(Result.Grid, Cell, NX, NY, Z))
+					else if (FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z))
 					{
 						// Check if neighbor is a staircase with its entry facing us — door frame instead of wall
 						bool bStaircaseEntry = false;

@@ -65,8 +65,8 @@ namespace
 		const FDungeonCell& Cell = Grid.GetCell(Coord);
 		const FIntVector N = Coord + PlanDirections[Face];
 		return Face < 4
-			? FDungeonBoundaryRules::NeedsWall(Grid, Cell, N.X, N.Y, N.Z)
-			: FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, Cell, N.X, N.Y, N.Z);
+			? FDungeonBoundaryRules::NeedsWall(Grid, Coord, N.X, N.Y, N.Z)
+			: FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, Coord, N.X, N.Y, N.Z);
 	}
 
 	/** Independent oracle: which grid cell a world point lies in, by its SAMPLE position. */

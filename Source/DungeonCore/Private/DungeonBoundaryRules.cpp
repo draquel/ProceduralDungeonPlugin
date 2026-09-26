@@ -20,6 +20,17 @@ bool FDungeonBoundaryRules::IsHallwayFamily(EDungeonCellType Type)
 		|| Type == EDungeonCellType::StaircaseHead;
 }
 
+bool FDungeonBoundaryRules::IsStairSideFace(const FDungeonCell& Cell, int32 DX, int32 DY)
+{
+	if (Cell.CellType != EDungeonCellType::Staircase && Cell.CellType != EDungeonCellType::StaircaseHead)
+	{
+		return false;
+	}
+	// Climb axis: directions 0/1 run along X, 2/3 along Y. A flank is the other axis.
+	const bool bClimbAlongX = (Cell.StaircaseDirection <= 1);
+	return bClimbAlongX ? (DY != 0) : (DX != 0);
+}
+
 namespace
 {
 	/**
@@ -75,8 +86,10 @@ namespace
 	}
 }
 
-bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ)
+bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FIntVector& CurrentCoord, int32 NX, int32 NY, int32 NZ)
 {
+	const FDungeonCell& Current = Grid.GetCell(CurrentCoord);
+
 	bool bNeeds = true;
 	const FDungeonCell* Neighbor = nullptr;
 	if (SharedRules(Grid, Current, NX, NY, NZ, bNeeds, Neighbor))
@@ -85,7 +98,17 @@ bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FDungeonCe
 	}
 	check(Neighbor);
 
-	// 5. Hallway family on both sides = no wall (hallways merge naturally at intersections).
+	// 5. Staircase flanks are walls from both sides of the face. The ramp and its shaft are
+	//    entered along the climb axis only; a hallway running alongside, or a landing beside
+	//    another staircase's shaft, must not open into it.
+	const int32 DX = NX - CurrentCoord.X;
+	const int32 DY = NY - CurrentCoord.Y;
+	if (IsStairSideFace(Current, DX, DY) || IsStairSideFace(*Neighbor, -DX, -DY))
+	{
+		return true;
+	}
+
+	// 6. Hallway family on both sides = no wall (hallways merge naturally at intersections).
 	//    Exception: a StaircaseHead only opens toward cells of the same staircase, which includes
 	//    the plain Hallway it exits into, keyed by HallwayIndex. (Requiring BOTH sides to be
 	//    staircase-family walled the top of every staircase off from its own exit corridor.)
@@ -100,12 +123,14 @@ bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FDungeonCe
 		return false;
 	}
 
-	// 6. Different spaces (room vs hallway, different rooms) = wall.
+	// 7. Different spaces (room vs hallway, different rooms) = wall.
 	return true;
 }
 
-bool FDungeonBoundaryRules::NeedsVerticalBoundary(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ)
+bool FDungeonBoundaryRules::NeedsVerticalBoundary(const FDungeonGrid& Grid, const FIntVector& CurrentCoord, int32 NX, int32 NY, int32 NZ)
 {
+	const FDungeonCell& Current = Grid.GetCell(CurrentCoord);
+
 	bool bNeeds = true;
 	const FDungeonCell* Neighbor = nullptr;
 	if (SharedRules(Grid, Current, NX, NY, NZ, bNeeds, Neighbor))

@@ -458,11 +458,11 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 					bool bNeedsBoundary;
 					if (Face < 4)
 					{
-						bNeedsBoundary = FDungeonBoundaryRules::NeedsWall(Grid, Cell, NX, NY, NZ);
+						bNeedsBoundary = FDungeonBoundaryRules::NeedsWall(Grid, FIntVector(GX, GY, GZ), NX, NY, NZ);
 					}
 					else
 					{
-						bNeedsBoundary = FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, Cell, NX, NY, NZ);
+						bNeedsBoundary = FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, FIntVector(GX, GY, GZ), NX, NY, NZ);
 					}
 
 					if (!bNeedsBoundary)
