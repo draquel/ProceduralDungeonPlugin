@@ -343,6 +343,137 @@ bool FRoomSemAnyPick::RunTest(const FString& Parameters)
 	return true;
 }
 
+// --- BoundaryEdge must match rooms on the RoomBuffer line: placement never puts a room at
+// coordinate 0, so a literal edge test can never match and always fell back to a random room ---
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemBoundaryEdgeBuffered, "Dungeon.RoomSemantics.Entrance.BoundaryEdgeMatchesBufferedRooms",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRoomSemBoundaryEdgeBuffered::RunTest(const FString& Parameters)
+{
+	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	Config->EntrancePlacement = EDungeonEntrancePlacement::BoundaryEdge;
+	Config->RoomBuffer = 1;
+
+	FDungeonResult Result;
+	Result.GridSize = FIntVector(30, 30, 1);
+	Result.Grid.Initialize(Result.GridSize);
+
+	auto AddRoom = [&Result](const FIntVector& Pos, const FIntVector& Size)
+	{
+		FDungeonRoom Room;
+		Room.RoomIndex = static_cast<uint8>(Result.Rooms.Num() + 1);
+		Room.Position = Pos;
+		Room.Size = Size;
+		Room.Center = Pos + Size / 2;
+		Result.Rooms.Add(Room);
+	};
+
+	AddRoom(FIntVector(10, 10, 0), FIntVector(4, 4, 1)); // 0: interior
+	AddRoom(FIntVector(1, 12, 0), FIntVector(4, 4, 1));  // 1: on the MinX buffer line (X == RoomBuffer)
+	AddRoom(FIntVector(12, 20, 0), FIntVector(4, 4, 1)); // 2: interior
+
+	// Whatever the seed, the only candidate is the buffered-boundary room.
+	for (int32 SeedValue = 1; SeedValue <= 8; ++SeedValue)
+	{
+		FDungeonSeed Seed(SeedValue);
+		const int32 Chosen = FRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
+		TestEqual(FString::Printf(TEXT("Seed %d: buffered boundary room chosen"), SeedValue), Chosen, 1);
+	}
+
+	// MaxY side: a room whose far edge reaches GridSize - RoomBuffer also counts.
+	Result.Rooms.Empty();
+	AddRoom(FIntVector(10, 10, 0), FIntVector(4, 4, 1)); // 0: interior
+	AddRoom(FIntVector(12, 25, 0), FIntVector(4, 4, 1)); // 1: Y + Size.Y == 29 == GridSize.Y - 1
+	{
+		FDungeonSeed Seed(3);
+		TestEqual(TEXT("MaxY buffered room chosen"), FRoomSemantics::SelectEntranceRoom(Result, *Config, Seed), 1);
+	}
+
+	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	return true;
+}
+
+// --- Generation-level: with real placement and BoundaryEdge, the entrance sits on the buffer
+// line whenever any placed room does (i.e. the mode is not dead code) ---
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemBoundaryEdgeGenerated, "Dungeon.RoomSemantics.Entrance.BoundaryEdgeHonoredByGenerator",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRoomSemBoundaryEdgeGenerated::RunTest(const FString& Parameters)
+{
+	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	Config->EntrancePlacement = EDungeonEntrancePlacement::BoundaryEdge;
+	Config->RoomBuffer = 1;
+	Config->GridSize = FIntVector(20, 20, 1);
+	Config->RoomCount = 8;
+
+	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
+	Generator->AddToRoot();
+
+	int32 SeedsWithBoundaryRoom = 0;
+	for (int64 SeedValue = 1; SeedValue <= 20; ++SeedValue)
+	{
+		const FDungeonResult Result = Generator->Generate(Config, SeedValue);
+		if (Result.Rooms.Num() < 2 || Result.EntranceRoomIndex < 0)
+		{
+			continue;
+		}
+
+		auto OnBufferLine = [&](const FDungeonRoom& Room)
+		{
+			return Room.Position.X <= 1 || Room.Position.Y <= 1
+				|| Room.Position.X + Room.Size.X >= Result.GridSize.X - 1
+				|| Room.Position.Y + Room.Size.Y >= Result.GridSize.Y - 1;
+		};
+
+		bool bAnyOnLine = false;
+		for (const FDungeonRoom& Room : Result.Rooms)
+		{
+			bAnyOnLine |= OnBufferLine(Room);
+		}
+		if (bAnyOnLine)
+		{
+			++SeedsWithBoundaryRoom;
+			TestTrue(FString::Printf(TEXT("Seed %lld: entrance is on the buffer line"), SeedValue),
+				OnBufferLine(Result.Rooms[Result.EntranceRoomIndex]));
+		}
+	}
+	TestTrue(TEXT("Placement produced boundary-line rooms for some seeds (test is meaningful)"), SeedsWithBoundaryRoom > 0);
+
+	Generator->RemoveFromRoot();
+	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	return true;
+}
+
+// --- Opening cell: the lid of a tall entrance room is above the top cell of the entrance column ---
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemOpeningCell, "Dungeon.RoomSemantics.Entrance.OpeningCellIsTopOfEntranceColumn",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FRoomSemOpeningCell::RunTest(const FString& Parameters)
+{
+	FDungeonResult Result;
+	Result.GridSize = FIntVector(10, 10, 4);
+	Result.Grid.Initialize(Result.GridSize);
+
+	// No entrance: opening == entrance cell.
+	Result.EntranceCell = FIntVector(3, 3, 0);
+	TestEqual(TEXT("No entrance -> EntranceCell"), Result.GetEntranceOpeningCell(), Result.EntranceCell);
+
+	FDungeonRoom Room;
+	Room.RoomIndex = 1;
+	Room.Position = FIntVector(2, 2, 1);
+	Room.Size = FIntVector(4, 4, 2);
+	Room.Center = FIntVector(4, 4, 2);
+	Result.Rooms.Add(Room);
+	Result.EntranceRoomIndex = 0;
+	Result.EntranceCell = FIntVector(4, 4, 1); // ground floor of the room
+
+	TestEqual(TEXT("Two-floor room -> top cell of the column"), Result.GetEntranceOpeningCell(), FIntVector(4, 4, 2));
+
+	Result.Rooms[0].Size.Z = 1;
+	TestEqual(TEXT("Single-floor room -> EntranceCell"), Result.GetEntranceOpeningCell(), FIntVector(4, 4, 1));
+	return true;
+}
+
 // ============================================================================
 // GRAPH METRICS TESTS (5)
 // ============================================================================

@@ -476,9 +476,13 @@ Rooms are placed by sampling random positions and sizes within the grid bounds. 
    - Sample random position within grid bounds (respecting `RoomBuffer` from edges)
    - Check overlap with all existing rooms (including buffer zone)
    - If no overlap, place the room. Otherwise retry up to `MaxPlacementAttempts`
-2. Rooms that span multiple floors have `Size.Y > 1`
+2. Rooms that span multiple floors have `Size.Z > 1`
 
-Rooms are placed in priority order: Entrance first (if `bGuaranteeEntrance`), then Boss (if `bGuaranteeBossRoom`), then remaining rooms. This ensures critical rooms get favorable placement before the grid fills up.
+No room is special during placement: every room is sampled uniformly. The entrance is **selected
+afterwards** (step 4) from the placed rooms by `EntrancePlacement`, and nothing reserves the volume
+around it — the approach a world backend will carve (shaft, tunnel) is not known to the generator.
+Placing the entrance first under an approach constraint is planned; see
+`ENTRANCE_PLACEMENT_PLAN.md`.
 
 #### Step 4: Room Type Assignment
 
@@ -552,7 +556,7 @@ Room type assignment integrates into the generation pipeline:
 
 ```
 Placement Pass 1 (before graph):
-  - Entrance: placed at grid boundary, on configured floor
+  - Entrance: SELECTED from the placed rooms by EntrancePlacement (not placed first — see below)
   - Stairwell: requires Size.Y >= 2
   - Corridor: requires one dimension >= 2× others
 
@@ -576,21 +580,33 @@ The entrance is a first-class concept in the generator:
 UENUM(BlueprintType)
 enum class EDungeonEntrancePlacement : uint8
 {
-    BoundaryEdge,   // Room touches grid edge — natural cave/door entrance
-    TopFloor,       // Entrance on highest floor — descending dungeon
-    BottomFloor,    // Entrance on lowest floor — ascending dungeon
+    BoundaryEdge,   // Room sits on the RoomBuffer line of a grid edge (placement never reaches coordinate 0)
+    TopFloor,       // Room reaches the highest floor — descending dungeon; the column above it is empty by construction
+    BottomFloor,    // Room on floor 0 — ascending dungeon
     Any,            // No positional constraint
 };
 ```
 
-The entrance room is always:
+Selection (`FRoomSemantics::SelectEntranceRoom`) filters the placed rooms by the mode and draws one
+at random from the survivors; if no room matches it warns and draws from all rooms. The entrance
+room is then:
 
 - Assigned `EDungeonRoomType::Entrance`
-- Placed first during room generation (best chance at valid position)
 - The root node for MST construction (Prim's starts here → shortest paths radiate outward)
 - The origin for graph distance calculations
 
-The entrance cell itself (`FDungeonResult::EntranceCell`) is the specific grid cell within the entrance room that faces outward (toward grid boundary) or upward/downward depending on placement mode. This cell is what output backends use to position transition triggers, doors, or terrain openings.
+Two cells describe the entrance:
+
+- `FDungeonResult::EntranceCell` — the walkable ground-floor centre cell of the entrance room.
+  Consumers use it for the floor height (spawn, loot, elevator car, POI stamp record).
+- `FDungeonResult::GetEntranceOpeningCell()` — the top cell of the entrance room directly above
+  `EntranceCell` (the same cell for single-floor rooms). A passage entering from above stops at
+  this cell's top plane and the tile mapper opens this cell's ceiling; for a two-floor room the
+  lid is one floor above the entrance cell.
+
+For a vertical (shaft) approach use `TopFloor`: the entrance room then reaches the grid top, so no
+room, hallway or staircase can sit above it. Other modes leave the column above the entrance
+unreserved — see `ENTRANCE_PLACEMENT_PLAN.md` for the planned approach-aware placement.
 
 ---
 

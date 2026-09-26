@@ -29,10 +29,14 @@ int32 FRoomSemantics::SelectEntranceRoom(
 		{
 		case EDungeonEntrancePlacement::BoundaryEdge:
 		{
-			const bool bTouchesMinX = Room.Position.X == 0;
-			const bool bTouchesMaxX = (Room.Position.X + Room.Size.X) >= Result.GridSize.X;
-			const bool bTouchesMinY = Room.Position.Y == 0;
-			const bool bTouchesMaxY = (Room.Position.Y + Room.Size.Y) >= Result.GridSize.Y;
+			// Room placement keeps every room RoomBuffer cells inside the grid edge, so "touches
+			// the boundary" means "sits on the buffer line". Testing for coordinate 0 / GridSize
+			// could never match with RoomBuffer >= 1 and silently fell back to a random room.
+			const int32 Buffer = FMath::Max(Config.RoomBuffer, 0);
+			const bool bTouchesMinX = Room.Position.X <= Buffer;
+			const bool bTouchesMaxX = (Room.Position.X + Room.Size.X) >= Result.GridSize.X - Buffer;
+			const bool bTouchesMinY = Room.Position.Y <= Buffer;
+			const bool bTouchesMaxY = (Room.Position.Y + Room.Size.Y) >= Result.GridSize.Y - Buffer;
 			if (bTouchesMinX || bTouchesMaxX || bTouchesMinY || bTouchesMaxY)
 			{
 				Candidates.Add(i);

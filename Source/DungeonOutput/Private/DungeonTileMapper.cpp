@@ -48,6 +48,11 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	const float HalfCS = CS * 0.5f;
 	const float Thin = TileThickness(CS);
 
+	// The cell whose LID opens for a passage from above: the top cell of the entrance room's
+	// column over EntranceCell. For a two-floor entrance room the ground-floor cell has no
+	// ceiling of its own (same room above), so skipping "its" ceiling would leave the lid closed.
+	const FIntVector OpeningCell = Result.GetEntranceOpeningCell();
+
 	// --- Compute per-mesh bounding box info for scale-to-fit and pivot correction ---
 	// Each mesh may have different native dimensions and pivot locations.
 	// We query the bounding box to compute:
@@ -374,10 +379,10 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 
 				// Ceiling: place if cell above is a different space, solid, or OOB.
 				// Top face of the ceiling mesh is aligned flush with the cell's upper boundary.
-				// The designated entrance cell's ceiling stays OPEN when a vertical passage
-				// enters from above (bOpenEntranceCeiling).
+				// The entrance room's lid (ceiling of the opening cell) stays OPEN when a vertical
+				// passage enters from above (bOpenEntranceCeiling).
 				const bool bIsOpenEntranceCeiling = bOpenEntranceCeiling
-					&& X == Result.EntranceCell.X && Y == Result.EntranceCell.Y && Z == Result.EntranceCell.Z;
+					&& X == OpeningCell.X && Y == OpeningCell.Y && Z == OpeningCell.Z;
 				if (bHasCeilingMesh && !bIsOpenEntranceCeiling && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, FIntVector(X, Y, Z), X, Y, Z + 1))
 				{
 					const FVector CeilingPos = CellCenter + FVector(0.0f, 0.0f, CS);
