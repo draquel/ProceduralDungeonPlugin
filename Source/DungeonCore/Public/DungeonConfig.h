@@ -82,6 +82,20 @@ public:
 
 	// --- Entrance ---
 
+	/**
+	 * Approach-aware entrance placement. With Approach != None the entrance room is placed FIRST
+	 * to suit the approach and its approach volume is kept free of rooms, hallways and
+	 * staircases (FDungeonResult::EntranceApproach records the geometry). This is what makes a
+	 * stitched shaft / tunnel guaranteed to reach the entrance. Takes precedence over
+	 * EntrancePlacement.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance")
+	FDungeonEntranceSpec Entrance;
+
+	/**
+	 * Legacy: which already-placed room becomes the entrance when Entrance.Approach is None (or
+	 * could not be satisfied). Nothing is reserved around it.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance")
 	EDungeonEntrancePlacement EntrancePlacement = EDungeonEntrancePlacement::BoundaryEdge;
 

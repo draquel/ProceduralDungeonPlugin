@@ -78,6 +78,24 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 	// =========================================================================
 	// Step 3: Place Rooms
 	// =========================================================================
+	// 3a: with an approach declared, the entrance room goes FIRST, placed to suit the approach,
+	// and its approach volume is stamped Reserved so the remaining rooms and the hallway
+	// pathfinder keep out of it. Reserved is cleared back to Empty in Step 10.
+	if (Config->Entrance.Approach != EDungeonEntranceApproach::None)
+	{
+		if (FRoomPlacement::PlaceEntranceRoom(Result.Grid, *Config, MainSeed, Result.Rooms, Result.EntranceApproach))
+		{
+			UE_LOG(LogDungeonGenerator, Log, TEXT("Step 3a: entrance room placed first (approach=%d, floor=%d)"),
+				static_cast<int32>(Config->Entrance.Approach), Result.Rooms[0].Position.Z);
+		}
+		else
+		{
+			UE_LOG(LogDungeonGenerator, Warning,
+				TEXT("Step 3a: entrance approach %d could not be satisfied; falling back to unconstrained placement (nothing reserved)"),
+				static_cast<int32>(Config->Entrance.Approach));
+		}
+	}
+
 	if (!FRoomPlacement::PlaceRooms(Result.Grid, *Config, MainSeed, Result.Rooms))
 	{
 		UE_LOG(LogDungeonGenerator, Error,
@@ -96,8 +114,17 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 	// =========================================================================
 	// Step 4: Select Entrance Room
 	// =========================================================================
+	// The fork is always taken so the later forks see the same seed state on both paths.
 	FDungeonSeed EntranceSeed = MainSeed.Fork(3);
-	Result.EntranceRoomIndex = FRoomSemantics::SelectEntranceRoom(Result, *Config, EntranceSeed);
+	if (Result.EntranceApproach.bSatisfied)
+	{
+		// Pre-placed in Step 3a: always room 0.
+		Result.EntranceRoomIndex = 0;
+	}
+	else
+	{
+		Result.EntranceRoomIndex = FRoomSemantics::SelectEntranceRoom(Result, *Config, EntranceSeed);
+	}
 	if (Result.EntranceRoomIndex >= 0)
 	{
 		Result.Rooms[Result.EntranceRoomIndex].RoomType = EDungeonRoomType::Entrance;
@@ -106,8 +133,11 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 		Result.EntranceCell = EntRoom.Position + FIntVector(EntRoom.Size.X / 2, EntRoom.Size.Y / 2, 0);
 	}
 
-	UE_LOG(LogDungeonGenerator, Log, TEXT("Step 4: Selected entrance room %d (placement=%d)"),
-		Result.EntranceRoomIndex, static_cast<int32>(Config->EntrancePlacement));
+	UE_LOG(LogDungeonGenerator, Log, TEXT("Step 4: Selected entrance room %d (%s)"),
+		Result.EntranceRoomIndex,
+		Result.EntranceApproach.bSatisfied
+			? *FString::Printf(TEXT("approach=%d, pre-placed"), static_cast<int32>(Result.EntranceApproach.Approach))
+			: *FString::Printf(TEXT("placement=%d"), static_cast<int32>(Config->EntrancePlacement)));
 
 	// =========================================================================
 	// Step 5: Delaunay Tetrahedralization (3D)
@@ -456,6 +486,24 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 		{
 			EntranceGridCell.CellType = EDungeonCellType::Entrance;
 			EntranceGridCell.Flags |= 0x01; // bIsEntrance flag
+		}
+	}
+
+	// Clear the transient approach keep-out: Reserved is a generation-time constraint and must
+	// never reach an output backend. Result.EntranceApproach keeps the box for consumers.
+	{
+		int32 Cleared = 0;
+		for (FDungeonCell& Cell : Result.Grid.Cells)
+		{
+			if (Cell.CellType == EDungeonCellType::Reserved)
+			{
+				Cell = FDungeonCell();
+				++Cleared;
+			}
+		}
+		if (Cleared > 0)
+		{
+			UE_LOG(LogDungeonGenerator, Log, TEXT("Step 10: released %d reserved approach cell(s)"), Cleared);
 		}
 	}
 

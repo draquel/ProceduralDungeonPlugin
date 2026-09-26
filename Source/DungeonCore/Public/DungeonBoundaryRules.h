@@ -32,7 +32,7 @@
  */
 struct DUNGEONCORE_API FDungeonBoundaryRules
 {
-	/** True for every traversable cell type (anything that is not Empty or RoomWall). */
+	/** True for every traversable cell type (anything that is not Empty, RoomWall or Reserved). */
 	static bool IsOpenCell(EDungeonCellType Type);
 
 	/** Room, Door, Entrance — cells that belong to a room and share its RoomIndex. */

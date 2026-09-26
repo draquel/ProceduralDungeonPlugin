@@ -19,6 +19,13 @@ enum class EDungeonCellType : uint8
 	StaircaseHead,
 	Door,
 	Entrance,
+	/**
+	 * Generation-time keep-out: the entrance approach volume (shaft column / tunnel corridor)
+	 * that rooms, hallways and staircases must not occupy. Solid for every rule that asks.
+	 * Never present in a finished FDungeonResult — the generator clears it back to Empty
+	 * before output (the validator reports any that leaks).
+	 */
+	Reserved,
 };
 
 /** Semantic meaning of a room. Affects placement rules and connectivity. */
@@ -37,14 +44,141 @@ enum class EDungeonRoomType : uint8
 	Custom,
 };
 
-/** Where the dungeon entrance room is placed. */
+/**
+ * Legacy entrance selection: which of the ALREADY-PLACED rooms becomes the entrance. Used only
+ * when FDungeonEntranceSpec::Approach is None; nothing is reserved around the chosen room.
+ */
 UENUM(BlueprintType)
 enum class EDungeonEntrancePlacement : uint8
 {
+	/** Room on the RoomBuffer line of a grid edge (placement never reaches coordinate 0). */
 	BoundaryEdge,
+	/** Room reaches the top floor — the column above it is empty by construction. */
 	TopFloor,
+	/** Room on floor 0. */
 	BottomFloor,
+	/** No positional constraint. */
 	Any,
+};
+
+/**
+ * How the world reaches the entrance room. Drives entrance-first placement and the reserved
+ * approach volume that the rest of the layout must keep clear.
+ */
+UENUM(BlueprintType)
+enum class EDungeonEntranceApproach : uint8
+{
+	/** No external approach: legacy post-placement selection by EntrancePlacement, no reservation. */
+	None,
+	/** A vertical passage (shaft, trapdoor, cave mouth) drops onto the entrance room's lid. */
+	FromAbove,
+	/** A vertical passage rises into the entrance room's floor. */
+	FromBelow,
+	/** A horizontal tunnel enters through a grid-boundary face of the entrance room. */
+	FromSide,
+};
+
+/** Which floor the entrance room is placed on. */
+UENUM(BlueprintType)
+enum class EDungeonEntranceFloor : uint8
+{
+	Any,
+	/** Highest floor the room fits on. For FromAbove this leaves nothing to reserve. */
+	Top,
+	/** Floor 0. For FromBelow this leaves nothing to reserve. */
+	Bottom,
+	/** FDungeonEntranceSpec::ExplicitFloor. Unsatisfiable when the room cannot fit there. */
+	Explicit,
+};
+
+/** A grid-boundary face (FromSide approaches). */
+UENUM(BlueprintType)
+enum class EDungeonGridFace : uint8
+{
+	Any,
+	MinX,
+	MaxX,
+	MinY,
+	MaxY,
+};
+
+/**
+ * FDungeonEntranceSpec
+ * Declares BEFORE generation how the entrance will be approached, so the generator can place the
+ * entrance room to suit it and keep the approach volume free of rooms, hallways and staircases.
+ * Approach None = legacy behaviour (entrance selected after placement, nothing reserved).
+ */
+USTRUCT(BlueprintType)
+struct DUNGEONCORE_API FDungeonEntranceSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Entrance")
+	EDungeonEntranceApproach Approach = EDungeonEntranceApproach::None;
+
+	/** Floor preference for the entrance room. Top is the natural choice for FromAbove. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Entrance", meta=(EditCondition="Approach != EDungeonEntranceApproach::None"))
+	EDungeonEntranceFloor Floor = EDungeonEntranceFloor::Any;
+
+	/** Floor index used when Floor == Explicit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Entrance", meta=(ClampMin="0", EditCondition="Floor == EDungeonEntranceFloor::Explicit"))
+	int32 ExplicitFloor = 0;
+
+	/** FromSide only: which boundary face the tunnel enters through. Any = drawn from the seed. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Entrance", meta=(EditCondition="Approach == EDungeonEntranceApproach::FromSide"))
+	EDungeonGridFace Face = EDungeonGridFace::Any;
+
+	/** Extra clear cells around the approach column / corridor (0 = the passage cell itself). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Entrance", meta=(ClampMin="0", ClampMax="2", EditCondition="Approach != EDungeonEntranceApproach::None"))
+	int32 Clearance = 0;
+
+	/**
+	 * FromAbove / FromBelow: force the entrance room to a single floor so the opening is the room's
+	 * own lid / floor and the passage does not have to cross the room's upper airspace.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Entrance", meta=(EditCondition="Approach == EDungeonEntranceApproach::FromAbove || Approach == EDungeonEntranceApproach::FromBelow"))
+	bool bSingleFloorEntranceRoom = true;
+};
+
+/**
+ * FDungeonEntranceApproachInfo
+ * The resolved approach geometry recorded on FDungeonResult, so every backend (tile mapper,
+ * voxel stitcher, POI subsystem) reads one description instead of re-deriving it.
+ */
+USTRUCT(BlueprintType)
+struct DUNGEONCORE_API FDungeonEntranceApproachInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
+	EDungeonEntranceApproach Approach = EDungeonEntranceApproach::None;
+
+	/** False when the requested approach could not be satisfied and the entrance was placed unconstrained. */
+	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
+	bool bSatisfied = false;
+
+	/**
+	 * The cell whose lid (FromAbove), floor (FromBelow) or boundary wall (FromSide) is the opening.
+	 * Same column as EntranceCell; equals it for single-floor rooms on vertical approaches.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
+	FIntVector OpeningCell = FIntVector::ZeroValue;
+
+	/** FromSide: the resolved face (never Any once satisfied). */
+	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
+	EDungeonGridFace Face = EDungeonGridFace::Any;
+
+	/** Inclusive cell box guaranteed Empty in the final grid. Empty box when nothing needed reserving. */
+	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
+	FIntVector KeepOutMin = FIntVector::ZeroValue;
+
+	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
+	FIntVector KeepOutMax = FIntVector(-1, -1, -1);
+
+	bool HasKeepOut() const
+	{
+		return KeepOutMax.X >= KeepOutMin.X && KeepOutMax.Y >= KeepOutMin.Y && KeepOutMax.Z >= KeepOutMin.Z;
+	}
 };
 
 // ============================================================================
@@ -230,6 +364,10 @@ struct DUNGEONCORE_API FDungeonResult
 
 	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
 	FIntVector EntranceCell = FIntVector::ZeroValue;
+
+	/** Resolved entrance approach (see FDungeonEntranceSpec). Approach None when none was requested. */
+	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
+	FDungeonEntranceApproachInfo EntranceApproach;
 
 	// -- Metrics --
 
