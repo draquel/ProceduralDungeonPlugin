@@ -34,12 +34,14 @@ bool FDungeonBoundaryRules::IsStairSideFace(const FDungeonCell& Cell, int32 DX, 
 namespace
 {
 	/**
-	 * Rules 1 to 4, identical for horizontal and vertical faces. Returns true when a decision was
-	 * reached (written to OutNeedsBoundary); false when the face-specific hallway-family rule
+	 * The rules shared by horizontal and vertical faces: solid / out-of-bounds neighbours, the
+	 * door rules (HORIZONTAL faces only: a doorway is an opening in a wall, and a door frame is
+	 * never a hole in a floor or ceiling), and same-room interiors. Returns true when a decision
+	 * was reached (written to OutNeedsBoundary); false when the face-specific hallway-family rule
 	 * must decide, in which case OutNeighbor is the in-bounds open neighbour.
 	 */
 	bool SharedRules(const FDungeonGrid& Grid, const FDungeonCell& Current, int32 NX, int32 NY, int32 NZ,
-		bool& OutNeedsBoundary, const FDungeonCell*& OutNeighbor)
+		bool bHorizontal, bool& OutNeedsBoundary, const FDungeonCell*& OutNeighbor)
 	{
 		OutNeighbor = nullptr;
 
@@ -57,20 +59,28 @@ namespace
 			return true;
 		}
 
-		// 2. Door / Entrance neighbours place their own frames; never boundary them off.
-		if (Neighbor.CellType == EDungeonCellType::Door || Neighbor.CellType == EDungeonCellType::Entrance)
+		if (bHorizontal)
 		{
-			OutNeedsBoundary = false;
-			return true;
-		}
+			// 2. Door / Entrance neighbours place their own frames; never wall them off.
+			if (Neighbor.CellType == EDungeonCellType::Door || Neighbor.CellType == EDungeonCellType::Entrance)
+			{
+				OutNeedsBoundary = false;
+				return true;
+			}
 
-		// 3. Door / Entrance opening toward the hallway family = the doorway itself. Without this
-		//    every doorway got a wall tile across its own opening while the voxels stayed carved.
-		if ((Current.CellType == EDungeonCellType::Door || Current.CellType == EDungeonCellType::Entrance)
-			&& FDungeonBoundaryRules::IsHallwayFamily(Neighbor.CellType))
-		{
-			OutNeedsBoundary = false;
-			return true;
+			// 3. Door / Entrance opening toward the hallway family = the doorway itself. Without
+			//    this every doorway got a wall tile across its own opening while the voxels
+			//    stayed carved.
+			//
+			// Both are walls-only: applied to floors and ceilings they dropped the floor of every
+			// hallway routed directly above a Door cell and the ceiling of the Door (and of any
+			// room or hallway cell directly under one), a hole straight through the level.
+			if ((Current.CellType == EDungeonCellType::Door || Current.CellType == EDungeonCellType::Entrance)
+				&& FDungeonBoundaryRules::IsHallwayFamily(Neighbor.CellType))
+			{
+				OutNeedsBoundary = false;
+				return true;
+			}
 		}
 
 		// 4. Same room = open (also covers multi-floor room interiors vertically).
@@ -126,7 +136,7 @@ bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FIntVector
 
 	bool bNeeds = true;
 	const FDungeonCell* Neighbor = nullptr;
-	if (SharedRules(Grid, Current, NX, NY, NZ, bNeeds, Neighbor))
+	if (SharedRules(Grid, Current, NX, NY, NZ, /*bHorizontal=*/true, bNeeds, Neighbor))
 	{
 		return bNeeds;
 	}
@@ -157,7 +167,7 @@ bool FDungeonBoundaryRules::NeedsVerticalBoundary(const FDungeonGrid& Grid, cons
 
 	bool bNeeds = true;
 	const FDungeonCell* Neighbor = nullptr;
-	if (SharedRules(Grid, Current, NX, NY, NZ, bNeeds, Neighbor))
+	if (SharedRules(Grid, Current, NX, NY, NZ, /*bHorizontal=*/false, bNeeds, Neighbor))
 	{
 		return bNeeds;
 	}

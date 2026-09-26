@@ -95,7 +95,10 @@ struct DUNGEONCORE_API FDungeonBoundaryRules
 
 	/**
 	 * Whether the VERTICAL face from Current toward the neighbour at (NX,NY,NZ) needs a floor or
-	 * ceiling. Rules 1 to 4 match NeedsWall. Rule 5 differs: two same-hallway cells stacked
+	 * ceiling. Rules 1 (solid / out of bounds) and 5 (same room) match NeedsWall; the door rules
+	 * and the flank rule are walls-only, since a doorway is an opening in a wall and a door frame
+	 * is never a hole in a floor or ceiling (applying them vertically dropped the floor of every
+	 * hallway routed over a Door cell and the ceiling beneath one). Rule 5 differs: two same-hallway cells stacked
 	 * vertically are open to each other ONLY when at least one is a Staircase / StaircaseHead (the
 	 * shaft the ramp climbs through). Two FLAT Hallway cells stacked at different Z are separate
 	 * walkable levels and each keeps its floor and ceiling; suppressing the boundary there dropped
