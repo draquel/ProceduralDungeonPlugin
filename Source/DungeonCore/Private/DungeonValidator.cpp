@@ -1,5 +1,6 @@
 // DungeonValidator.cpp — Validates dungeon generation results for structural correctness
 #include "DungeonValidator.h"
+#include "DungeonBoundaryRules.h"
 #include "DungeonConfig.h"
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,7 @@ FDungeonValidationResult FDungeonValidator::ValidateAll(const FDungeonResult& Re
 	ValidateRoomBuffer(Result, Config, Validation.Issues);
 	ValidateRoomConnectivity(Result, Validation.Issues);
 	ValidateStaircaseHeadroom(Result, Validation.Issues);
+	ValidateStaircaseFlanks(Result, Validation.Issues);
 	ValidateReachability(Result, Validation.Issues);
 	ValidateRoomSemantics(Result, Config, Validation.Issues);
 
@@ -429,6 +431,56 @@ void FDungeonValidator::ValidateRoomSemantics(const FDungeonResult& Result, cons
 				TEXT("Semantics"),
 				FString::Printf(TEXT("Entrance room %d has GraphDistanceFromEntrance=%d (expected 0)"),
 					Result.EntranceRoomIndex, Result.Rooms[Result.EntranceRoomIndex].GraphDistanceFromEntrance)));
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ValidateStaircaseFlanks
+// ---------------------------------------------------------------------------
+
+void FDungeonValidator::ValidateStaircaseFlanks(const FDungeonResult& Result, TArray<FDungeonValidationIssue>& OutIssues)
+{
+	static const int32 DX[4] = {1, -1, 0, 0};
+	static const int32 DY[4] = {0, 0, 1, -1};
+	const FDungeonGrid& Grid = Result.Grid;
+
+	for (int32 Z = 0; Z < Grid.GridSize.Z; ++Z)
+	{
+		for (int32 Y = 0; Y < Grid.GridSize.Y; ++Y)
+		{
+			for (int32 X = 0; X < Grid.GridSize.X; ++X)
+			{
+				const FDungeonCell& Cell = Grid.GetCell(X, Y, Z);
+				if (Cell.CellType != EDungeonCellType::Staircase && Cell.CellType != EDungeonCellType::StaircaseHead)
+				{
+					continue;
+				}
+				for (int32 D = 0; D < 4; ++D)
+				{
+					if (!FDungeonBoundaryRules::IsStairSideFace(Cell, DX[D], DY[D]))
+					{
+						continue;
+					}
+					const int32 NX = X + DX[D], NY = Y + DY[D];
+					if (!Grid.IsInBounds(NX, NY, Z))
+					{
+						continue;
+					}
+					const FDungeonCell& N = Grid.GetCell(NX, NY, Z);
+					if (FDungeonBoundaryRules::IsHallwayFamily(N.CellType) || N.CellType == EDungeonCellType::Door)
+					{
+						OutIssues.Add(FDungeonValidationIssue(
+							TEXT("StaircaseFlank"),
+							FString::Printf(TEXT("%s (%d,%d,%d) of hallway %d has a %s (hallway %d) on its flank at (%d,%d,%d)"),
+								Cell.CellType == EDungeonCellType::Staircase ? TEXT("Staircase") : TEXT("StaircaseHead"),
+								X, Y, Z, Cell.HallwayIndex,
+								N.CellType == EDungeonCellType::Door ? TEXT("Door") : TEXT("hallway-family cell"),
+								N.HallwayIndex, NX, NY, Z),
+							FIntVector(NX, NY, Z)));
+					}
+				}
+			}
 		}
 	}
 }

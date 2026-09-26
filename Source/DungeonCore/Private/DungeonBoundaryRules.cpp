@@ -86,9 +86,43 @@ namespace
 	}
 }
 
+bool FDungeonBoundaryRules::IsStairFlankCell(const FDungeonGrid& Grid, const FIntVector& Coord)
+{
+	static const int32 DX[4] = {1, -1, 0, 0};
+	static const int32 DY[4] = {0, 0, 1, -1};
+	for (int32 D = 0; D < 4; ++D)
+	{
+		const int32 NX = Coord.X + DX[D], NY = Coord.Y + DY[D];
+		if (!Grid.IsInBounds(NX, NY, Coord.Z))
+		{
+			continue;
+		}
+		// The neighbour's face toward Coord points the opposite way.
+		if (IsStairSideFace(Grid.GetCell(NX, NY, Coord.Z), -DX[D], -DY[D]))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FIntVector& CurrentCoord, int32 NX, int32 NY, int32 NZ)
 {
 	const FDungeonCell& Current = Grid.GetCell(CurrentCoord);
+
+	// 2. Staircase flanks are walls from both sides of the face, ahead of the door rules: the ramp
+	//    and its shaft are entered along the climb axis only, so neither a hallway running
+	//    alongside, nor a landing beside another staircase's shaft, nor a doorway facing the
+	//    shaft may open into it. (Rule 1, out of bounds / solid, is folded into the bounds test.)
+	if (Grid.IsInBounds(NX, NY, NZ))
+	{
+		const int32 DX = NX - CurrentCoord.X;
+		const int32 DY = NY - CurrentCoord.Y;
+		if (IsStairSideFace(Current, DX, DY) || IsStairSideFace(Grid.GetCell(NX, NY, NZ), -DX, -DY))
+		{
+			return true;
+		}
+	}
 
 	bool bNeeds = true;
 	const FDungeonCell* Neighbor = nullptr;
@@ -97,16 +131,6 @@ bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FIntVector
 		return bNeeds;
 	}
 	check(Neighbor);
-
-	// 5. Staircase flanks are walls from both sides of the face. The ramp and its shaft are
-	//    entered along the climb axis only; a hallway running alongside, or a landing beside
-	//    another staircase's shaft, must not open into it.
-	const int32 DX = NX - CurrentCoord.X;
-	const int32 DY = NY - CurrentCoord.Y;
-	if (IsStairSideFace(Current, DX, DY) || IsStairSideFace(*Neighbor, -DX, -DY))
-	{
-		return true;
-	}
 
 	// 6. Hallway family on both sides = no wall (hallways merge naturally at intersections).
 	//    Exception: a StaircaseHead only opens toward cells of the same staircase, which includes

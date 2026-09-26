@@ -49,8 +49,11 @@ struct DUNGEONCORE_API FHallwayPathfinder
 		const UDungeonConfiguration& Config,
 		TArray<FDungeonStaircase>& OutStaircases);
 
-private:
-	/** Check if all cells needed for a staircase are available (Empty or Hallway). */
+	/**
+	 * Check whether a staircase can be built from Entry climbing (DirX,DirY) by Rise floors: body
+	 * and headroom cells Empty, no other staircase adjacent, no hallway or door on a flank, and
+	 * an exit landing that is Empty / Hallway / Room and not on another staircase's flank.
+	 */
 	static bool CanBuildStaircase(
 		const FDungeonGrid& Grid,
 		const FIntVector& Entry,

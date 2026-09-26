@@ -281,3 +281,31 @@ bool FBoundaryStairAxisFaces::RunTest(const FString& Parameters)
 	{ FPair P; TestTrue(TEXT("Staircase(+X) -> Room (different space)"), CurStair(P, ECT::Staircase, 1, 0).Side(ECT::Room, 3, 0).Wall()); }
 	return true;
 }
+
+BOUNDARY_TEST(FBoundaryStairFlankDoor, "Dungeon.BoundaryRules.Wall.DoorOnStaircaseFlankIsWall")
+bool FBoundaryStairFlankDoor::RunTest(const FString& Parameters)
+{
+	// The flank rule precedes the door rules: a door frame must never open onto a shaft or ramp.
+	{ FPair P; TestTrue(TEXT("Head(+Y) -> Door on its flank"), CurStair(P, ECT::StaircaseHead, 4, 2).Side(ECT::Door, 8, 5).Wall()); }
+	{ FPair P; P.Cur(ECT::Door, 8, 5); TestTrue(TEXT("Door -> Head(+Y) flank"), SideStair(P, ECT::StaircaseHead, 4, 2).Wall()); }
+	{ FPair P; P.Cur(ECT::Door, 8, 5); TestTrue(TEXT("Door -> Staircase(-Y) flank"), SideStair(P, ECT::Staircase, 4, 3).Wall()); }
+	// ...but a door on the stair's ENTRY face still opens (a staircase may attach to a room).
+	{ FPair P; P.Cur(ECT::Door, 8, 5); TestFalse(TEXT("Door -> Staircase(+X) entry face"), SideStair(P, ECT::Staircase, 5, 0).Wall()); }
+	return true;
+}
+
+BOUNDARY_TEST(FBoundaryStairFlankCell, "Dungeon.BoundaryRules.StairFlankCellPredicate")
+bool FBoundaryStairFlankCell::RunTest(const FString& Parameters)
+{
+	FDungeonGrid Grid;
+	Grid.Initialize(FIntVector(3, 3, 1));
+	FDungeonCell& S = Grid.GetCell(1, 1, 0);
+	S.CellType = ECT::Staircase;
+	S.StaircaseDirection = 0; // climbs +X: flanks are (1,0) and (1,2)
+	TestTrue(TEXT("(1,2) is a flank cell"), FDungeonBoundaryRules::IsStairFlankCell(Grid, FIntVector(1, 2, 0)));
+	TestTrue(TEXT("(1,0) is a flank cell"), FDungeonBoundaryRules::IsStairFlankCell(Grid, FIntVector(1, 0, 0)));
+	TestFalse(TEXT("(2,1) is the climb face, not a flank"), FDungeonBoundaryRules::IsStairFlankCell(Grid, FIntVector(2, 1, 0)));
+	TestFalse(TEXT("(0,1) is the entry face, not a flank"), FDungeonBoundaryRules::IsStairFlankCell(Grid, FIntVector(0, 1, 0)));
+	TestFalse(TEXT("(0,0) is diagonal, not a flank"), FDungeonBoundaryRules::IsStairFlankCell(Grid, FIntVector(0, 0, 0)));
+	return true;
+}

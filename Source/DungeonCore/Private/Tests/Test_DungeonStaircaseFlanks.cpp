@@ -9,8 +9,10 @@
 // flank. Measured in the DungeonTest map (seed 28377955, 25x25x5): 4 of 11 staircases had a hallway
 // on a body flank and 3 had a same-index hallway beside their shaft.
 //
-// This test is the RED test for that layout defect. It will fail until the pathfinder treats the
-// flanks of every staircase as keep-out for hallway cells.
+// This test was written RED against that layout and turned green by the pathfinder's flank
+// keep-out (CanBuildStaircase rejects flanks holding hallway cells, same-floor moves never enter
+// a flank of a carved or planned staircase, and FindPath re-searches when a path lands beside its
+// own ramp). FDungeonValidator::ValidateStaircaseFlanks reports the same invariant in the editor.
 
 #include "Misc/AutomationTest.h"
 #include "DungeonTypes.h"
