@@ -75,16 +75,24 @@ struct DUNGEONCORE_API FDungeonBoundaryRules
 	 *     merge below opened the side of every ramp to any hallway that touched it, and the tile
 	 *     mapper patched it locally (one-sided) while the voxel stamper did not — the third drift
 	 *     this file exists to prevent.
-	 *  3. Door / Entrance neighbour: no wall (it places its own frame).
-	 *  4. Door / Entrance current facing the hallway family: no wall (the doorway itself).
-	 *  5. Same room (room family, equal RoomIndex): no wall.
-	 *  6. Hallway family on both sides: no wall (hallways merge), EXCEPT a StaircaseHead only
+	 *  3. Staircase axis faces between a stair-family cell and an open cell that is not: a ramp
+	 *     is entered at the foot of its first body cell and left from the climb face of the low
+	 *     headroom cell (directly above a body) onto the exit landing; those two faces are open
+	 *     to any open neighbour (hallway, room or door, any index). Every other axis face is a
+	 *     wall: the body's climb face (the cell under the exit landing), the low headroom's entry
+	 *     face (the cell above the entry landing, e.g. a two-floor room's upper airspace over the
+	 *     doorway the ramp starts from) and both faces of upper headroom cells (hallways passing
+	 *     the shaft one or two levels up). Same-stair continuations are decided by rule 7.
+	 *  4. Door / Entrance neighbour: no wall (it places its own frame).
+	 *  5. Door / Entrance current facing the hallway family: no wall (the doorway itself).
+	 *  6. Same room (room family, equal RoomIndex): no wall.
+	 *  7. Hallway family on both sides: no wall (hallways merge), EXCEPT a StaircaseHead only
 	 *     opens toward cells of its own hallway (equal HallwayIndex), which includes the plain
 	 *     Hallway it exits into.
-	 *  7. Anything else (room vs hallway, different rooms): wall.
+	 *  8. Anything else (room vs hallway, different rooms): wall.
 	 *
-	 * The caller may layer further staircase placement policy on top (entry / climb faces toward
-	 * rooms); that is placement policy, not space membership, and stays in the backend.
+	 * Backends place geometry from these answers only; the one backend-specific addition is the
+	 * tile mapper's door frame in the opening where a ramp enters a room cell directly.
 	 *
 	 * @param Grid     The dungeon grid.
 	 * @param Current  Grid coordinate of the cell whose face is being evaluated (must be in bounds).

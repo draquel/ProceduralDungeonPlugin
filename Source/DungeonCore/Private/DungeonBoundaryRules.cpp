@@ -96,6 +96,40 @@ namespace
 	}
 }
 
+namespace
+{
+	static constexpr int32 RuleClimbDX[4] = {1, -1, 0, 0};
+	static constexpr int32 RuleClimbDY[4] = {0, 0, 1, -1};
+
+	bool IsStairFamilyCell(EDungeonCellType Type)
+	{
+		return Type == EDungeonCellType::Staircase || Type == EDungeonCellType::StaircaseHead;
+	}
+
+	/**
+	 * A stair-family cell S at SCoord, its face (FDX,FDY) on the climb axis, facing an open cell
+	 * that is not stair-family. The ramp is entered at the bottom of its first body cell and left
+	 * from the top of its last body cell, which is the low headroom cell's climb face; every
+	 * other axis face is a wall:
+	 *   body            entry open            climb wall (the cell under the exit landing)
+	 *   headroom (low)  entry wall            climb open (the exit landing)
+	 *   headroom (upper) entry wall           climb wall
+	 * "Low" headroom sits directly above a body cell. Same-stair continuations (body to body,
+	 * headroom to headroom) never reach here: both sides are stair-family.
+	 */
+	bool StairAxisFaceNeedsWall(const FDungeonGrid& Grid, const FDungeonCell& S, const FIntVector& SCoord, int32 FDX, int32 FDY)
+	{
+		const bool bClimb = (FDX == RuleClimbDX[S.StaircaseDirection] && FDY == RuleClimbDY[S.StaircaseDirection]);
+		if (S.CellType == EDungeonCellType::Staircase)
+		{
+			return bClimb;
+		}
+		const FIntVector Below(SCoord.X, SCoord.Y, SCoord.Z - 1);
+		const bool bLowHeadroom = Grid.IsInBounds(Below) && Grid.GetCell(Below).CellType == EDungeonCellType::Staircase;
+		return !(bLowHeadroom && bClimb);
+	}
+}
+
 bool FDungeonBoundaryRules::IsStairFlankCell(const FDungeonGrid& Grid, const FIntVector& Coord)
 {
 	static const int32 DX[4] = {1, -1, 0, 0};
@@ -126,11 +160,25 @@ bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FIntVector
 	//    shaft may open into it. (Rule 1, out of bounds / solid, is folded into the bounds test.)
 	if (Grid.IsInBounds(NX, NY, NZ))
 	{
+		const FDungeonCell& N = Grid.GetCell(NX, NY, NZ);
 		const int32 DX = NX - CurrentCoord.X;
 		const int32 DY = NY - CurrentCoord.Y;
-		if (IsStairSideFace(Current, DX, DY) || IsStairSideFace(Grid.GetCell(NX, NY, NZ), -DX, -DY))
+		if (IsStairSideFace(Current, DX, DY) || IsStairSideFace(N, -DX, -DY))
 		{
 			return true;
+		}
+
+		// 3. Staircase axis faces (entry / climb) between a stair-family cell and an open cell that
+		//    is not: only the ramp's foot (body entry face) and its top (low headroom climb face,
+		//    onto the exit landing) are openings; every other axis face is a wall, whatever the
+		//    neighbour is. This is what closes a two-floor room's upper airspace above the doorway
+		//    a ramp starts from, and hallways passing the shaft one or two levels up. Ahead of the
+		//    door rules: a Door on a headroom entry face is walled, not framed.
+		if (IsOpenCell(N.CellType) && IsStairFamilyCell(Current.CellType) != IsStairFamilyCell(N.CellType))
+		{
+			return IsStairFamilyCell(Current.CellType)
+				? StairAxisFaceNeedsWall(Grid, Current, CurrentCoord, DX, DY)
+				: StairAxisFaceNeedsWall(Grid, N, FIntVector(NX, NY, NZ), -DX, -DY);
 		}
 	}
 
@@ -142,7 +190,7 @@ bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FIntVector
 	}
 	check(Neighbor);
 
-	// 6. Hallway family on both sides = no wall (hallways merge naturally at intersections).
+	// 7. Hallway family on both sides = no wall (hallways merge naturally at intersections).
 	//    Exception: a StaircaseHead only opens toward cells of the same staircase, which includes
 	//    the plain Hallway it exits into, keyed by HallwayIndex. (Requiring BOTH sides to be
 	//    staircase-family walled the top of every staircase off from its own exit corridor.)
@@ -157,7 +205,7 @@ bool FDungeonBoundaryRules::NeedsWall(const FDungeonGrid& Grid, const FIntVector
 		return false;
 	}
 
-	// 7. Different spaces (room vs hallway, different rooms) = wall.
+	// 8. Different spaces (room vs hallway, different rooms) = wall.
 	return true;
 }
 
