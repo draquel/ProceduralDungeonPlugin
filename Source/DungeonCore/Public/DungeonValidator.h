@@ -65,6 +65,14 @@ struct DUNGEONCORE_API FDungeonValidator
 	/** OccupiedCells above staircase body are Staircase/StaircaseHead, not Room/RoomWall. */
 	static void ValidateStaircaseHeadroom(const FDungeonResult& Result, TArray<FDungeonValidationIssue>& OutIssues);
 
+	/**
+	 * No hallway-family or Door cell on a staircase flank (a face of a Staircase / StaircaseHead
+	 * cell perpendicular to its climb axis). Such a cell is walled off from the ramp by the
+	 * boundary rules and reads as a corridor running into the side of the incline; the
+	 * pathfinder keeps hallways off flanks, this reports anything that slipped through.
+	 */
+	static void ValidateStaircaseFlanks(const FDungeonResult& Result, TArray<FDungeonValidationIssue>& OutIssues);
+
 	/** 6-directional flood fill from entrance cell reaches all non-Empty cells. */
 	static void ValidateReachability(const FDungeonResult& Result, TArray<FDungeonValidationIssue>& OutIssues);
 
