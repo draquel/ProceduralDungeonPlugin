@@ -58,6 +58,24 @@ using ECT = EDungeonCellType;
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(ClassName, TestName, \
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
+namespace DungeonBoundaryRulesTestHelpers
+{
+	/**
+	 * A LOW headroom cell: StaircaseHead at (1,1,1) with a Staircase body directly below it at
+	 * (1,1,0), both hallway 1, climbing Direction (0 = +X, so the +X side neighbour is its climb
+	 * face; 1 = -X, so the +X side is its entry face).
+	 */
+	FPair LowHeadPair(uint8 Direction = 0)
+	{
+		FPair P;
+		P.Cur(ECT::StaircaseHead, 0, 1);
+		P.Current().StaircaseDirection = Direction;
+		FDungeonCell& Body = P.Grid.GetCell(FPair::CX, FPair::CY, FPair::CZ - 1);
+		Body.CellType = ECT::Staircase; Body.HallwayIndex = 1; Body.StaircaseDirection = Direction;
+		return P;
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Rule 1: out-of-bounds and solid neighbours
 // ---------------------------------------------------------------------------
@@ -105,8 +123,9 @@ bool FBoundaryDoorway::RunTest(const FString& Parameters)
 {
 	// The doorway itself: the rule the mapper was missing (every doorway had a wall tile across it).
 	TestFalse(TEXT("Door->Hallway"), FPair().Cur(ECT::Door, 1).Side(ECT::Hallway, 0, 3).Wall());
-	TestFalse(TEXT("Door->Staircase"), FPair().Cur(ECT::Door, 1).Side(ECT::Staircase, 0, 3).Wall());
-	TestFalse(TEXT("Door->StaircaseHead"), FPair().Cur(ECT::Door, 1).Side(ECT::StaircaseHead, 0, 3).Wall());
+	TestFalse(TEXT("Door->Staircase (its entry face)"), FPair().Cur(ECT::Door, 1).Side(ECT::Staircase, 0, 3).Wall());
+	// A Door beside a headroom cell is on the shaft's entry face: walled (rule 3), never framed.
+	TestTrue(TEXT("Door->StaircaseHead entry face"), FPair().Cur(ECT::Door, 1).Side(ECT::StaircaseHead, 0, 3).Wall());
 	TestFalse(TEXT("Entrance->Hallway"), FPair().Cur(ECT::Entrance, 1).Side(ECT::Hallway, 0, 3).Wall());
 	// A door facing a DIFFERENT room directly (no hallway) is still a wall; only hallways get the opening.
 	TestTrue(TEXT("Door->other Room"), FPair().Cur(ECT::Door, 1).Side(ECT::Room, 2).Wall());
@@ -143,7 +162,7 @@ bool FBoundaryHallwaysMerge::RunTest(const FString& Parameters)
 {
 	TestFalse(TEXT("Hallway->Hallway same"), FPair().Cur(ECT::Hallway, 0, 1).Side(ECT::Hallway, 0, 1).Wall());
 	TestFalse(TEXT("Hallway->Hallway different"), FPair().Cur(ECT::Hallway, 0, 1).Side(ECT::Hallway, 0, 2).Wall());
-	TestFalse(TEXT("Hallway->Staircase different"), FPair().Cur(ECT::Hallway, 0, 1).Side(ECT::Staircase, 0, 2).Wall());
+	TestFalse(TEXT("Hallway->Staircase different (its entry face)"), FPair().Cur(ECT::Hallway, 0, 1).Side(ECT::Staircase, 0, 2).Wall());
 	TestFalse(TEXT("Staircase->Staircase same"), FPair().Cur(ECT::Staircase, 0, 1).Side(ECT::Staircase, 0, 1).Wall());
 	return true;
 }
@@ -151,13 +170,15 @@ bool FBoundaryHallwaysMerge::RunTest(const FString& Parameters)
 BOUNDARY_TEST(FBoundaryStaircaseHead, "Dungeon.BoundaryRules.Wall.StaircaseHeadOpensToOwnHallway")
 bool FBoundaryStaircaseHead::RunTest(const FString& Parameters)
 {
-	// The rule the mapper was missing: the head must open into the plain Hallway it exits into.
-	TestFalse(TEXT("Head->Hallway same index"), FPair().Cur(ECT::StaircaseHead, 0, 1).Side(ECT::Hallway, 0, 1).Wall());
-	TestFalse(TEXT("Hallway->Head same index"), FPair().Cur(ECT::Hallway, 0, 1).Side(ECT::StaircaseHead, 0, 1).Wall());
-	TestFalse(TEXT("Head->Staircase same index"), FPair().Cur(ECT::StaircaseHead, 0, 1).Side(ECT::Staircase, 0, 1).Wall());
-	// ...but not into some other hallway that happens to pass by.
-	TestTrue(TEXT("Head->Hallway other index"), FPair().Cur(ECT::StaircaseHead, 0, 1).Side(ECT::Hallway, 0, 2).Wall());
-	TestTrue(TEXT("Hallway->Head other index"), FPair().Cur(ECT::Hallway, 0, 2).Side(ECT::StaircaseHead, 0, 1).Wall());
+	// The head must open into the Hallway it exits into: the LOW headroom (directly above a
+	// body) on its climb face, whatever the landing's index (rule 3). Same-stair continuation
+	// (rule 7) is open; a headroom cell with no body below is upper headroom and walls the face.
+	TestFalse(TEXT("Low head->exit Hallway same index"), LowHeadPair().Side(ECT::Hallway, 0, 1).Wall());
+	TestFalse(TEXT("Low head->exit Hallway other index (existing corridor as landing)"), LowHeadPair().Side(ECT::Hallway, 0, 2).Wall());
+	TestFalse(TEXT("Head->StaircaseHead same index"), FPair().Cur(ECT::StaircaseHead, 0, 1).Side(ECT::StaircaseHead, 0, 1).Wall());
+	TestTrue(TEXT("Upper head->Hallway same index"), FPair().Cur(ECT::StaircaseHead, 0, 1).Side(ECT::Hallway, 0, 1).Wall());
+	TestTrue(TEXT("Upper head->Hallway other index"), FPair().Cur(ECT::StaircaseHead, 0, 1).Side(ECT::Hallway, 0, 2).Wall());
+	TestTrue(TEXT("Hallway->Upper head other index"), FPair().Cur(ECT::Hallway, 0, 2).Side(ECT::StaircaseHead, 0, 1).Wall());
 	return true;
 }
 
@@ -275,12 +296,12 @@ bool FBoundaryStairFlanks::RunTest(const FString& Parameters)
 BOUNDARY_TEST(FBoundaryStairAxisFaces, "Dungeon.BoundaryRules.Wall.StaircaseAxisFacesUnchanged")
 bool FBoundaryStairAxisFaces::RunTest(const FString& Parameters)
 {
-	// The +X face of a stair climbing along X is its climb or entry face: rule 6 still applies.
-	{ FPair P; TestFalse(TEXT("Staircase(+X) -> Hallway (climb face, merge)"), CurStair(P, ECT::Staircase, 1, 0).Side(ECT::Hallway, 0, 2).Wall()); }
+	// The +X face of a stair climbing along X is its climb face, -X its entry face (rule 3).
+	{ FPair P; TestTrue(TEXT("Staircase(+X) -> Hallway on its climb face (under the exit landing)"), CurStair(P, ECT::Staircase, 1, 0).Side(ECT::Hallway, 0, 2).Wall()); }
+	{ FPair P; TestFalse(TEXT("Staircase(-X) -> Hallway on its entry face (the landing)"), CurStair(P, ECT::Staircase, 1, 1).Side(ECT::Hallway, 0, 2).Wall()); }
+	{ FPair P; TestFalse(TEXT("Staircase(-X) -> Room on its entry face (ramp starts in a room)"), CurStair(P, ECT::Staircase, 1, 1).Side(ECT::Room, 3, 0).Wall()); }
 	{ FPair P; TestFalse(TEXT("Staircase(-X) -> Staircase(-X) same (continuation)"), SideStair(CurStair(P, ECT::Staircase, 1, 1), ECT::Staircase, 1, 1).Wall()); }
-	{ FPair P; TestFalse(TEXT("Head(+X) -> Hallway same index (exit)"), CurStair(P, ECT::StaircaseHead, 1, 0).Side(ECT::Hallway, 0, 1).Wall()); }
-	{ FPair P; TestTrue(TEXT("Head(+X) -> Hallway other index"), CurStair(P, ECT::StaircaseHead, 1, 0).Side(ECT::Hallway, 0, 2).Wall()); }
-	{ FPair P; TestTrue(TEXT("Staircase(+X) -> Room (different space)"), CurStair(P, ECT::Staircase, 1, 0).Side(ECT::Room, 3, 0).Wall()); }
+	{ FPair P; TestTrue(TEXT("Staircase(+X) -> Room on its climb face"), CurStair(P, ECT::Staircase, 1, 0).Side(ECT::Room, 3, 0).Wall()); }
 	return true;
 }
 
@@ -345,5 +366,37 @@ bool FBoundaryDoorStackKeepsFloors::RunTest(const FString& Parameters)
 	// Horizontally the doorway is unchanged.
 	TestFalse(TEXT("Door -> Hallway wall face is the doorway"), FPair().Cur(ECT::Door, 3, 5).Side(ECT::Hallway, 0, 5).Wall());
 	TestFalse(TEXT("Hallway -> Door wall face is open"), FPair().Cur(ECT::Hallway, 0, 5).Side(ECT::Door, 3, 5).Wall());
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Rule 3: staircase axis faces — only the ramp's foot and its top are openings
+// ---------------------------------------------------------------------------
+
+BOUNDARY_TEST(FBoundaryStairAxisTable, "Dungeon.BoundaryRules.Wall.StaircaseAxisFaceTable")
+bool FBoundaryStairAxisTable::RunTest(const FString& Parameters)
+{
+	// Body: entry open (foot of the ramp), climb wall (the cell under the exit landing).
+	{ FPair P; TestFalse(TEXT("body entry -> Hallway"), CurStair(P, ECT::Staircase, 1, 1).Side(ECT::Hallway, 0, 9).Wall()); }
+	{ FPair P; TestFalse(TEXT("body entry -> Door"), CurStair(P, ECT::Staircase, 1, 1).Side(ECT::Door, 4, 1).Wall()); }
+	{ FPair P; TestTrue(TEXT("body climb -> Hallway"), CurStair(P, ECT::Staircase, 1, 0).Side(ECT::Hallway, 0, 1).Wall()); }
+	{ FPair P; TestTrue(TEXT("body climb -> Door"), CurStair(P, ECT::Staircase, 1, 0).Side(ECT::Door, 4, 1).Wall()); }
+
+	// Low headroom (body directly below): climb open onto the landing, entry wall.
+	TestFalse(TEXT("low head climb -> Hallway"), LowHeadPair().Side(ECT::Hallway, 0, 1).Wall());
+	TestFalse(TEXT("low head climb -> Room (ramp emerges into a room)"), LowHeadPair().Side(ECT::Room, 4, 0).Wall());
+	TestFalse(TEXT("low head climb -> Door"), LowHeadPair().Side(ECT::Door, 4, 1).Wall());
+	TestTrue(TEXT("low head entry -> Room (two-floor room's airspace over the doorway)"), LowHeadPair(/*Direction=*/1).Side(ECT::Room, 4, 0).Wall());
+	TestTrue(TEXT("low head entry -> Hallway"), LowHeadPair(1).Side(ECT::Hallway, 0, 1).Wall());
+	TestTrue(TEXT("low head entry -> Door"), LowHeadPair(1).Side(ECT::Door, 4, 1).Wall());
+
+	// Upper headroom (headroom below): both axis faces wall.
+	{ FPair P; TestTrue(TEXT("upper head climb -> Hallway same index"), CurStair(P, ECT::StaircaseHead, 1, 0).Side(ECT::Hallway, 0, 1).Wall()); }
+	{ FPair P; TestTrue(TEXT("upper head entry -> Room"), CurStair(P, ECT::StaircaseHead, 1, 1).Side(ECT::Room, 4, 0).Wall()); }
+
+	// Mirrored: the same answers from the open cell's side of the face.
+	{ FPair P; P.Cur(ECT::Room, 4); TestTrue(TEXT("Room -> upper head entry face"), SideStair(P, ECT::StaircaseHead, 1, 0).Wall()); }
+	{ FPair P; P.Cur(ECT::Hallway, 0, 9); TestFalse(TEXT("Hallway -> body entry face"), SideStair(P, ECT::Staircase, 1, 0).Wall()); }
+	{ FPair P; P.Cur(ECT::Hallway, 0, 9); TestTrue(TEXT("Hallway -> body climb face"), SideStair(P, ECT::Staircase, 1, 1).Wall()); }
 	return true;
 }

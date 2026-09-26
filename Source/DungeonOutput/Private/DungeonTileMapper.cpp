@@ -484,63 +484,17 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 							}
 						}
 					}
-					else if (bIsStaircase)
+					else if (bIsStaircase || bIsStaircaseHead)
 					{
-						// Staircase cells: wall all faces except entry approach and same-staircase continuation.
-						// Entry face (bottom approach): use normal NeedsWall (open to hallways, walled against solid).
-						// Climb face (high/exit side): walled unless same-staircase or underpass enabled.
-						// Flank faces: FDungeonBoundaryRules (rule 5) walls them from both sides; the stair
-						// cell itself only places that wall against a solid neighbour. An open neighbour
-						// places the wall on ITS face, so a wall module inset into this cell never cuts
-						// through the ramp mesh.
-						const uint8 Dir = Cell.StaircaseDirection;
-						const bool bIsClimbFace = (WC.DX == DX[Dir] && WC.DY == DY[Dir]);
-						const bool bIsEntryFace = (WC.DX == -DX[Dir] && WC.DY == -DY[Dir]);
-
-						bool bPlaceWall;
-
-						if (bIsEntryFace)
-						{
-							// Entry: defer to standard logic, but open toward room-family cells
-							// (staircase can attach directly to a room without an intermediate hallway)
-							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z);
-							if (bPlaceWall && Result.Grid.IsInBounds(NX, NY, Z))
-							{
-								const EDungeonCellType NType = Result.Grid.GetCell(NX, NY, Z).CellType;
-								if (NType == EDungeonCellType::Room
-									|| NType == EDungeonCellType::Door
-									|| NType == EDungeonCellType::Entrance)
-								{
-									bPlaceWall = false;
-								}
-							}
-						}
-						else if (bIsClimbFace)
-						{
-							// Check for same-staircase continuation (multi-cell runs)
-							bool bSameStaircase = false;
-							if (Result.Grid.IsInBounds(NX, NY, Z))
-							{
-								const FDungeonCell& Neighbor = Result.Grid.GetCell(NX, NY, Z);
-								bSameStaircase = (Neighbor.CellType == EDungeonCellType::Staircase
-									|| Neighbor.CellType == EDungeonCellType::StaircaseHead)
-									&& Neighbor.HallwayIndex == Cell.HallwayIndex;
-							}
-
-							if (bSameStaircase)
-								bPlaceWall = false;
-							else
-								bPlaceWall = true;
-						}
-						else
-						{
-							// Flank: shared rule, own wall only against solid / OOB (see above).
-							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z)
-								&& !(Result.Grid.IsInBounds(NX, NY, Z)
-									&& FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(NX, NY, Z).CellType));
-						}
-
-						if (bPlaceWall && SlotActive(EDungeonTileType::WallSegment))
+						// Every staircase face (flank, entry, climb, headroom level) is decided by
+						// FDungeonBoundaryRules. The stair cell places its own wall only against a
+						// solid / OOB neighbour: an open neighbour walls its side of the face, so a wall
+						// module inset into this cell never cuts through the ramp mesh.
+						const bool bNeighborOpen = Result.Grid.IsInBounds(NX, NY, Z)
+							&& FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(NX, NY, Z).CellType);
+						if (!bNeighborOpen
+							&& FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z)
+							&& SlotActive(EDungeonTileType::WallSegment))
 						{
 							const FVector WS = WallScale(EDungeonTileType::WallSegment);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
@@ -548,91 +502,29 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 						}
 					}
-					else if (bIsStaircaseHead)
+					else
 					{
-						// StaircaseHead cells: climb/entry faces open to hallways, rooms, and same-staircase.
-						// Flank faces: always walls (shared rule 5); as for Staircase cells, the head only
-						// places its own flank wall against a solid neighbour.
-						const uint8 Dir = Cell.StaircaseDirection;
-						const bool bIsClimbFace = (WC.DX == DX[Dir] && WC.DY == DY[Dir]);
-						const bool bIsEntryFace = (WC.DX == -DX[Dir] && WC.DY == -DY[Dir]);
+						const bool bWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z);
 
-						bool bPlaceWall;
-
-						if (bIsClimbFace || bIsEntryFace)
-						{
-							// Open toward hallway-family, room-family, or same-staircase
-							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z);
-							if (bPlaceWall && Result.Grid.IsInBounds(NX, NY, Z))
-							{
-								const EDungeonCellType NType = Result.Grid.GetCell(NX, NY, Z).CellType;
-								if (NType == EDungeonCellType::Hallway
-									|| NType == EDungeonCellType::Room
-									|| NType == EDungeonCellType::Door
-									|| NType == EDungeonCellType::Entrance)
-								{
-									bPlaceWall = false;
-								}
-							}
-						}
-						else
-						{
-							// Flank: shared rule, own wall only against solid / OOB.
-							bPlaceWall = FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z)
-								&& !(Result.Grid.IsInBounds(NX, NY, Z)
-									&& FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(NX, NY, Z).CellType));
-						}
-
-						if (bPlaceWall && SlotActive(EDungeonTileType::WallSegment))
-						{
-							const FVector WS = WallScale(EDungeonTileType::WallSegment);
-							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-								FTransform(WallRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
-						}
-					}
-					else if (FDungeonBoundaryRules::NeedsWall(Result.Grid, FIntVector(X, Y, Z), NX, NY, Z))
-					{
-						// Check if neighbor is a staircase with its entry facing us — door frame instead of wall
+						// A ramp entering this room cell directly (no Door cell between): the shared
+						// rules leave the ramp's entry face open; frame the opening like a doorway.
 						bool bStaircaseEntry = false;
-						// Check if neighbor is a StaircaseHead with climb/entry face toward us — skip wall
-						bool bStaircaseHeadOpen = false;
-						if (Result.Grid.IsInBounds(NX, NY, Z))
+						if (!bWall && !bIsHallway && Result.Grid.IsInBounds(NX, NY, Z))
 						{
 							const FDungeonCell& Neighbor = Result.Grid.GetCell(NX, NY, Z);
-							if (Neighbor.CellType == EDungeonCellType::Staircase)
-							{
-								// Room-to-staircase direction matches staircase's climb direction
-								// means we're at the staircase's entry side (opposite of climb)
-								bStaircaseEntry = (WC.DX == DX[Neighbor.StaircaseDirection]
-									&& WC.DY == DY[Neighbor.StaircaseDirection]);
-							}
-							else if (Neighbor.CellType == EDungeonCellType::StaircaseHead)
-							{
-								// Face from StaircaseHead toward us is (-WC.DX, -WC.DY).
-								// If that's the head's climb or entry face, don't wall.
-								const uint8 HeadDir = Neighbor.StaircaseDirection;
-								const bool bHeadClimb = (-WC.DX == DX[HeadDir] && -WC.DY == DY[HeadDir]);
-								const bool bHeadEntry = (WC.DX == DX[HeadDir] && WC.DY == DY[HeadDir]);
-								if (bHeadClimb || bHeadEntry)
-								{
-									bStaircaseHeadOpen = true;
-								}
-							}
+							bStaircaseEntry = Neighbor.CellType == EDungeonCellType::Staircase
+								&& WC.DX == DX[Neighbor.StaircaseDirection]
+								&& WC.DY == DY[Neighbor.StaircaseDirection];
 						}
 
-						if (bStaircaseHeadOpen)
-						{
-							// Don't place wall — StaircaseHead's climb/entry face is open
-						}
-						else if (bStaircaseEntry && SlotActive(EDungeonTileType::DoorFrame))
+						if (bStaircaseEntry && SlotActive(EDungeonTileType::DoorFrame))
 						{
 							const FVector FS = WallScale(EDungeonTileType::DoorFrame);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::DoorFrame)].Emplace(
 								FTransform(DoorRot,
 									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::DoorFrame, FS, DoorRot), FS));
 						}
-						else if (!bStaircaseEntry && SlotActive(EDungeonTileType::WallSegment))
+						else if (bWall && SlotActive(EDungeonTileType::WallSegment))
 						{
 							const FVector WS = WallScale(EDungeonTileType::WallSegment);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
