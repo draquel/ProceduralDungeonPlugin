@@ -87,9 +87,26 @@ public:
 
 	// --- Seed ---
 
+	/**
+	 * When true, generating with Seed 0 ("no seed supplied") uses FixedSeed instead of a clock-derived
+	 * seed. An explicit non-zero seed passed to UDungeonGenerator::Generate ALWAYS wins, so
+	 * ADungeonActor::Seed, RandomizeSeed() and POI placement seeds are never overridden by the config.
+	 * See ResolveSeed for the exact precedence.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Seed")
 	bool bUseFixedSeed = false;
 
+	/** Seed used for Seed-0 generations while bUseFixedSeed is on. 0 = unset (clock fallback, with a warning). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Seed", meta=(EditCondition="bUseFixedSeed"))
 	int64 FixedSeed = 0;
+
+	/**
+	 * Resolve the seed UDungeonGenerator::Generate will use for a requested seed.
+	 * Precedence: non-zero RequestedSeed -> RequestedSeed; else (bUseFixedSeed && FixedSeed != 0) -> FixedSeed;
+	 * else 0, meaning no deterministic seed is available and the generator derives one from the clock.
+	 * @param RequestedSeed  Seed passed by the caller (0 = none supplied).
+	 * @return The deterministic seed to use, or 0 when the generator must pick a clock-derived one.
+	 */
+	UFUNCTION(BlueprintPure, Category="Dungeon|Seed")
+	int64 ResolveSeed(int64 RequestedSeed) const;
 };

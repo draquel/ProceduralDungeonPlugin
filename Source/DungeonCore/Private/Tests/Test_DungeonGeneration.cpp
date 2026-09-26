@@ -304,6 +304,96 @@ bool FDungeonGenSeedZeroValid::RunTest(const FString& Parameters)
 	return true;
 }
 
+// An explicit seed must give the same layout whether or not the config carries a fixed seed:
+// bUseFixedSeed/FixedSeed never override a caller's non-zero seed.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDungeonGenExplicitSeedIgnoresFixedSeedFlag, "Dungeon.Generation.Determinism.ExplicitSeedIgnoresFixedSeedFlag",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeonGenExplicitSeedIgnoresFixedSeedFlag::RunTest(const FString& Parameters)
+{
+	UDungeonConfiguration* Loose = DungeonGenerationTestHelpers::CreateDefaultConfig();
+	Loose->bUseFixedSeed = false;
+	Loose->FixedSeed = 0;
+
+	UDungeonConfiguration* Fixed = DungeonGenerationTestHelpers::CreateDefaultConfig();
+	Fixed->bUseFixedSeed = true;
+	Fixed->FixedSeed = 999;
+
+	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
+	Generator->AddToRoot();
+
+	const int64 Seed = 28377955;
+	const FDungeonResult FromLoose = Generator->Generate(Loose, Seed);
+	const FDungeonResult FromFixed = Generator->Generate(Fixed, Seed);
+
+	TestEqual(TEXT("Flag off records the explicit seed"), FromLoose.Seed, Seed);
+	TestEqual(TEXT("Flag on records the explicit seed, not FixedSeed"), FromFixed.Seed, Seed);
+	TestTrue(TEXT("Same explicit seed gives the same layout across the bUseFixedSeed flag"),
+		DungeonGenerationTestHelpers::AreDungeonResultsIdentical(FromLoose, FromFixed));
+
+	const FDungeonResult FromFixedSeedValue = Generator->Generate(Loose, Fixed->FixedSeed);
+	TestFalse(TEXT("The explicit seed was not replaced by FixedSeed"),
+		DungeonGenerationTestHelpers::AreDungeonResultsIdentical(FromFixed, FromFixedSeedValue));
+
+	Generator->RemoveFromRoot();
+	DungeonGenerationTestHelpers::CleanupConfig(Loose);
+	DungeonGenerationTestHelpers::CleanupConfig(Fixed);
+	return true;
+}
+
+// Seed 0 ("none supplied") resolves to FixedSeed while bUseFixedSeed is on, and to the clock otherwise.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDungeonGenSeedZeroUsesFixedSeed, "Dungeon.Generation.Determinism.SeedZeroUsesFixedSeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeonGenSeedZeroUsesFixedSeed::RunTest(const FString& Parameters)
+{
+	UDungeonConfiguration* Config = DungeonGenerationTestHelpers::CreateDefaultConfig(); // bUseFixedSeed, FixedSeed 12345
+	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
+	Generator->AddToRoot();
+
+	TestEqual(TEXT("ResolveSeed(0) returns FixedSeed"), Config->ResolveSeed(0), Config->FixedSeed);
+	TestEqual(TEXT("ResolveSeed(explicit) returns the explicit seed"), Config->ResolveSeed(7), static_cast<int64>(7));
+
+	const FDungeonResult FromZero = Generator->Generate(Config, 0);
+	const FDungeonResult FromFixed = Generator->Generate(Config, Config->FixedSeed);
+	TestEqual(TEXT("Seed 0 records FixedSeed as the seed used"), FromZero.Seed, Config->FixedSeed);
+	TestTrue(TEXT("Seed 0 generates the FixedSeed layout"),
+		DungeonGenerationTestHelpers::AreDungeonResultsIdentical(FromZero, FromFixed));
+
+	Config->bUseFixedSeed = false;
+	TestEqual(TEXT("ResolveSeed(0) with the flag off leaves the choice to the clock"), Config->ResolveSeed(0), static_cast<int64>(0));
+	const FDungeonResult FromClock = Generator->Generate(Config, 0);
+	TestTrue(TEXT("Flag off: seed 0 still yields a usable non-zero seed"), FromClock.Seed != 0);
+
+	Generator->RemoveFromRoot();
+	DungeonGenerationTestHelpers::CleanupConfig(Config);
+	return true;
+}
+
+// bUseFixedSeed with FixedSeed 0 cannot be deterministic: it warns and falls back to the clock.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDungeonGenFixedSeedZeroFallsBackToClock, "Dungeon.Generation.Determinism.FixedSeedZeroFallsBackToClock",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FDungeonGenFixedSeedZeroFallsBackToClock::RunTest(const FString& Parameters)
+{
+	UDungeonConfiguration* Config = DungeonGenerationTestHelpers::CreateDefaultConfig();
+	Config->bUseFixedSeed = true;
+	Config->FixedSeed = 0;
+	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
+	Generator->AddToRoot();
+
+	AddExpectedMessage(TEXT("FixedSeed is 0"), ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1);
+
+	TestEqual(TEXT("ResolveSeed(0) reports no deterministic seed"), Config->ResolveSeed(0), static_cast<int64>(0));
+	const FDungeonResult Result = Generator->Generate(Config, 0);
+	TestTrue(TEXT("Clock fallback still produces rooms"), Result.Rooms.Num() >= 2);
+	TestTrue(TEXT("Clock fallback records a non-zero seed"), Result.Seed != 0);
+
+	Generator->RemoveFromRoot();
+	DungeonGenerationTestHelpers::CleanupConfig(Config);
+	return true;
+}
+
 // ============================================================================
 // STRUCTURE TESTS
 // ============================================================================

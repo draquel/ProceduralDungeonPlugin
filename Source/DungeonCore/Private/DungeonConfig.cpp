@@ -20,3 +20,20 @@ UDungeonConfiguration::UDungeonConfiguration()
 	TreasureRule.bPreferLeafNodes = true;
 	RoomTypeRules.Add(TreasureRule);
 }
+
+int64 UDungeonConfiguration::ResolveSeed(int64 RequestedSeed) const
+{
+	// An explicit seed always wins: a config must never silently replace a caller's seed.
+	if (RequestedSeed != 0)
+	{
+		return RequestedSeed;
+	}
+
+	// No seed supplied: the fixed seed stands in for the clock fallback when it is configured.
+	if (bUseFixedSeed && FixedSeed != 0)
+	{
+		return FixedSeed;
+	}
+
+	return 0;
+}

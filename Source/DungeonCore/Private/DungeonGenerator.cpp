@@ -44,10 +44,21 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 
 	const double StartTime = FPlatformTime::Seconds();
 
-	// Use current time if seed is 0
+	// Seed precedence: explicit non-zero Seed > Config->FixedSeed (when bUseFixedSeed) > clock.
+	const int64 RequestedSeed = Seed;
+	Seed = Config->ResolveSeed(RequestedSeed);
 	if (Seed == 0)
 	{
+		if (Config->bUseFixedSeed)
+		{
+			UE_LOG(LogDungeonGenerator, Warning,
+				TEXT("bUseFixedSeed is set but FixedSeed is 0 and no seed was supplied; using a clock-derived seed (non-deterministic)"));
+		}
 		Seed = static_cast<int64>(FPlatformTime::Cycles64());
+	}
+	else if (RequestedSeed == 0)
+	{
+		UE_LOG(LogDungeonGenerator, Log, TEXT("No seed supplied; using the configuration's FixedSeed %lld"), Seed);
 	}
 
 	Result.Seed = Seed;

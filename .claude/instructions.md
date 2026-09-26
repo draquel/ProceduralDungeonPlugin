@@ -108,6 +108,7 @@ These rules ensure identical seed + config → identical dungeon across platform
 3. **Fork seeds per sub-system** — `Seed.Fork(1)` for rooms, `Seed.Fork(2)` for edges, etc.
 4. **Integer math for grid ops** — float only for Delaunay circumsphere (deterministic given identical inputs)
 5. **No platform-specific float rounding** — `FRandomStream` is cross-platform deterministic in UE
+6. **Seed precedence** — an explicit non-zero `Seed` passed to `Generate` always wins; `bUseFixedSeed`/`FixedSeed` only replace the clock fallback when the caller passes 0 (`UDungeonConfiguration::ResolveSeed`). A config must never silently override a caller's seed.
 
 ## VoxelWorlds Integration Notes
 
