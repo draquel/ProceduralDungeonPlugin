@@ -250,6 +250,16 @@ struct DUNGEONCORE_API FDungeonResult
 	const FDungeonRoom* FindRoomByType(EDungeonRoomType Type) const;
 	const FDungeonRoom* GetEntranceRoom() const;
 
+	/**
+	 * The cell whose LID a passage entering from above opens: the topmost cell of the entrance
+	 * room directly above EntranceCell. EntranceCell is the walkable ground-floor cell of the
+	 * entrance room; for a room taller than one floor the room's ceiling sits above the cells
+	 * stacked on it, so a shaft must stop at (and the tile mapper must open) the top cell of that
+	 * column, not the floor cell. Equals EntranceCell for single-floor rooms or when there is no
+	 * entrance.
+	 */
+	FIntVector GetEntranceOpeningCell() const;
+
 	/** Convert grid coordinate to world position (Z-up, direct mapping). */
 	FVector GridToWorld(const FIntVector& GridCoord) const;
 

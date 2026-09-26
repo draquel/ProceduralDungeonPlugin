@@ -510,3 +510,68 @@ bool FTileMapperOpenEntranceCeiling::RunTest(const FString& Parameters)
 	CleanupTileSet(TS);
 	return true;
 }
+
+// --- OpenEntranceCeiling on a TWO-floor entrance room: the room's lid is the ceiling of the top
+// cell above the entrance cell, not the (non-existent) ceiling of the ground-floor cell ---
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTileMapperOpenEntranceCeilingTallRoom,
+	"Dungeon.TileMapper.Entrance.OpenCeilingOpensTallRoomLid",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FTileMapperOpenEntranceCeilingTallRoom::RunTest(const FString& Parameters)
+{
+	using namespace DungeonTileMapperTestHelpers;
+
+	UDungeonTileSet* TS = CreateTileSet();
+
+	// 5x5x2: the single-room layout duplicated on Z=1 as the same room (a 3x3x2 room).
+	FDungeonResult Result;
+	Result.GridSize = FIntVector(5, 5, 2);
+	Result.CellWorldSize = 400.0f;
+	Result.Grid.Initialize(Result.GridSize);
+	for (int32 Z = 0; Z < 2; ++Z)
+	{
+		for (int32 Y = 0; Y < 5; ++Y)
+		{
+			for (int32 X = 0; X < 5; ++X)
+			{
+				const bool bInterior = X >= 1 && X <= 3 && Y >= 1 && Y <= 3;
+				FDungeonCell& Cell = Result.Grid.GetCell(X, Y, Z);
+				Cell.CellType = bInterior ? EDungeonCellType::Room : EDungeonCellType::RoomWall;
+				Cell.RoomIndex = 1;
+				Cell.FloorIndex = static_cast<uint8>(Z);
+			}
+		}
+	}
+	FDungeonRoom Room;
+	Room.RoomIndex = 1;
+	Room.Position = FIntVector(1, 1, 0);
+	Room.Size = FIntVector(3, 3, 2);
+	Room.Center = FIntVector(2, 2, 1);
+	Result.Rooms.Add(Room);
+	Result.EntranceRoomIndex = 0;
+	Result.EntranceCell = FIntVector(2, 2, 0); // ground floor
+	Result.Grid.GetCell(2, 2, 0).CellType = EDungeonCellType::Entrance;
+
+	// Closed: only the Z=1 cells have a ceiling (Z=0 -> Z=1 is the same room, open) = 9.
+	FDungeonTileMapResult Closed = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector);
+	TestEqual(TEXT("Closed: 9 ceilings (lid only)"),
+		Closed.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 9);
+
+	// Open: the lid over the entrance column is skipped -> 8. (Before the opening-cell fix the
+	// mapper skipped the ground-floor cell's non-existent ceiling and the lid stayed at 9.)
+	FDungeonTileMapResult Open = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector,
+		/*bOpenEntranceCeiling=*/true);
+	TestEqual(TEXT("Open: 8 ceilings (lid over the entrance column open)"),
+		Open.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 8);
+
+	// The lid over cell (2,2,1) sits at Z = 2 * 400 = 800; nothing remains at that XY.
+	for (const FTransform& Xf : Open.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)])
+	{
+		const FVector P = Xf.GetLocation();
+		const bool bOverEntrance = FMath::Abs(P.X - 1000.0f) < 1.0f && FMath::Abs(P.Y - 1000.0f) < 1.0f;
+		TestFalse(TEXT("No lid over the entrance column"), bOverEntrance);
+	}
+
+	CleanupTileSet(TS);
+	return true;
+}

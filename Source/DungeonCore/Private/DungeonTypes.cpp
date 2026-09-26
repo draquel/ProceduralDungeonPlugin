@@ -71,6 +71,20 @@ const FDungeonRoom* FDungeonResult::GetEntranceRoom() const
 	return nullptr;
 }
 
+FIntVector FDungeonResult::GetEntranceOpeningCell() const
+{
+	const FDungeonRoom* Room = GetEntranceRoom();
+	if (!Room || Room->Size.Z <= 1)
+	{
+		return EntranceCell;
+	}
+	// The room's own AABB is authoritative: every cell of the column above the floor cell up to
+	// the room's top floor belongs to the room (rooms are solid boxes; nothing else can be carved
+	// into their volume).
+	const int32 TopZ = Room->Position.Z + Room->Size.Z - 1;
+	return FIntVector(EntranceCell.X, EntranceCell.Y, FMath::Max(EntranceCell.Z, TopZ));
+}
+
 FVector FDungeonResult::GridToWorld(const FIntVector& GridCoord) const
 {
 	return FVector(

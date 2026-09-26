@@ -198,8 +198,15 @@ int32 UDungeonEntranceStitcher::StitchEntrance(
 
 float UDungeonEntranceStitcher::ComputeEntranceZ(const FDungeonResult& Result, const FVector& WorldOffset, bool bStopAtEntranceCellTop)
 {
-	const float EntranceCellBottomZ = WorldOffset.Z + Result.EntranceCell.Z * Result.CellWorldSize;
-	return bStopAtEntranceCellTop ? EntranceCellBottomZ + Result.CellWorldSize : EntranceCellBottomZ;
+	if (bStopAtEntranceCellTop)
+	{
+		// Stop at the entrance ROOM's lid: for a room taller than one floor the tile mapper opens
+		// the ceiling of the top cell above the entrance cell, and the room's interior below it is
+		// already open. Stopping at the floor cell's top would leave the lid closed one floor up.
+		const FIntVector Opening = Result.GetEntranceOpeningCell();
+		return WorldOffset.Z + (Opening.Z + 1) * Result.CellWorldSize;
+	}
+	return WorldOffset.Z + Result.EntranceCell.Z * Result.CellWorldSize;
 }
 
 // ============================================================================
