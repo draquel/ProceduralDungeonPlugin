@@ -19,7 +19,9 @@ public:
 	/**
 	 * Generate a dungeon from the given configuration and seed.
 	 * @param Config  Generation parameters (grid size, room count, etc.).
-	 * @param Seed    Random seed. 0 = use current time.
+	 * @param Seed    Random seed. A non-zero value is always used as-is. 0 = no seed supplied: the
+	 *                config's FixedSeed is used when bUseFixedSeed is on, otherwise a clock-derived seed
+	 *                (see UDungeonConfiguration::ResolveSeed). FDungeonResult::Seed records the seed used.
 	 * @return Complete dungeon result (grid, rooms, hallways, graph data).
 	 */
 	UFUNCTION(BlueprintCallable, Category="Dungeon|Generation")
