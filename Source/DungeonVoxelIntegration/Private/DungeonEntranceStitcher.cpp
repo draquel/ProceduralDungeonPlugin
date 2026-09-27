@@ -1,4 +1,5 @@
 #include "DungeonEntranceStitcher.h"
+#include "DungeonEntrancePassagePlan.h"
 #include "DungeonVoxelConfig.h"
 #include "DungeonVoxelLattice.h"
 #include "DungeonVoxelIntegration.h"
@@ -135,224 +136,21 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 }
 
 // ============================================================================
-// Main Entry Point
+// Cave opening carver
 // ============================================================================
 
-int32 UDungeonEntranceStitcher::StitchEntrance(
-	const FDungeonResult& Result,
+int32 UDungeonEntranceStitcher::CarveCaveOpening(
+	UVoxelEditManager* EditManager,
 	UVoxelChunkManager* ChunkManager,
-	const FVector& WorldOffset,
-	EDungeonEntranceStyle Style,
-	UDungeonVoxelConfig* Config,
-	bool bStopAtEntranceCellTop)
-{
-	if (!ChunkManager)
-	{
-		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: ChunkManager is null"));
-		return -1;
-	}
-
-	if (!Config)
-	{
-		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: Config is null"));
-		return -1;
-	}
-
-	if (Result.EntranceRoomIndex < 0)
-	{
-		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: No entrance defined in dungeon result"));
-		return -1;
-	}
-
-	const UVoxelWorldConfiguration* VoxelConfig = ChunkManager->GetConfiguration();
-	if (!VoxelConfig)
-	{
-		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: VoxelWorldConfiguration is null"));
-		return -1;
-	}
-
-	const float VoxelSize = VoxelConfig->VoxelSize;
-	const float EntranceZ = ComputeEntranceZ(Result, WorldOffset, bStopAtEntranceCellTop);
-
-	UE_LOG(LogDungeonVoxelIntegration, Log,
-		TEXT("StitchEntrance: Style=%d EntranceCell=(%d,%d,%d) StopAtTop=%d"),
-		static_cast<int32>(Style),
-		Result.EntranceCell.X, Result.EntranceCell.Y, Result.EntranceCell.Z,
-		bStopAtEntranceCellTop ? 1 : 0);
-
-	switch (Style)
-	{
-	case EDungeonEntranceStyle::VerticalShaft:
-		return StitchVerticalShaft(Result, ChunkManager, WorldOffset, Config, VoxelSize, EntranceZ);
-	case EDungeonEntranceStyle::SlopedTunnel:
-		return StitchSlopedTunnel(Result, ChunkManager, WorldOffset, Config, VoxelSize, EntranceZ);
-	case EDungeonEntranceStyle::CaveOpening:
-		return StitchCaveOpening(Result, ChunkManager, WorldOffset, Config, VoxelSize, EntranceZ);
-	case EDungeonEntranceStyle::Trapdoor:
-		return StitchTrapdoor(Result, ChunkManager, WorldOffset, Config, VoxelSize, EntranceZ);
-	default:
-		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: Unknown style %d"), static_cast<int32>(Style));
-		return -1;
-	}
-}
-
-float UDungeonEntranceStitcher::ComputeEntranceZ(const FDungeonResult& Result, const FVector& WorldOffset, bool bStopAtEntranceCellTop)
-{
-	if (bStopAtEntranceCellTop)
-	{
-		// Stop at the entrance ROOM's lid: for a room taller than one floor the tile mapper opens
-		// the ceiling of the top cell above the entrance cell, and the room's interior below it is
-		// already open. Stopping at the floor cell's top would leave the lid closed one floor up.
-		const FIntVector Opening = Result.GetEntranceOpeningCell();
-		return WorldOffset.Z + (Opening.Z + 1) * Result.CellWorldSize;
-	}
-	return WorldOffset.Z + Result.EntranceCell.Z * Result.CellWorldSize;
-}
-
-// ============================================================================
-// Style Implementations
-// ============================================================================
-
-int32 UDungeonEntranceStitcher::StitchVerticalShaft(
-	const FDungeonResult& Result,
-	UVoxelChunkManager* ChunkManager,
-	const FVector& WorldOffset,
-	UDungeonVoxelConfig* Config,
+	const FDungeonPassageSegment& Segment,
+	float SurfaceZ,
 	float VoxelSize,
-	float EntranceZ)
+	UDungeonVoxelConfig* Config)
 {
-	const float CellWorldSize = Result.CellWorldSize;
-	const FVector EntranceWorldMin = WorldOffset + FVector(Result.EntranceCell) * CellWorldSize;
-	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
-
-	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
-	// Overshoot ABOVE the surface: carving to exactly SurfaceZ leaves the voxel band CONTAINING
-	// the isosurface crossing uncarved, and the mesher skins a collidable lid over the mouth.
-	// (Player digs never hit this — the spherical brush overshoots the clicked surface point.)
-	const float CarveTopZ = SurfaceZ + 2.0f * VoxelSize;
-	const float HalfExtent = CellWorldSize * 0.5f;
-
-	UVoxelEditManager* EditManager = ChunkManager->GetEditManager();
-	EditManager->BeginEditOperation(TEXT("Entrance Shaft"));
-	EditManager->SetEditSource(EEditSource::System);
-
-	const int32 VoxelsModified = CarveColumn(EditManager, ChunkManager,
-		FVector(EntranceCenter.X, EntranceCenter.Y, 0.0f),
-		HalfExtent, CarveTopZ, EntranceZ, VoxelSize,
-		true, /*WallTopZ=*/SurfaceZ, Config->WallMaterialID, Config->DungeonBiomeID);
-
-	EditManager->EndEditOperation();
-
-	// Mark affected chunks dirty
-	for (float Z = EntranceZ; Z < CarveTopZ; Z += VoxelSize * 32.0f)
-	{
-		ChunkManager->MarkChunkDirty(
-			ChunkManager->WorldToChunkCoord(FVector(EntranceCenter.X, EntranceCenter.Y, Z)));
-	}
-
-	UE_LOG(LogDungeonVoxelIntegration, Log,
-		TEXT("StitchVerticalShaft: Carved from Z=%.0f (surface %.0f) to Z=%.0f, %d voxels modified"),
-		CarveTopZ, SurfaceZ, EntranceZ, VoxelsModified);
-
-	return VoxelsModified;
-}
-
-int32 UDungeonEntranceStitcher::StitchSlopedTunnel(
-	const FDungeonResult& Result,
-	UVoxelChunkManager* ChunkManager,
-	const FVector& WorldOffset,
-	UDungeonVoxelConfig* Config,
-	float VoxelSize,
-	float EntranceZ)
-{
-	const float CellWorldSize = Result.CellWorldSize;
-	const FVector EntranceWorldMin = WorldOffset + FVector(Result.EntranceCell) * CellWorldSize;
-	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
-
-	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
-	// Break THROUGH the surface band, not up to it (see StitchVerticalShaft).
-	const float CarveTopZ = SurfaceZ + 2.0f * VoxelSize;
-	const float HalfExtent = CellWorldSize * 0.5f;
-
-	// Determine horizontal direction: from entrance toward nearest grid boundary
-	const FIntVector& EC = Result.EntranceCell;
-	const FIntVector& GS = Result.Grid.GridSize;
-	int32 BestDir = 0;
-	int32 BestDist = EC.X;
-	if (GS.X - 1 - EC.X < BestDist) { BestDir = 1; BestDist = GS.X - 1 - EC.X; }
-	if (EC.Y < BestDist) { BestDir = 2; BestDist = EC.Y; }
-	if (GS.Y - 1 - EC.Y < BestDist) { BestDir = 3; }
-
-	FVector HorizDir;
-	switch (BestDir)
-	{
-	case 0: HorizDir = FVector(-1, 0, 0); break;
-	case 1: HorizDir = FVector(1, 0, 0); break;
-	case 2: HorizDir = FVector(0, -1, 0); break;
-	default: HorizDir = FVector(0, 1, 0); break;
-	}
-
-	UVoxelEditManager* EditManager = ChunkManager->GetEditManager();
-	EditManager->BeginEditOperation(TEXT("Entrance Sloped Tunnel"));
-	EditManager->SetEditSource(EEditSource::System);
-
-	int32 TotalVoxels = 0;
-	const float HeightPerStep = CellWorldSize;
-	const int32 NumSteps = FMath::CeilToInt32((CarveTopZ - EntranceZ) / HeightPerStep);
-
-	for (int32 Step = 0; Step < NumSteps; ++Step)
-	{
-		const float StepZ = EntranceZ + Step * HeightPerStep;
-		const float StepTopZ = FMath::Min(StepZ + HeightPerStep, CarveTopZ);
-		const FVector StepCenter = FVector(
-			EntranceCenter.X + HorizDir.X * Step * CellWorldSize,
-			EntranceCenter.Y + HorizDir.Y * Step * CellWorldSize,
-			0.0f);
-
-		TotalVoxels += CarveColumn(EditManager, ChunkManager,
-			StepCenter, HalfExtent, StepTopZ, StepZ, VoxelSize,
-			true, /*WallTopZ=*/SurfaceZ, Config->WallMaterialID, Config->DungeonBiomeID);
-	}
-
-	EditManager->EndEditOperation();
-
-	// Mark chunks dirty along the tunnel path
-	for (int32 Step = 0; Step < NumSteps; ++Step)
-	{
-		const float StepZ = EntranceZ + Step * HeightPerStep;
-		const FVector StepPos = FVector(
-			EntranceCenter.X + HorizDir.X * Step * CellWorldSize,
-			EntranceCenter.Y + HorizDir.Y * Step * CellWorldSize,
-			StepZ);
-		ChunkManager->MarkChunkDirty(ChunkManager->WorldToChunkCoord(StepPos));
-	}
-
-	UE_LOG(LogDungeonVoxelIntegration, Log,
-		TEXT("StitchSlopedTunnel: %d steps, %d voxels modified"), NumSteps, TotalVoxels);
-
-	return TotalVoxels;
-}
-
-int32 UDungeonEntranceStitcher::StitchCaveOpening(
-	const FDungeonResult& Result,
-	UVoxelChunkManager* ChunkManager,
-	const FVector& WorldOffset,
-	UDungeonVoxelConfig* Config,
-	float VoxelSize,
-	float EntranceZ)
-{
-	const float CellWorldSize = Result.CellWorldSize;
-	const FVector EntranceWorldMin = WorldOffset + FVector(Result.EntranceCell) * CellWorldSize;
-	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
-
-	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
-	// Break THROUGH the surface band, not up to it (see StitchVerticalShaft).
-	const float CarveTopZ = SurfaceZ + 2.0f * VoxelSize;
-	const float BaseRadius = CellWorldSize * 0.5f;
-
-	UVoxelEditManager* EditManager = ChunkManager->GetEditManager();
-	EditManager->BeginEditOperation(TEXT("Entrance Cave Opening"));
-	EditManager->SetEditSource(EEditSource::System);
+	const FVector& EntranceCenter = Segment.Center;
+	const float EntranceZ = Segment.BottomZ;
+	const float CarveTopZ = Segment.TopZ;
+	const float BaseRadius = Segment.HalfExtentXY;
 
 	int32 VoxelsModified = 0;
 	const FVoxelData AirVoxel = FVoxelData::Air();
@@ -366,7 +164,6 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 	const UVoxelWorldConfiguration* VoxelConfig = ChunkManager->GetConfiguration();
 	if (!VoxelConfig)
 	{
-		EditManager->EndEditOperation();
 		return 0;
 	}
 	const FDungeonVoxelLattice Lattice(VoxelConfig->WorldOrigin, VoxelSize);
@@ -381,7 +178,6 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 		Min, Max);
 	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
 	{
-		EditManager->EndEditOperation();
 		return 0;
 	}
 
@@ -428,59 +224,110 @@ int32 UDungeonEntranceStitcher::StitchCaveOpening(
 		}
 	}
 
-	EditManager->EndEditOperation();
-
-	// Mark affected chunks dirty
-	for (float Z = EntranceZ; Z < CarveTopZ; Z += VoxelSize * 32.0f)
-	{
-		ChunkManager->MarkChunkDirty(
-			ChunkManager->WorldToChunkCoord(FVector(EntranceCenter.X, EntranceCenter.Y, Z)));
-	}
-
-	UE_LOG(LogDungeonVoxelIntegration, Log,
-		TEXT("StitchCaveOpening: %d voxels modified"), VoxelsModified);
-
 	return VoxelsModified;
 }
 
-int32 UDungeonEntranceStitcher::StitchTrapdoor(
+// ============================================================================
+// Main Entry Point
+// ============================================================================
+
+int32 UDungeonEntranceStitcher::StitchEntrance(
 	const FDungeonResult& Result,
 	UVoxelChunkManager* ChunkManager,
 	const FVector& WorldOffset,
+	EDungeonEntranceStyle Style,
 	UDungeonVoxelConfig* Config,
-	float VoxelSize,
-	float EntranceZ)
+	bool bStopAtEntranceCellTop)
 {
-	const float CellWorldSize = Result.CellWorldSize;
-	const FVector EntranceWorldMin = WorldOffset + FVector(Result.EntranceCell) * CellWorldSize;
-	const FVector EntranceCenter = EntranceWorldMin + FVector(CellWorldSize * 0.5f);
+	if (!ChunkManager)
+	{
+		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: ChunkManager is null"));
+		return -1;
+	}
 
-	const float SurfaceZ = DetectSurfaceHeight(ChunkManager, EntranceCenter.X, EntranceCenter.Y);
-	// Break THROUGH the surface band, not up to it (see StitchVerticalShaft) — a 1x1 column
-	// skins over even more readily than the wide shaft.
-	const float CarveTopZ = SurfaceZ + 2.0f * VoxelSize;
+	if (!Config)
+	{
+		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: Config is null"));
+		return -1;
+	}
 
-	// Minimal 1x1 voxel column — no walls
-	const float HalfExtent = VoxelSize * 0.5f;
+	if (Result.EntranceRoomIndex < 0)
+	{
+		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: No entrance defined in dungeon result"));
+		return -1;
+	}
+
+	const UVoxelWorldConfiguration* VoxelConfig = ChunkManager->GetConfiguration();
+	if (!VoxelConfig)
+	{
+		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: VoxelWorldConfiguration is null"));
+		return -1;
+	}
+
+	const float VoxelSize = VoxelConfig->VoxelSize;
+
+	// The geometry is decided from the dungeon's recorded approach, so the carve stays inside the
+	// volume the generator kept clear. A mismatched style is refused rather than carved blindly.
+	const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(
+		Result, WorldOffset, Style, VoxelSize, bStopAtEntranceCellTop,
+		[this, ChunkManager](float X, float Y) { return DetectSurfaceHeight(ChunkManager, X, Y); });
+
+	if (!Plan.IsValid())
+	{
+		UE_LOG(LogDungeonVoxelIntegration, Error, TEXT("StitchEntrance: refused — %s"), *Plan.Error);
+		return -1;
+	}
+	if (!Plan.Note.IsEmpty())
+	{
+		UE_LOG(LogDungeonVoxelIntegration, Warning, TEXT("StitchEntrance: %s"), *Plan.Note);
+	}
+
+	UE_LOG(LogDungeonVoxelIntegration, Log,
+		TEXT("StitchEntrance: Style=%d Approach=%d EntranceCell=(%d,%d,%d) StopAtTop=%d segments=%d surface=%.0f carveTop=%.0f entranceZ=%.0f"),
+		static_cast<int32>(Style), static_cast<int32>(Plan.Approach),
+		Result.EntranceCell.X, Result.EntranceCell.Y, Result.EntranceCell.Z,
+		bStopAtEntranceCellTop ? 1 : 0, Plan.Segments.Num(), Plan.SurfaceZ, Plan.CarveTopZ, Plan.EntranceZ);
+
+	static const TCHAR* OpNames[] = { TEXT("Entrance Shaft"), TEXT("Entrance Sloped Tunnel"), TEXT("Entrance Cave Opening"), TEXT("Entrance Trapdoor") };
+	const int32 StyleIdx = FMath::Clamp(static_cast<int32>(Style), 0, 3);
 
 	UVoxelEditManager* EditManager = ChunkManager->GetEditManager();
-	EditManager->BeginEditOperation(TEXT("Entrance Trapdoor"));
+	EditManager->BeginEditOperation(OpNames[StyleIdx]);
 	EditManager->SetEditSource(EEditSource::System);
 
-	const int32 VoxelsModified = CarveColumn(EditManager, ChunkManager,
-		FVector(EntranceCenter.X, EntranceCenter.Y, 0.0f),
-		HalfExtent, CarveTopZ, EntranceZ, VoxelSize,
-		false, /*WallTopZ=*/SurfaceZ, 0, 0);
+	int32 VoxelsModified = 0;
+	if (Style == EDungeonEntranceStyle::CaveOpening && Plan.Segments.Num() > 0)
+	{
+		VoxelsModified = CarveCaveOpening(EditManager, ChunkManager, Plan.Segments[0], Plan.SurfaceZ, VoxelSize, Config);
+	}
+	else
+	{
+		for (const FDungeonPassageSegment& Seg : Plan.Segments)
+		{
+			VoxelsModified += CarveColumn(EditManager, ChunkManager,
+				FVector(Seg.Center.X, Seg.Center.Y, 0.0f),
+				Seg.HalfExtentXY, Seg.TopZ, Seg.BottomZ, VoxelSize,
+				Seg.bWalls, /*WallTopZ=*/Plan.SurfaceZ,
+				Seg.bWalls ? Config->WallMaterialID : 0, Seg.bWalls ? Config->DungeonBiomeID : 0);
+		}
+	}
 
 	EditManager->EndEditOperation();
 
-	ChunkManager->MarkChunkDirty(
-		ChunkManager->WorldToChunkCoord(FVector(EntranceCenter.X, EntranceCenter.Y, EntranceZ)));
-	ChunkManager->MarkChunkDirty(
-		ChunkManager->WorldToChunkCoord(FVector(EntranceCenter.X, EntranceCenter.Y, SurfaceZ)));
+	// Mark affected chunks dirty: every segment, every chunk-height slice of it.
+	const float ChunkStride = VoxelSize * 32.0f;
+	for (const FDungeonPassageSegment& Seg : Plan.Segments)
+	{
+		for (float Z = Seg.BottomZ; Z < Seg.TopZ + ChunkStride; Z += ChunkStride)
+		{
+			ChunkManager->MarkChunkDirty(
+				ChunkManager->WorldToChunkCoord(FVector(Seg.Center.X, Seg.Center.Y, FMath::Min(Z, Seg.TopZ))));
+		}
+	}
 
 	UE_LOG(LogDungeonVoxelIntegration, Log,
-		TEXT("StitchTrapdoor: %d voxels modified"), VoxelsModified);
+		TEXT("StitchEntrance: %s carved %d segment(s), %d voxels modified"),
+		OpNames[StyleIdx], Plan.Segments.Num(), VoxelsModified);
 
 	return VoxelsModified;
 }

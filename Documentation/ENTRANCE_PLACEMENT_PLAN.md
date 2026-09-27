@@ -1,8 +1,10 @@
 # Entrance Placement Control — Review & Design Plan
 
-**Status:** P0 merged (PDP#11 / parent #44, 2026-09-26). P1 implemented on
-`feature/entrance-approach-p1` (spec, entrance-first placement, `Reserved` keep-out, approach info
-on the result, validator, tests). P2–P3 proposed.
+**Status:** P0 merged (PDP#11 / parent #44) and P1 merged (PDP#12 / parent #45), 2026-09-26.
+P2 implemented on `feature/entrance-approach-p2`: `FDungeonEntrancePassagePlan` (pure carve
+geometry from `EntranceApproach`, unit-tested), stitcher refuses style/approach mismatches,
+`SlopedTunnel` re-shaped as a `FromSide` corridor + walkable ramp outside the footprint, tile mapper
+opens the lid / floor / face wall per approach. P3 proposed.
 **Decisions taken:** vertical approaches prefer the **top floor** (`Floor = Top`; the demo POI
 configs move to `TopFloor` in P0 so the column above the entrance is empty by construction).
 **Scope:** `DungeonCore` (entrance spec, entrance-first placement, approach keep-out, validator),
