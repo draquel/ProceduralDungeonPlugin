@@ -21,6 +21,14 @@ namespace
 	 */
 	constexpr float ShellVoxels = 2.0f;
 
+	/**
+	 * Shell voxels are only written this many voxels or more below the LOCAL terrain surface.
+	 * The top layers are solid ground already; painting them with the wall material only
+	 * re-textures the surface (a stone ring around a shaft, a wide stone apron over a ramp's
+	 * overlapping columns near the mouth).
+	 */
+	constexpr float SurfaceSkinVoxels = 2.0f;
+
 	/** True when a world position lies inside an open (traversable) cell of the dungeon grid. */
 	bool IsInsideOpenDungeonCell(const FDungeonResult& Result, const FVector& WorldOffset, const FVector& WorldPos)
 	{
@@ -120,7 +128,8 @@ int32 UDungeonEntranceStitcher::PlaceColumnShell(
 	const FDungeonResult& Result,
 	const FVector& WorldOffset,
 	float VoxelSize,
-	float WallTopZ,
+	TFunctionRef<float(float, float)> SampleSurfaceZ,
+	TMap<FIntPoint, float>& SurfaceCache,
 	uint8 WallMaterialID,
 	uint8 BiomeID)
 {
@@ -131,6 +140,7 @@ int32 UDungeonEntranceStitcher::PlaceColumnShell(
 
 	const FVoxelData WallVoxel = FVoxelData::Solid(WallMaterialID, BiomeID);
 	const float Thickness = ShellVoxels * VoxelSize;
+	const float SurfaceSkin = SurfaceSkinVoxels * VoxelSize;
 	const FVector& C = Segment.Center;
 	const float Outer = Segment.HalfExtentXY + Thickness;
 	const float ZPad = Segment.bFloorCeilingShell ? Thickness : 0.0f;
@@ -161,8 +171,24 @@ int32 UDungeonEntranceStitcher::PlaceColumnShell(
 
 				// The carve may overshoot the terrain surface (breaking the mouth open), but the
 				// shell must not follow it up: solid voxels placed in the air above the surface
-				// would build a knee-high collar the character cannot step over.
-				if (WorldPos.Z >= WallTopZ)
+				// would build a knee-high collar the character cannot step over. Nor into the
+				// top layers just below it: they are solid ground already, and writing the wall
+				// material there only re-textures the surface (the stone apron). The surface is
+				// LOCAL — the ramp runs under terrain of varying height.
+				float LocalSurfaceZ;
+				{
+					const FIntPoint ColumnKey(IX, IY);
+					if (const float* Cached = SurfaceCache.Find(ColumnKey))
+					{
+						LocalSurfaceZ = *Cached;
+					}
+					else
+					{
+						LocalSurfaceZ = SampleSurfaceZ(WorldPos.X, WorldPos.Y);
+						SurfaceCache.Add(ColumnKey, LocalSurfaceZ);
+					}
+				}
+				if (WorldPos.Z >= LocalSurfaceZ - SurfaceSkin)
 				{
 					continue;
 				}
@@ -379,11 +405,14 @@ int32 UDungeonEntranceStitcher::StitchEntrance(
 			}
 		}
 
-		// Pass 2: shells, never over an interior sample or an open dungeon cell.
+		// Pass 2: shells, never over an interior sample, an open dungeon cell, or the natural
+		// surface skin. The local surface is sampled once per lattice column across all segments.
+		TMap<FIntPoint, float> SurfaceCache;
+		auto SampleSurface = [this, ChunkManager](float X, float Y) { return DetectSurfaceHeight(ChunkManager, X, Y); };
 		for (const FDungeonPassageSegment& Seg : Plan.Segments)
 		{
 			VoxelsModified += PlaceColumnShell(EditManager, Lattice, Seg, Interior, Result, WorldOffset,
-				VoxelSize, /*WallTopZ=*/Plan.SurfaceZ, Config->WallMaterialID, Config->DungeonBiomeID);
+				VoxelSize, SampleSurface, SurfaceCache, Config->WallMaterialID, Config->DungeonBiomeID);
 		}
 	}
 
