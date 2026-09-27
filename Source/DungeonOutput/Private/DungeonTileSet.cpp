@@ -1,4 +1,5 @@
 #include "DungeonTileSet.h"
+#include "DungeonWallProfileConformance.h"
 
 UDungeonTileSet::UDungeonTileSet()
 {
@@ -162,4 +163,11 @@ void UDungeonTileSet::GetAllUniqueMeshes(TArray<TPair<FName, TSoftObjectPtr<USta
 			OutMeshes.Emplace(Name, Pair.Value.Mesh);
 		}
 	}
+}
+
+TArray<FString> UDungeonTileSet::CheckWallProfile() const
+{
+	TArray<FString> Issues;
+	FDungeonWallProfileConformance::Check(*this, Issues);
+	return Issues;
 }

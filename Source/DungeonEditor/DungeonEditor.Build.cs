@@ -24,6 +24,7 @@ public class DungeonEditor : ModuleRules
 			"ToolMenus",
 			"AssetRegistry",
 			"ContentBrowser",
+			"DataValidation",
 			"DungeonCore",
 			"DungeonOutput",
 		});

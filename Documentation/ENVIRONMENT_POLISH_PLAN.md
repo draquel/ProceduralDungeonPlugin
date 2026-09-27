@@ -1,6 +1,6 @@
 # Dungeon Environment Polish — Design Plan (final generation phase)
 
-**Status:** E1 implemented on `feature/env-e1-face-ownership` (2026-09-27): `OwnsSharedFace`,
+**Status:** E2 done on `feature/env-e2-wall-profile` (2026-09-27, 130/130 in-editor, PIE-verified): `FDungeonWallProfile` on the tileset, `FDungeonWallProfileConformance` (module bounds vs profile) + editor asset validator + `CheckWallProfile()`, profile-driven fit for single wall meshes, `WallCornerInner` / `WallCornerOuter` slots placed once per corner point and pulled onto the wall faces; demo content: `DM_Door` surround moved onto the face, `TM_WallPartitionThin` (two back-to-back quads, finished both sides), `SM_Pillar_02` on both corner slots. E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
 `WallPartition` slot + mapper ownership (not a tileset default: map properties serialize as a
 delta against the class default, so a new default key would appear as an engine cube in every
 existing tileset), coverage tests; demo tileset carries
@@ -133,11 +133,16 @@ The single-mesh path is brought under the same profile: a single wall mesh is fi
 
 ### 3.3 Corners
 
-Two optional slots, `WallCornerOuter` (convex post where two owned walls meet at a cell corner)
-and `WallCornerInner` (concave, where a wall turns around solid). The mapper derives them from the
-placed wall faces after ownership, per cell corner, so a corner post is placed once even where four
-cells meet. Empty slot = no corner geometry (today's behaviour). This is the fix for the openings
-where a wall run meets a door frame or a stair.
+Two optional slots (as built): `WallCornerInner`, a post where two walled faces of one open cell
+meet (a room or corridor corner), and `WallCornerOuter`, a post where a wall run ends at an
+unframed opening (the mouth of a side corridor); never beside a door or entrance frame, whose
+jambs cover that corner. The mapper places each once per corner lattice point (doubled cell
+coords + face offsets) and pulls the anchor onto the wall face(s): in by `FaceInset` from a
+rock-backed face, by half `PartitionThickness` from a partition, so a post centred on its anchor
+straddles the face, half proud. Where two open cells share a corner point across a partition only
+the first cell's post is placed (one post per point; the other side sees its back). Empty slot =
+no corner geometry. A partition module must reach both faces of the profile slab (the demo one is
+two single-sided pack quads back to back).
 
 ### 3.4 Deterministic variety
 
