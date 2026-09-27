@@ -1,6 +1,6 @@
 # Dungeon Environment Polish — Design Plan (final generation phase)
 
-**Status:** E2 done on `feature/env-e2-wall-profile` (2026-09-27, 130/130 in-editor, PIE-verified): `FDungeonWallProfile` on the tileset, `FDungeonWallProfileConformance` (module bounds vs profile) + editor asset validator + `CheckWallProfile()`, profile-driven fit for single wall meshes, `WallCornerInner` / `WallCornerOuter` slots placed once per corner point and pulled onto the wall faces; demo content: `DM_Door` surround moved onto the face, `TM_WallPartitionThin` (two back-to-back quads, finished both sides), `SM_Pillar_02` on both corner slots. E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
+**Status:** E3 done on `feature/env-e3-interactables` (2026-09-27, 132/132 in-editor, PIE-verified incl. state kept across stream-out / stream-in): the mapper emits `FDungeonOpening` (Doorway / StairEntry / EntranceOpening, with the leaf hinge) and `FDungeonFixture` (wall lights per `FDungeonFixtureRules`) beside the tiles; `ADungeonActor::BuildDungeon` is the ONE build every consumer uses; VoxelWorldPOI adds `APOIDungeonInteractables` (structure), `APOIDungeonDoor`, `APOIDungeonTorch` and the placement subsystem's per-dungeon `InteractableStates` record + `RebuildStampedDungeon`. E2 merged (PDP#17 / parent #50). E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
 `WallPartition` slot + mapper ownership (not a tileset default: map properties serialize as a
 delta against the class default, so a new default key would appear as an engine cube in every
 existing tileset), coverage tests; demo tileset carries
@@ -209,6 +209,33 @@ tile instances. The tile actor stays visual-only and spawns on every client; a n
   (`TMap<ID, state>`) that survives stream-out / stream-in the way `StampedDungeons` does today, and
   is the unit a save system persists later. Without this, a door re-closes and a torch relights on
   every stream-in.
+
+**As built (E3, 2026-09-27):**
+
+- `FDungeonTileMapResult` carries `Openings` and `Fixtures` next to the instance transforms. An
+  opening is emitted at every frame site whether or not the frame slot has geometry; its
+  `LeafHinge` sits on the finished-face plane (`FaceInset` in, `HingeInset` out) at the -Y jamb,
+  +Y running toward the opening centre, so a leaf of `DoorLeafWidth` x `DoorLeafHeight` (profile
+  data; 151 x 289 fits the pack door in the smooth doorway) closes the opening and swings toward
+  -X into the Door cell's jamb passage, never into the corridor.
+- `FDungeonFixtureRules` (tileset): doorway lights on both side walls of every Door cell, offset
+  toward the room by `DoorwayLightOffsetFraction` so the open leaf clears them; then every Nth
+  rock-backed room wall face; hard cap `MaxWallLights`. Partitions never carry fixtures (seen from
+  both sides, owned by either cell). Lesson from the demo: 19 doorways x 2 exhaust a cap of 24
+  before any room wall lights — the demo tileset runs at 64; the C++ default stays 24.
+- `FDungeonTileMapper::MakeInteractableId` (FNV-1a over cell, face, kind namespace) keys the state
+  record; `ADungeonActor::BuildDungeon` is the single generate + map entry point and
+  `UPOIPlacementSubsystem::RebuildStampedDungeon` feeds it the stamp's exact inputs (concern §7.1).
+- Actors follow the loot-chest pattern: replicated state + `OnRep`, `UInteractableComponent` under
+  `WITH_INTERACTION_PLUGIN`, leaf / sconce mesh and offsets replicated so clients build the same
+  actor. A torch's point light is created when lit and destroyed when put out (concern §7.5).
+  Door collision follows the leaf (a closed door blocks; `SetCanEverAffectNavigation` on).
+- Content: `DoorLeafMesh = SM_Door_01` (yaw 180), `WallLightMesh = SM_Torch_Sconce_01` (yaw -90);
+  `APOIDungeonInteractables` is a structure entry of `DA_POIType_DungeonTiled`. Python gotcha:
+  `unreal.Rotator(a, b, c)` is (roll, pitch, yaw) — author offsets with keyword arguments.
+- Open for E5: the entrance room over-exposes with shaft daylight plus a dozen torches (the
+  Lumen cached-lighting exposure warning); torch intensity / radius are actor defaults to tune
+  with the project exposure fix. Hallways stay unlit by rule (no hallway fixtures yet).
 
 ### 3.7 Validation and tooling
 

@@ -78,6 +78,30 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
 	const FDungeonResult& GetDungeonResult() const { return CachedResult; }
 
+	/** The tile map of the last GenerateDungeon (instances, openings, fixtures); empty before. */
+	const FDungeonTileMapResult& GetTileMap() const { return CachedTileMap; }
+
+	/**
+	 * THE dungeon build: generate (with or without an entrance override) and map to tiles. Every
+	 * consumer that must agree with the tile actor's layout — the actor itself, and gameplay that
+	 * hangs doors / lights from the mapper's openings and fixtures — goes through this one
+	 * function with the same inputs, so no second caller can drift (the entrance-placement P3
+	 * lesson: the spec changes room placement).
+	 * @param Config        Generation parameters (required).
+	 * @param TileSet       Tile geometry + wall profile + fixture rules (required).
+	 * @param InSeed        Seed (0 = config fallback, see UDungeonConfiguration::ResolveSeed).
+	 * @param bUseEntranceOverride Generate with EntranceOverride instead of the config's spec.
+	 * @param EntranceOverride     The spec when overriding.
+	 * @param bOpenEntranceCeiling Leave the entrance opening unbuilt (see MapToTiles).
+	 * @param WorldOffset   World-space offset of the grid origin (the tile actor's location).
+	 * @param OutResult     The generated dungeon.
+	 * @param OutTileMap    The mapped tiles, openings and fixtures.
+	 * @return False (with a log) when Config or TileSet is missing.
+	 */
+	static bool BuildDungeon(UDungeonConfiguration* Config, const UDungeonTileSet* TileSet, int64 InSeed,
+		bool bUseEntranceOverride, const FDungeonEntranceSpec& EntranceOverride, bool bOpenEntranceCeiling,
+		const FVector& WorldOffset, FDungeonResult& OutResult, FDungeonTileMapResult& OutTileMap);
+
 	/** Get the world-space position of the entrance cell. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
 	FVector GetEntranceWorldPosition() const;
@@ -156,6 +180,9 @@ public:
 private:
 	UPROPERTY()
 	FDungeonResult CachedResult;
+
+	/** Openings and fixtures of the last build (not a UPROPERTY: rebuilt with the tiles). */
+	FDungeonTileMapResult CachedTileMap;
 
 	/** Live tile HISMs, keyed by render batch (mesh+material identity), one per unique batch. */
 	UPROPERTY(Transient)

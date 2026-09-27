@@ -26,6 +26,25 @@ void FDungeonTileMapResult::Reset()
 	{
 		Transforms[i].Reset();
 	}
+	Openings.Reset();
+	Fixtures.Reset();
+}
+
+uint32 FDungeonTileMapper::MakeInteractableId(const FIntVector& Cell, int32 FaceDX, int32 FaceDY, uint8 Kind)
+{
+	// FNV-1a over the six fields in a fixed byte order: platform- and version-stable, unlike
+	// GetTypeHash / HashCombine which are free to change between engine releases.
+	uint32 Hash = 2166136261u;
+	auto Fold = [&Hash](int32 V)
+	{
+		for (int32 B = 0; B < 4; ++B)
+		{
+			Hash ^= static_cast<uint8>((static_cast<uint32>(V) >> (B * 8)) & 0xFFu);
+			Hash *= 16777619u;
+		}
+	};
+	Fold(Cell.X); Fold(Cell.Y); Fold(Cell.Z); Fold(FaceDX); Fold(FaceDY); Fold(Kind);
+	return Hash;
 }
 
 // ============================================================================
@@ -207,6 +226,28 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 		if (bTypeIsModule[Idx] || Type == EDungeonTileType::WallPartition) { return FVector::ZeroVector; }
 		const float Shift = Thin * 0.5f - FaceInsetW;
 		return FVector(DX * Shift, DY * Shift, 0.0f);
+	};
+
+	// Framed openings (E3): one record per frame site, whether or not the frame slot has geometry,
+	// so gameplay can hang door leaves in Doorway openings. Frame = face centre on the cell floor,
+	// +X into the neighbour. LeafHinge = the hinge line on the finished-face plane at the -Y jamb
+	// of the opening (local frame), +Y running along the wall toward the opening centre.
+	auto EmitOpening = [&](EDungeonOpeningKind Kind, const FIntVector& C, int32 FDX, int32 FDY)
+	{
+		FDungeonOpening O;
+		O.Cell = C;
+		O.FaceDX = FDX;
+		O.FaceDY = FDY;
+		O.Kind = Kind;
+		const FVector Base = Result.GridToWorld(C) + WorldOffset;
+		const FVector FaceCentre = Base + FVector(HalfCS + FDX * HalfCS, HalfCS + FDY * HalfCS, 0.0f);
+		const FRotator Rot(0.0f, FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(FDY), static_cast<float>(FDX))), 0.0f);
+		O.Frame = FTransform(Rot, FaceCentre, FVector(ProfileScale));
+		O.LeafWidth = Profile.DoorLeafWidth * ProfileScale;
+		O.LeafHeight = Profile.DoorLeafHeight * ProfileScale;
+		const FVector HingeLocal(-FaceInsetW + Profile.HingeInset * ProfileScale, -O.LeafWidth * 0.5f, 0.0f);
+		O.LeafHinge = FTransform(Rot, FaceCentre + Rot.RotateVector(HingeLocal), FVector(ProfileScale));
+		Out.Openings.Add(O);
 	};
 
 	// Pivot correction: offset placement so the mesh's bounding box center
@@ -530,6 +571,9 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 									: EDungeonTileType::EntranceFrame;
 								const FRotator FrameRot = bIsDoor ? DoorRot : EntranceRot;
 
+								EmitOpening(bIsDoor ? EDungeonOpeningKind::Doorway : EDungeonOpeningKind::EntranceOpening,
+									FIntVector(X, Y, Z), WC.DX, WC.DY);
+
 								const bool bHasFrameMesh = bIsDoor
 									? SlotActive(EDungeonTileType::DoorFrame)
 									: SlotActive(EDungeonTileType::EntranceFrame);
@@ -579,13 +623,17 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 								&& WC.DY == DY[Neighbor.StaircaseDirection];
 						}
 
-						if (bStaircaseEntry && SlotActive(EDungeonTileType::DoorFrame))
+						if (bStaircaseEntry)
 						{
-							const FVector FS = WallScale(EDungeonTileType::DoorFrame);
-							Out.Transforms[static_cast<int32>(EDungeonTileType::DoorFrame)].Emplace(
-								FTransform(DoorRot,
-									CellCenter + WC.Offset + WallFaceShift(EDungeonTileType::DoorFrame, WC.DX, WC.DY)
-										+ PivotOffset(EDungeonTileType::DoorFrame, FS, DoorRot), FS));
+							EmitOpening(EDungeonOpeningKind::StairEntry, FIntVector(X, Y, Z), WC.DX, WC.DY);
+							if (SlotActive(EDungeonTileType::DoorFrame))
+							{
+								const FVector FS = WallScale(EDungeonTileType::DoorFrame);
+								Out.Transforms[static_cast<int32>(EDungeonTileType::DoorFrame)].Emplace(
+									FTransform(DoorRot,
+										CellCenter + WC.Offset + WallFaceShift(EDungeonTileType::DoorFrame, WC.DX, WC.DY)
+											+ PivotOffset(EDungeonTileType::DoorFrame, FS, DoorRot), FS));
+							}
 						}
 						else if (bWall)
 						{
@@ -731,6 +779,100 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 				const FVector Inset(-WDX * Depth, -WDY * Depth, 0.0f);
 				Place(EDungeonTileType::WallCornerOuter, C, DXA, DYB, Inset,
 					FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(ODY), static_cast<float>(ODX))));
+			}
+		}
+	}
+
+	// --- Wall fixtures (E3): wall lights per the tileset's FDungeonFixtureRules ---
+	// Doorway lights first (both side walls of every Door cell, at the room end of the jamb
+	// passage), then every Nth rock-backed wall face of each room, until the cap. Only
+	// rock-backed faces (the neighbour is solid) carry fixtures: a partition is seen from both
+	// sides and its owner may be the other cell.
+	{
+		const FDungeonFixtureRules& Rules = TileSet.FixtureRules;
+		const float MountZ = Rules.WallLightHeight * ProfileScale;
+		TSet<FIntVector> UsedFaces;
+		auto RockBacked = [&](const FIntVector& C, int32 FDX, int32 FDY) -> bool
+		{
+			const int32 NX = C.X + FDX, NY = C.Y + FDY;
+			const bool bNeighborOpen = Result.Grid.IsInBounds(NX, NY, C.Z)
+				&& FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(NX, NY, C.Z).CellType);
+			return !bNeighborOpen && FDungeonBoundaryRules::NeedsWall(Result.Grid, C, NX, NY, C.Z);
+		};
+		auto EmitFixture = [&](const FIntVector& C, int32 FDX, int32 FDY, const FVector& AlongWall) -> bool
+		{
+			if (Out.Fixtures.Num() >= Rules.MaxWallLights)
+			{
+				return false;
+			}
+			const FIntVector Key(2 * C.X + FDX, 2 * C.Y + FDY, C.Z);
+			if (UsedFaces.Contains(Key))
+			{
+				return true;
+			}
+			UsedFaces.Add(Key);
+			FDungeonFixture F;
+			F.Cell = C;
+			F.FaceDX = FDX;
+			F.FaceDY = FDY;
+			F.Kind = EDungeonFixtureKind::WallLight;
+			const FVector Base = Result.GridToWorld(C) + WorldOffset;
+			const FVector OnFace = Base + FVector(HalfCS + FDX * (HalfCS - FaceInsetW), HalfCS + FDY * (HalfCS - FaceInsetW), MountZ);
+			// +X off the wall into the cell.
+			const FRotator Rot(0.0f, FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(-FDY), static_cast<float>(-FDX))), 0.0f);
+			F.Anchor = FTransform(Rot, OnFace + AlongWall, FVector(ProfileScale));
+			Out.Fixtures.Add(F);
+			return true;
+		};
+
+		if (Rules.MaxWallLights > 0 && Rules.bLightDoorways)
+		{
+			for (const FDungeonOpening& O : Out.Openings)
+			{
+				if (O.Kind != EDungeonOpeningKind::Doorway)
+				{
+					continue;
+				}
+				// The two faces perpendicular to the opening; the light sits toward the room
+				// (away from the frame) so an open leaf swung into the cell clears it.
+				const FVector TowardRoom(-O.FaceDX * Rules.DoorwayLightOffsetFraction * CS, -O.FaceDY * Rules.DoorwayLightOffsetFraction * CS, 0.0f);
+				const int32 Sides[2][2] = { { -O.FaceDY, O.FaceDX }, { O.FaceDY, -O.FaceDX } };
+				for (const auto& Side : Sides)
+				{
+					if (RockBacked(O.Cell, Side[0], Side[1]) && !EmitFixture(O.Cell, Side[0], Side[1], TowardRoom))
+					{
+						break;
+					}
+				}
+			}
+		}
+
+		if (Rules.MaxWallLights > 0 && Rules.RoomWallLightEvery > 0)
+		{
+			TMap<uint8, int32> FacesSeenPerRoom;
+			for (int32 Z = 0; Z < GridSize.Z && Out.Fixtures.Num() < Rules.MaxWallLights; ++Z)
+			for (int32 Y = 0; Y < GridSize.Y && Out.Fixtures.Num() < Rules.MaxWallLights; ++Y)
+			for (int32 X = 0; X < GridSize.X && Out.Fixtures.Num() < Rules.MaxWallLights; ++X)
+			{
+				const FDungeonCell& Cell = Result.Grid.GetCell(X, Y, Z);
+				if (Cell.CellType != EDungeonCellType::Room)
+				{
+					continue;
+				}
+				const FIntVector C(X, Y, Z);
+				for (int32 Dir = 0; Dir < 4; ++Dir)
+				{
+					if (!RockBacked(C, DX[Dir], DY[Dir]))
+					{
+						continue;
+					}
+					int32& Seen = FacesSeenPerRoom.FindOrAdd(Cell.RoomIndex);
+					++Seen;
+					if (Seen % Rules.RoomWallLightEvery == 0)
+					{
+						EmitFixture(C, DX[Dir], DY[Dir], FVector::ZeroVector);
+					}
+				}
 			}
 		}
 	}
