@@ -408,3 +408,44 @@ bool FPlacementAvoidsReserved::RunTest(const FString& Parameters)
 	Config->RemoveFromRoot();
 	return true;
 }
+
+// ---------------------------------------------------------------------------
+// GenerateWithEntrance: the override replaces the config's spec in both directions.
+// ---------------------------------------------------------------------------
+APPROACH_TEST(FApproachOverride, "Dungeon.Generation.EntranceApproach.GenerateWithEntranceOverridesConfig")
+bool FApproachOverride::RunTest(const FString& Parameters)
+{
+	UDungeonConfiguration* Config = CreateConfig(FIntVector(20, 20, 4), 6, FIntVector(6, 6, 1));
+	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
+	Generator->AddToRoot();
+
+	// Config says None; override asks for FromAbove/Top.
+	FDungeonEntranceSpec Override;
+	Override.Approach = EDungeonEntranceApproach::FromAbove;
+	Override.Floor = EDungeonEntranceFloor::Top;
+	for (int64 Seed = 1; Seed <= 10; ++Seed)
+	{
+		const FDungeonResult R = Generator->GenerateWithEntrance(Config, Seed, Override);
+		const FString Tag = FString::Printf(TEXT("seed %lld: "), Seed);
+		if (R.Rooms.Num() < 2) { continue; }
+		TestEqual(Tag + TEXT("override approach honoured"), R.EntranceApproach.Approach, EDungeonEntranceApproach::FromAbove);
+		TestTrue(Tag + TEXT("satisfied"), R.EntranceApproach.bSatisfied);
+		TestEqual(Tag + TEXT("top floor"), R.Rooms[0].Position.Z + R.Rooms[0].Size.Z, 4);
+		const FDungeonValidationResult V = FDungeonValidator::ValidateAll(R, *Config);
+		TestTrue(Tag + TEXT("validator: ") + V.GetSummary(), V.bPassed);
+	}
+
+	// Config says FromAbove; an override of None runs the legacy path.
+	Config->Entrance.Approach = EDungeonEntranceApproach::FromAbove;
+	const FDungeonEntranceSpec NoneSpec;
+	const FDungeonResult Legacy = Generator->GenerateWithEntrance(Config, 5, NoneSpec);
+	TestEqual(TEXT("override None -> legacy"), Legacy.EntranceApproach.Approach, EDungeonEntranceApproach::None);
+	TestEqual(TEXT("no Reserved leaked"), CountReserved(Legacy), 0);
+
+	// And Generate() itself still reads the config.
+	const FDungeonResult FromConfig = Generator->Generate(Config, 5);
+	TestEqual(TEXT("Generate uses Config->Entrance"), FromConfig.EntranceApproach.Approach, EDungeonEntranceApproach::FromAbove);
+
+	Cleanup(Config, Generator);
+	return true;
+}

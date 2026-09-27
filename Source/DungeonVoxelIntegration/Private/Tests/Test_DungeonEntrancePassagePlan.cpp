@@ -98,7 +98,7 @@ bool FPassagePlanCompatibility::RunTest(const FString& Parameters)
 	// Build refuses too, with a reason, and carves nothing.
 	FDungeonResult R = MakeResult();
 	SetFromAbove(R);
-	const FDungeonEntrancePassagePlan Refused = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::SlopedTunnel, PassageVS, true, FlatSurface);
+	const FDungeonEntrancePassagePlan Refused = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::SlopedTunnel, PassageVS, true, 0.0f, FlatSurface);
 	TestFalse(TEXT("Build refused"), Refused.IsValid());
 	TestEqual(TEXT("no segments"), Refused.Segments.Num(), 0);
 	TestTrue(TEXT("reason given"), !Refused.Error.IsEmpty());
@@ -118,7 +118,7 @@ bool FPassagePlanVertical::RunTest(const FString& Parameters)
 		for (bool bStopAtTop : { true, false })
 		{
 			const FString Tag = FString::Printf(TEXT("style %d stopAtTop %d: "), static_cast<int32>(Style), bStopAtTop ? 1 : 0);
-			const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(R, PassageOffset, Style, PassageVS, bStopAtTop, FlatSurface);
+			const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(R, PassageOffset, Style, PassageVS, bStopAtTop, 0.0f, FlatSurface);
 			TestTrue(Tag + TEXT("valid"), Plan.IsValid());
 			TestEqual(Tag + TEXT("approach"), Plan.Approach, EDungeonEntranceApproach::FromAbove);
 			if (!TestEqual(Tag + TEXT("one column"), Plan.Segments.Num(), 1)) { continue; }
@@ -138,7 +138,7 @@ bool FPassagePlanVertical::RunTest(const FString& Parameters)
 	R.Rooms[0].Size.Z = 2;
 	R.EntranceApproach.OpeningCell.Z = 1;
 	R.EntranceApproach.KeepOutMin.Z = 2;
-	const FDungeonEntrancePassagePlan Tall = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::VerticalShaft, PassageVS, true, FlatSurface);
+	const FDungeonEntrancePassagePlan Tall = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::VerticalShaft, PassageVS, true, 0.0f, FlatSurface);
 	TestTrue(TEXT("tall room: lid plane is the top of floor 1"), FMath::IsNearlyEqual(Tall.Segments[0].BottomZ, PassageOffset.Z + 2 * PassageCS, 0.01f));
 	return true;
 }
@@ -155,7 +155,7 @@ bool FPassagePlanSideTunnel::RunTest(const FString& Parameters)
 	{
 		const FString Tag = FString::Printf(TEXT("stopAtTop %d: "), bStopAtTop ? 1 : 0);
 		const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(
-			R, PassageOffset, EDungeonEntranceStyle::SlopedTunnel, PassageVS, bStopAtTop, FlatSurface);
+			R, PassageOffset, EDungeonEntranceStyle::SlopedTunnel, PassageVS, bStopAtTop, 0.0f, FlatSurface);
 		TestTrue(Tag + TEXT("valid"), Plan.IsValid());
 		TestEqual(Tag + TEXT("approach"), Plan.Approach, EDungeonEntranceApproach::FromSide);
 		TestTrue(Tag + TEXT("tunnel floor is the room floor"), FMath::IsNearlyEqual(Plan.EntranceZ, FloorZ, 0.01f));
@@ -220,7 +220,7 @@ bool FPassagePlanLegacy::RunTest(const FString& Parameters)
 	FDungeonResult R = MakeResult();
 	for (S Style : { S::VerticalShaft, S::SlopedTunnel, S::CaveOpening, S::Trapdoor })
 	{
-		const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(R, PassageOffset, Style, PassageVS, false, FlatSurface);
+		const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(R, PassageOffset, Style, PassageVS, false, 0.0f, FlatSurface);
 		TestTrue(FString::Printf(TEXT("legacy style %d builds"), static_cast<int32>(Style)), Plan.IsValid());
 		TestEqual(TEXT("approach None"), Plan.Approach, EDungeonEntranceApproach::None);
 		TestTrue(TEXT("has segments"), Plan.Segments.Num() > 0);
@@ -229,7 +229,7 @@ bool FPassagePlanLegacy::RunTest(const FString& Parameters)
 
 	// Legacy sloped tunnel: the old in-grid diagonal from the entrance cell.
 	{
-		const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::SlopedTunnel, PassageVS, false, FlatSurface);
+		const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::SlopedTunnel, PassageVS, false, 0.0f, FlatSurface);
 		TestEqual(TEXT("legacy tunnel starts at the entrance cell"), Plan.Segments[0].Cell, R.EntranceCell);
 		TestTrue(TEXT("legacy tunnel steps up one cell per column"),
 			Plan.Segments.Num() > 1 && FMath::IsNearlyEqual(Plan.Segments[1].BottomZ - Plan.Segments[0].BottomZ, PassageCS, 0.01f));
@@ -238,9 +238,72 @@ bool FPassagePlanLegacy::RunTest(const FString& Parameters)
 	// Requested but unsatisfied: treated as legacy, with a note for the log.
 	SetFromAbove(R);
 	R.EntranceApproach.bSatisfied = false;
-	const FDungeonEntrancePassagePlan Unsat = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::SlopedTunnel, PassageVS, false, FlatSurface);
+	const FDungeonEntrancePassagePlan Unsat = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::SlopedTunnel, PassageVS, false, 0.0f, FlatSurface);
 	TestTrue(TEXT("unsatisfied builds"), Unsat.IsValid());
 	TestEqual(TEXT("treated as None"), Unsat.Approach, EDungeonEntranceApproach::None);
 	TestFalse(TEXT("note explains the fallback"), Unsat.Note.IsEmpty());
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+PLAN_TEST(FPassagePlanSideTunnelFloorLift, "Dungeon.EntrancePassagePlan.SideTunnelFloorLiftMeetsWalkableFloor")
+bool FPassagePlanSideTunnelFloorLift::RunTest(const FString& Parameters)
+{
+	FDungeonResult R = MakeResult();
+	SetFromSideMinX(R);
+	const float CellBottomZ = PassageOffset.Z;
+	const float Lift = 80.0f; // a 400-cell tile floor slab
+
+	const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(
+		R, PassageOffset, EDungeonEntranceStyle::SlopedTunnel, PassageVS, true, Lift, FlatSurface);
+	TestTrue(TEXT("valid"), Plan.IsValid());
+	TestTrue(TEXT("tunnel floor is the walkable floor"), FMath::IsNearlyEqual(Plan.EntranceZ, CellBottomZ + Lift, 0.01f));
+	for (const FDungeonPassageSegment& Seg : Plan.Segments)
+	{
+		if (!Seg.bInsideGrid) { break; }
+		TestTrue(TEXT("corridor floor lifted"), FMath::IsNearlyEqual(Seg.BottomZ, CellBottomZ + Lift, 0.01f));
+		TestTrue(TEXT("corridor ceiling stays at the cell top"), FMath::IsNearlyEqual(Seg.TopZ, CellBottomZ + PassageCS, 0.01f));
+	}
+	// The ramp keeps the same clear height as the corridor.
+	const FDungeonPassageSegment* FirstOutside = Plan.Segments.FindByPredicate([](const FDungeonPassageSegment& S) { return !S.bInsideGrid; });
+	TestTrue(TEXT("ramp exists"), FirstOutside != nullptr);
+	if (FirstOutside)
+	{
+		TestTrue(TEXT("ramp starts at the lifted floor"), FMath::IsNearlyEqual(FirstOutside->BottomZ, CellBottomZ + Lift, 0.01f));
+		TestTrue(TEXT("ramp clear height = cell - lift"), FMath::IsNearlyEqual(FirstOutside->TopZ - FirstOutside->BottomZ, PassageCS - Lift, 0.01f));
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+PLAN_TEST(FPassagePlanShellFlags, "Dungeon.EntrancePassagePlan.SideTunnelHasFloorAndCeilingShell")
+bool FPassagePlanShellFlags::RunTest(const FString& Parameters)
+{
+	// A horizontal passage through the cave layer needs a floor and a lid; a vertical shaft is
+	// enclosed by its sides alone. The opening cell (voxel-lined mode) has no shell at all.
+	FDungeonResult Side = MakeResult();
+	SetFromSideMinX(Side);
+	const FDungeonEntrancePassagePlan Tunnel = FDungeonEntrancePassagePlan::Build(
+		Side, PassageOffset, EDungeonEntranceStyle::SlopedTunnel, PassageVS, false, 0.0f, FlatSurface);
+	for (const FDungeonPassageSegment& Seg : Tunnel.Segments)
+	{
+		if (Seg.bInsideGrid && Seg.Cell == Side.EntranceApproach.OpeningCell)
+		{
+			TestFalse(TEXT("opening cell: no side shell"), Seg.bWalls);
+			TestFalse(TEXT("opening cell: no cap shell"), Seg.bFloorCeilingShell);
+		}
+		else
+		{
+			TestTrue(TEXT("tunnel column: side shell"), Seg.bWalls);
+			TestTrue(TEXT("tunnel column: floor + ceiling shell"), Seg.bFloorCeilingShell);
+		}
+	}
+
+	FDungeonResult Above = MakeResult();
+	SetFromAbove(Above);
+	const FDungeonEntrancePassagePlan Shaft = FDungeonEntrancePassagePlan::Build(
+		Above, PassageOffset, EDungeonEntranceStyle::VerticalShaft, PassageVS, true, 0.0f, FlatSurface);
+	TestTrue(TEXT("shaft: side shell"), Shaft.Segments[0].bWalls);
+	TestFalse(TEXT("shaft: no cap shell"), Shaft.Segments[0].bFloorCeilingShell);
 	return true;
 }

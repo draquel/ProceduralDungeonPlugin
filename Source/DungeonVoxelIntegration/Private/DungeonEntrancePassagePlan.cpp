@@ -67,6 +67,7 @@ FDungeonEntrancePassagePlan FDungeonEntrancePassagePlan::Build(
 	EDungeonEntranceStyle Style,
 	float VoxelSize,
 	bool bStopAtEntranceCellTop,
+	float SideTunnelFloorLift,
 	TFunctionRef<float(float, float)> SampleSurfaceZ)
 {
 	FDungeonEntrancePassagePlan Plan;
@@ -116,7 +117,11 @@ FDungeonEntrancePassagePlan FDungeonEntrancePassagePlan::Build(
 			return Plan;
 		}
 
-		const float FloorZ = WorldOffset.Z + A.OpeningCell.Z * CS;
+		// The tunnel floor meets the room's walkable floor (cell bottom + lining); its ceiling is
+		// the cell top, so the passage is cell height minus the lining.
+		const float CellBottomZ = WorldOffset.Z + A.OpeningCell.Z * CS;
+		const float FloorZ = CellBottomZ + FMath::Max(SideTunnelFloorLift, 0.0f);
+		const float CeilingZ = CellBottomZ + CS;
 		Plan.EntranceZ = FloorZ;
 
 		// Voxel-lined dungeons: carve the opening cell itself so the room's wall lining opens
@@ -133,8 +138,9 @@ FDungeonEntrancePassagePlan FDungeonEntrancePassagePlan::Build(
 			Seg.Center = CellCenterXY(Cell);
 			Seg.HalfExtentXY = HalfCS;
 			Seg.BottomZ = FloorZ;
-			Seg.TopZ = FloorZ + CS;
+			Seg.TopZ = CeilingZ;
 			Seg.bWalls = (Cell != A.OpeningCell);
+			Seg.bFloorCeilingShell = Seg.bWalls;
 			Seg.Cell = Cell;
 			Seg.bInsideGrid = true;
 			Cell += FIntVector(DX, DY, 0);
@@ -163,8 +169,9 @@ FDungeonEntrancePassagePlan FDungeonEntrancePassagePlan::Build(
 			Seg.Center = Center;
 			Seg.HalfExtentXY = HalfCS;
 			Seg.BottomZ = Bottom;
-			Seg.TopZ = Bottom + CS;
+			Seg.TopZ = Bottom + (CeilingZ - FloorZ);
 			Seg.bWalls = true;
+			Seg.bFloorCeilingShell = true;
 			Seg.bInsideGrid = false;
 
 			++Step;

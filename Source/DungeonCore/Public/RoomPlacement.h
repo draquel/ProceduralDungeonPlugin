@@ -6,6 +6,7 @@ struct FDungeonGrid;
 struct FDungeonRoom;
 struct FDungeonSeed;
 struct FDungeonEntranceApproachInfo;
+struct FDungeonEntranceSpec;
 enum class EDungeonCellType : uint8;
 class UDungeonConfiguration;
 
@@ -19,17 +20,19 @@ class UDungeonConfiguration;
 struct DUNGEONCORE_API FRoomPlacement
 {
 	/**
-	 * Place the entrance room first under Config.Entrance and reserve its approach volume.
+	 * Place the entrance room first under Spec and reserve its approach volume.
 	 * OutRooms must be empty. On success the room is OutRooms[0] (RoomIndex 1), the keep-out box
 	 * is stamped Reserved, and OutApproach.bSatisfied is true. On failure nothing is placed,
 	 * OutApproach records the request with bSatisfied false, and the caller falls back to
 	 * unconstrained placement + post-hoc selection.
 	 * Draws from Seed.Fork(5) only, so configs with Approach None keep their layouts.
+	 * @param Spec  The entrance spec to honour (Config.Entrance, or a caller override).
 	 * @return true when the entrance room was placed under the constraints.
 	 */
 	static bool PlaceEntranceRoom(
 		FDungeonGrid& Grid,
 		const UDungeonConfiguration& Config,
+		const FDungeonEntranceSpec& Spec,
 		FDungeonSeed& Seed,
 		TArray<FDungeonRoom>& OutRooms,
 		FDungeonEntranceApproachInfo& OutApproach);
