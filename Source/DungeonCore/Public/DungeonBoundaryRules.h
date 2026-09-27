@@ -102,6 +102,22 @@ struct DUNGEONCORE_API FDungeonBoundaryRules
 	static bool NeedsWall(const FDungeonGrid& Grid, const FIntVector& Current, int32 NX, int32 NY, int32 NZ);
 
 	/**
+	 * Which side of a horizontal face shared by TWO OPEN cells dresses it. NeedsWall answers per
+	 * cell, so a room cell beside a corridor, or a landing beside a ramp's flank, needs a wall from
+	 * both sides — but one piece of geometry is enough, and a wall with depth placed from both
+	 * sides lands inside the neighbour's open cell (the crypt wall clipping into the corridor).
+	 * Rule: the cell on the -X / -Y side of the face owns it, except that a stair-family cell
+	 * never dresses a face toward an open neighbour (the ramp mesh fills its cell), so the open
+	 * neighbour owns those. For a solid or out-of-bounds neighbour the current cell always owns.
+	 * Pure and symmetric: exactly one of the two sides answers true for any shared face.
+	 *
+	 * @param Grid    The dungeon grid.
+	 * @param Current Grid coordinate of the cell whose face is evaluated (must be in bounds).
+	 * @param DX,DY   Unit face direction from the cell toward its neighbour (exactly one non-zero).
+	 */
+	static bool OwnsSharedFace(const FDungeonGrid& Grid, const FIntVector& Current, int32 DX, int32 DY);
+
+	/**
 	 * Whether the VERTICAL face from Current toward the neighbour at (NX,NY,NZ) needs a floor or
 	 * ceiling. Rules 1 (solid / out of bounds) and 5 (same room) match NeedsWall; the door rules
 	 * and the flank rule are walls-only, since a doorway is an opening in a wall and a door frame

@@ -32,6 +32,13 @@ enum class EDungeonTileType : uint8
 	HallwayCeilingTJunction,
 	HallwayCeilingCrossroad,
 	HallwayCeilingEndCap,
+	/**
+	 * Wall on a face shared by TWO OPEN cells (room beside corridor, landing beside a ramp flank),
+	 * placed once, by the owning side (FDungeonBoundaryRules::OwnsSharedFace), and seen from both
+	 * sides: author it two-faced and symmetric about the face plane. Rock-backed faces keep
+	 * WallSegment (which may extrude outward into the rock). Falls back to WallSegment when unset.
+	 */
+	WallPartition,
 	COUNT UMETA(Hidden)
 };
 
