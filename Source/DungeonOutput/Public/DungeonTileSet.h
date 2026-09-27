@@ -90,6 +90,54 @@ struct DUNGEONOUTPUT_API FDungeonWallProfile
 	/** Measurement tolerance. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile", meta = (ClampMin = "0.0"))
 	float Tolerance = 2.0f;
+
+	/**
+	 * Door leaf that seats in the DoorFrame slot's opening (E3): the leaf actor scales the tileset's
+	 * DoorLeafMesh to this width x height. Defaults fit the pack's SM_Door_01 in SM_Doorway_Smooth_01.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile|Door", meta = (ClampMin = "1.0"))
+	float DoorLeafWidth = 151.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile|Door", meta = (ClampMin = "1.0"))
+	float DoorLeafHeight = 289.0f;
+
+	/** Hinge line offset from the finished-face plane along the face normal (positive = outward, into the neighbour). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile|Door")
+	float HingeInset = 0.0f;
+};
+
+/**
+ * Where wall fixtures go (E3): the light-placement rule of the environment plan, as tileset data so
+ * a themed set can be darker or brighter. The mapper emits FDungeonFixture placements from these;
+ * gameplay (VoxelWorldPOI torches) spawns the actual lights and counts against the same cap.
+ */
+USTRUCT(BlueprintType)
+struct DUNGEONOUTPUT_API FDungeonFixtureRules
+{
+	GENERATED_BODY()
+
+	/** A wall light on each side wall of every Door cell (the jamb passage), at the room end. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fixtures")
+	bool bLightDoorways = true;
+
+	/** Every Nth rock-backed wall face of a room (in cell order) takes a wall light; 0 = none. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fixtures", meta = (ClampMin = "0"))
+	int32 RoomWallLightEvery = 3;
+
+	/** Hard cap of wall lights per dungeon (doorway lights first, then room walls). 0 = no fixtures at all. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fixtures", meta = (ClampMin = "0"))
+	int32 MaxWallLights = 24;
+
+	/** Mount height above the cell floor, at WallProfile.ReferenceCellSize (scales with the cell). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fixtures", meta = (ClampMin = "0.0"))
+	float WallLightHeight = 190.0f;
+
+	/**
+	 * Doorway lights sit this far from the door cell's centre toward the ROOM (away from the
+	 * frame), as a fraction of the cell, so an open leaf swung into the cell never meets them.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fixtures", meta = (ClampMin = "0.0", ClampMax = "0.45"))
+	float DoorwayLightOffsetFraction = 0.25f;
 };
 
 /**
@@ -120,6 +168,34 @@ public:
 	/** The wall profile the wall-family slots are authored to (see FDungeonWallProfile). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
 	FDungeonWallProfile WallProfile;
+
+	/** Wall-fixture placement rules (see FDungeonFixtureRules); the mapper emits placements from these. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	FDungeonFixtureRules FixtureRules;
+
+	/**
+	 * Door leaf mesh for Doorway openings (E3), hung by gameplay, never instanced. Leaf convention
+	 * after DoorLeafRotationOffset: hinge line through the mesh origin along Z, the leaf extending
+	 * along local +Y with its base at Z=0. Unset = no door leaves.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Interactables")
+	TSoftObjectPtr<UStaticMesh> DoorLeafMesh;
+
+	/** Mesh-local rotation bringing DoorLeafMesh to the leaf convention (pack doors extend along -Y: yaw 180). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Interactables")
+	FRotator DoorLeafRotationOffset = FRotator(0.0f, 180.0f, 0.0f);
+
+	/**
+	 * Wall light mesh for WallLight fixtures (E3), spawned as torch actors. Convention after
+	 * WallLightRotationOffset: mount point at the mesh origin, the fixture extending along local
+	 * +X off the wall. Unset = no wall lights.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Interactables")
+	TSoftObjectPtr<UStaticMesh> WallLightMesh;
+
+	/** Mesh-local rotation bringing WallLightMesh to the fixture convention (pack sconces extend along +Y: yaw -90). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Interactables")
+	FRotator WallLightRotationOffset = FRotator(0.0f, -90.0f, 0.0f);
 
 	/**
 	 * Measure every wall-family module against WallProfile. One line per problem; empty = conforms.

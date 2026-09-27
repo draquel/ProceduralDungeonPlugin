@@ -50,19 +50,13 @@ void ADungeonActor::GenerateDungeon()
 		ClearDungeon();
 	}
 
-	// Generate dungeon data
-	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
-	CachedResult = bUseEntranceOverride
-		? Generator->GenerateWithEntrance(DungeonConfig, Seed, EntranceOverride)
-		: Generator->Generate(DungeonConfig, Seed);
-
-	UE_LOG(LogDungeonOutput, Log, TEXT("Generated dungeon: %d rooms, %d hallways, %d staircases in %.1fms"),
-		CachedResult.Rooms.Num(), CachedResult.Hallways.Num(),
-		CachedResult.Staircases.Num(), CachedResult.GenerationTimeMs);
-
-	// Map grid to tile transforms
-	FDungeonTileMapResult TileMap = FDungeonTileMapper::MapToTiles(
-		CachedResult, *TileSet, GetActorLocation(), bOpenEntranceCeiling);
+	// Generate dungeon data + map to tiles through the ONE shared build (see BuildDungeon).
+	if (!BuildDungeon(DungeonConfig, TileSet, Seed, bUseEntranceOverride, EntranceOverride, bOpenEntranceCeiling,
+		GetActorLocation(), CachedResult, CachedTileMap))
+	{
+		return;
+	}
+	const FDungeonTileMapResult& TileMap = CachedTileMap;
 
 	// Resolve each tile type to its single mesh + a display name, from the consolidated slots.
 	struct FTileSlot
@@ -219,6 +213,30 @@ void ADungeonActor::GenerateDungeon()
 
 	UE_LOG(LogDungeonOutput, Log, TEXT("Dungeon visualization complete: %d total instances, %d HISMC components"),
 		TileMap.GetTotalInstanceCount(), TileComponents.Num());
+}
+
+bool ADungeonActor::BuildDungeon(UDungeonConfiguration* Config, const UDungeonTileSet* TileSet, int64 InSeed,
+	bool bUseEntranceOverride, const FDungeonEntranceSpec& EntranceOverride, bool bOpenEntranceCeiling,
+	const FVector& WorldOffset, FDungeonResult& OutResult, FDungeonTileMapResult& OutTileMap)
+{
+	if (!Config || !TileSet)
+	{
+		UE_LOG(LogDungeonOutput, Error, TEXT("ADungeonActor::BuildDungeon — %s is null"),
+			Config ? TEXT("TileSet") : TEXT("DungeonConfig"));
+		return false;
+	}
+
+	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
+	OutResult = bUseEntranceOverride
+		? Generator->GenerateWithEntrance(Config, InSeed, EntranceOverride)
+		: Generator->Generate(Config, InSeed);
+
+	UE_LOG(LogDungeonOutput, Log, TEXT("Generated dungeon: %d rooms, %d hallways, %d staircases in %.1fms"),
+		OutResult.Rooms.Num(), OutResult.Hallways.Num(),
+		OutResult.Staircases.Num(), OutResult.GenerationTimeMs);
+
+	OutTileMap = FDungeonTileMapper::MapToTiles(OutResult, *TileSet, WorldOffset, bOpenEntranceCeiling);
+	return true;
 }
 
 void ADungeonActor::ClearDungeon()
