@@ -170,7 +170,37 @@ Four parts, in cost order:
 
 Colour, fixture style and density are tileset data so the demo and a future themed set can differ.
 
-### 3.6 Validation and tooling
+### 3.6 Interactables: doors and lights are actors, on the gameplay path
+
+Decision (2026-09-27): doors and lights must be interactable. Interactable things carry state and
+replicate, so they are **actors on the POI structure path** (the elevator / loot-chest pattern:
+authority-spawned, replicated, `UInteractableComponent` under `WITH_INTERACTION_PLUGIN`), never
+tile instances. The tile actor stays visual-only and spawns on every client; a new
+`IPOIStructure` implementer (`APOIDungeonInteractables`) regenerates the dungeon from seed + spec
+(1.6 ms) and spawns the actors server-side from the mapper's placements.
+
+- **Placements are a second mapper output.** `FDungeonTileMapResult` gains
+  `TArray<FDungeonOpening> Openings` (cell, face, `EDungeonOpeningKind { Doorway, StairEntry,
+  EntranceOpening }`) and `TArray<FDungeonFixture> Fixtures` (position, face, kind). Frames stay
+  instanced; only `Doorway` openings get a leaf — a leaf on a stair entry blocks the ramp, and one
+  on the entrance opening blocks the shaft drop or the tunnel.
+- **Door leaf and frame align through the profile.** `FDungeonWallProfile` gains the hinge line
+  (offset from the face plane, jamb side) and leaf size, so `SM_Door_01..03`, `SM_Door_Large_01`
+  and `SM_Door_MetalGate_01` seat in the instanced `DM_Door` frame by data. The leaf actor
+  replicates STATE (`Closed / Open / Locked`, locked reserved for keys later) and animates locally;
+  its collision matches the opening while closed.
+- **Torches are the lights.** A `APOIDungeonTorch` actor carries the sconce mesh (`SM_Torch_Sconce_01`
+  / `SM_WallSconce_01`), an emissive material and one shadowless point light; `Lit` is replicated
+  state (unlit = emissive off, light off). The light budget of §3.5 becomes the torch placement
+  rule: both sides of every doorway, then every 3rd rock-backed room wall face (never a partition —
+  it is seen from both sides), capped per dungeon. Standing braziers can ride the existing prop path.
+- **Stable identity and state.** Every interactable has a deterministic ID
+  (`Hash(POI cell, grid cell, face)`); the POI subsystem keeps a per-dungeon state record
+  (`TMap<ID, state>`) that survives stream-out / stream-in the way `StampedDungeons` does today, and
+  is the unit a save system persists later. Without this, a door re-closes and a torch relights on
+  every stream-in.
+
+### 3.7 Validation and tooling
 
 - `Dungeon.TileMapper.Coverage`: generate several seeds, map to tiles, and assert for every open
   cell: each face that needs a wall has exactly one wall-family instance (post-ownership), each
@@ -191,12 +221,15 @@ Colour, fixture style and density are tileset data so the demo and a future them
 |-------|---------|---------|------|
 | **E1 — Ownership + partition** | `OwnsSharedFace`, `WallPartition` slot, mapper skips non-owner faces, coverage test (red → green), profile-correct fit for single wall meshes. | DungeonOutput (+ one predicate) | 1 day |
 | **E2 — Profile + door + corners** | `FDungeonWallProfile`, conformance test + asset validation, re-author `DM_Door` (+ entrance frame) to the profile, corner slots + placement, demo corner module. | DungeonOutput, DungeonEditor, content | 1–2 days |
-| **E3 — Variety** | Slot variants + seeded pick, room-type overrides, decor slots + density, hallway ceiling fudges → modules, determinism test. | DungeonOutput, content | 1–2 days |
-| **E4 — Lighting** | Light-tight overlap rules + coverage report, emissive `WallLight` slot + placement rule, light placements + budgeted point lights on the actor, interior post-process, project exposure settings. | DungeonOutput, VoxelWorldPOI (budget/PPV hook), content | 2 days |
-| **E5 — Sweep + sign-off** | Author the demo tileset through all of it, PIE pass on both demo POI types (shaft and side tunnel) with a light-leak checklist, screenshots, doc updates. | content | 1 day |
+| **E3 — Interactables** | Mapper emits openings + fixtures; `APOIDungeonInteractables` structure; door leaf actor (state replicated, collision while closed, hinge from the profile); torch actor (emissive + shadowless light, `Lit` state); per-dungeon state record with stable IDs; placement rule + cap. | DungeonOutput, VoxelWorldPOI | 2–3 days |
+| **E4 — Variety** | Slot variants + seeded pick, room-type overrides, decor slots + density, hallway ceiling fudges → modules, determinism test. | DungeonOutput, content | 1–2 days |
+| **E5 — Lighting polish** | Light-tight overlap rules + coverage report, interior post-process (exposure clamp, fog, AO), project exposure settings, torch budget tuning per representation. | DungeonOutput, VoxelWorldPOI, content | 1 day |
+| **E6 — Sweep + sign-off** | Author the demo tileset through all of it (crypt for `WallSegment`, thin symmetric for `WallPartition`), PIE pass on both demo POI types (shaft and side tunnel) with a light-leak checklist, screenshots, doc updates. | content | 1 day |
 
 E1 is independently shippable and removes the clipping class outright. E2 makes the door problem
-impossible to reintroduce. E3 and E4 are what turn the shell into a place.
+impossible to reintroduce and is the prerequisite for door leaves. E3 comes before variety because
+doors and torches exercise the profile and the actor path early; E4 and E5 are what turn the shell
+into a place.
 
 ---
 
@@ -217,13 +250,40 @@ impossible to reintroduce. E3 and E4 are what turn the shell into a place.
    half-voxel carve band (`CarveMarginVoxels`) rules from the module plan §10; corners and
    partitions do not change the carved void.
 
-## 6. Decisions needed
+## 6. Decisions (taken 2026-09-27)
 
-1. Keep the deep crypt wall for rock-backed faces (`WallSegment`) and use a thin symmetric piece
-   only for partitions, or go thin everywhere? The two-slot design supports either; the crypt look
-   is worth keeping where it cannot clip.
-2. Fixture style and colour for the demo (torches, braziers, sconces), and density (every door plus
-   every 3rd room wall face is the suggested starting point).
-3. Should lights be gameplay-relevant later (extinguishable, lit by the player)? If yes, fixtures
-   become the POI structure/prop path (actors, counted in the ones) rather than tileset decor; the
-   emissive-plus-budgeted-lights baseline stays either way.
+1. **Crypt wall for rock-backed faces** (`WallSegment` returns to `TM_WallCrypt`), **thin symmetric
+   piece for partitions** (`WallPartition`, from `SM_Wall_Stone_01_Sml`).
+2. **Wall sconces / torches** from the pack (`SM_Torch_Sconce_01`, `SM_WallSconce_01`,
+   `SM_Torch_01`), placed both sides of every doorway plus every 3rd rock-backed room wall face.
+3. **Lights and doors are interactable** → actors on the structure path (§3.6), with a per-dungeon
+   state record from the start.
+
+## 7. Concerns to settle before E1 starts
+
+1. **Two spawn paths must agree on the layout.** The tile actor (every client) and the
+   interactables structure (server) each regenerate from seed + entrance spec. Both must use
+   `GenerateWithEntrance` with the spec from `MakeEntranceSpecForStyle` — the P3 lesson. Put the
+   regeneration in one shared helper on the POI subsystem so a third caller cannot drift.
+2. **State persistence has no home yet.** `StampedDungeons` lives in memory for the world's
+   lifetime; nothing persists across sessions (open question since P0). E3 defines the state record
+   and the stable IDs; hooking it to a save system is a later feature but the record shape should
+   be save-ready (POD, keyed by deterministic IDs, no actor references).
+3. **Doors and pathing.** A closed door blocks the player by collision; it must also block AI
+   later (dynamic nav obstacle) and must never be placed where the generator's connectivity
+   guarantee is the only route to a room that a *locked* door would sever. Locked stays reserved
+   until keys are designed; the connectivity validator can later check that every room is
+   reachable through unlocked doors.
+4. **Partition thickness changes clearances.** A partition centred on the plane takes 40 from each
+   side; the crypt face inset takes 40 from a room. Corridor floor variants (auto-fit to 400) run
+   under the partition base — acceptable, but the profile must state it and the coverage test must
+   not count the overlap as a gap. Door opening width = 400 − 2 × inset by construction.
+5. **Light cost lives with torches now.** Every torch is a replicated actor with a light; the cap
+   per dungeon (start at 24) bounds Lumen cost and replication, and unlit torches must drop their
+   light component, not just dim it. Standing braziers via the prop path count against the same cap.
+6. **The uncommitted tileset asset.** `Content/PluginTesting/Config/DungeonTileSet.uasset` carries
+   the thin-wall swap in the working tree; it should land with E1, where the wall slot becomes
+   `WallSegment = crypt module` again and the thin mesh moves to the new `WallPartition` slot.
+7. **Tests.** E1–E2 stay pure (mapper + validator tests). E3's actors need a functional PIE check
+   (open a door, light a torch, stream out and back in, state kept) — manual in `VoxelDemo` with the
+   `vox.*` tooling until a functional-test harness for POI structures exists.
