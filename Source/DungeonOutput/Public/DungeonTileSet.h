@@ -4,6 +4,7 @@
 #include "Engine/DataAsset.h"
 #include "DungeonTileMapper.h" // EDungeonTileType
 #include "DungeonTileModule.h" // UDungeonTileModule
+#include "DungeonTypes.h" // EDungeonRoomType (room-type overrides)
 #include "DungeonTileSet.generated.h"
 
 /**
@@ -15,6 +16,38 @@
  *   Floor/Ceiling mesh local axes: X=width, Y=depth, Z=thickness (flat slab).
  *   Wall/Door/Entrance mesh local axes: X=depth(thin), Y=width, Z=height; finished face toward +X.
  */
+/**
+ * One alternative piece of geometry for a slot (E4 variety): a mesh or a module with the same
+ * conventions as the slot itself, picked per placement by weight with the dungeon seed.
+ */
+USTRUCT(BlueprintType)
+struct DUNGEONOUTPUT_API FDungeonTileVariant
+{
+	GENERATED_BODY()
+
+	/** Single mesh, auto-fit like the slot's own mesh. Ignored when Module is set. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Variant")
+	TSoftObjectPtr<UStaticMesh> Mesh;
+
+	/** Module (uniform cell scale), replaces Mesh when set. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Variant")
+	TSoftObjectPtr<UDungeonTileModule> Module;
+
+	/** Rotation offset composed with the placement rotation (this variant's own, e.g. a yaw-90 floor). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Variant")
+	FRotator RotationOffset = FRotator::ZeroRotator;
+
+	/** Scale multiplier on top of the auto-fit scale (single-mesh path). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Variant")
+	FVector ScaleMultiplier = FVector::OneVector;
+
+	/** Relative pick weight against the slot's own Weight and the other variants. <= 0 never places. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Variant", meta = (ClampMin = "0.0"))
+	float Weight = 1.0f;
+
+	bool IsActive() const { return !Mesh.IsNull() || !Module.IsNull(); }
+};
+
 USTRUCT(BlueprintType)
 struct DUNGEONOUTPUT_API FDungeonTileSlot
 {
@@ -36,9 +69,60 @@ struct DUNGEONOUTPUT_API FDungeonTileSlot
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
 	FVector ScaleMultiplier = FVector::OneVector;
 
+	/**
+	 * Pick weight of the slot's OWN geometry against its Variants (E4). 0 with live variants =
+	 * the slot's mesh / module is never placed itself (a pure variant pool).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot|Variety", meta = (ClampMin = "0.0"))
+	float Weight = 1.0f;
+
+	/**
+	 * Alternative pieces picked per placement by weight with the dungeon seed (E4): the same
+	 * seed always yields the same dungeon, on every machine and every rebuild. Empty = no variety.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot|Variety")
+	TArray<FDungeonTileVariant> Variants;
+
 	bool HasMesh() const { return !Mesh.IsNull(); }
 	bool HasModule() const { return !Module.IsNull(); }
 	bool IsActive() const { return HasMesh() || HasModule(); }
+};
+
+/**
+ * Per-room-type slot replacements (E4): a boss or treasure room swaps floor / wall / ceiling /
+ * decor geometry without a second tileset. Only the listed types change; a type the base tileset
+ * does not place at all stays absent (overrides swap geometry, they never add placements).
+ */
+USTRUCT(BlueprintType)
+struct DUNGEONOUTPUT_API FDungeonRoomTypeOverride
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Override")
+	TMap<EDungeonTileType, FDungeonTileSlot> Slots;
+};
+
+/** Where decor goes (E4): densities are per candidate site, selection is seeded per cell / face. */
+USTRUCT(BlueprintType)
+struct DUNGEONOUTPUT_API FDungeonDecorRules
+{
+	GENERATED_BODY()
+
+	/** Fraction of rock-backed room / corridor wall faces that take a WallDecor piece. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Decor", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float WallDecorDensity = 0.15f;
+
+	/** Fraction of room cells that take a FloorDecor piece (never Door / Entrance / opening cells). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Decor", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float FloorDecorDensity = 0.08f;
+
+	/** Fraction of hallway cells that take a HallwayDecor piece. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Decor", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float HallwayDecorDensity = 0.08f;
+
+	/** Wall faces carrying a WallLight fixture take no wall decor. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Decor")
+	bool bSkipFixtureFaces = true;
 };
 
 /**
@@ -172,6 +256,14 @@ public:
 	/** Wall-fixture placement rules (see FDungeonFixtureRules); the mapper emits placements from these. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
 	FDungeonFixtureRules FixtureRules;
+
+	/** Decor placement rules (E4, see FDungeonDecorRules) for the WallDecor / FloorDecor / HallwayDecor slots. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	FDungeonDecorRules DecorRules;
+
+	/** Per-room-type slot replacements (E4, see FDungeonRoomTypeOverride). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	TMap<EDungeonRoomType, FDungeonRoomTypeOverride> RoomTypeOverrides;
 
 	/**
 	 * Door leaf mesh for Doorway openings (E3), hung by gameplay, never instanced. Leaf convention

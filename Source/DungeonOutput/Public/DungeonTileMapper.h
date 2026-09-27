@@ -4,6 +4,8 @@
 #include "DungeonTileMapper.generated.h"
 
 class UDungeonTileSet;
+class UDungeonTileModule;
+class UStaticMesh;
 struct FDungeonResult;
 struct FDungeonGrid;
 struct FDungeonCell;
@@ -55,7 +57,33 @@ enum class EDungeonTileType : uint8
 	 * face. Never placed beside a door / entrance frame (the frame's jambs cover that corner). Optional.
 	 */
 	WallCornerOuter,
+	/**
+	 * Decor hung on a rock-backed wall face of a room or corridor cell, by seeded density
+	 * (UDungeonTileSet::DecorRules). Anchor: the finished wall face on the cell floor, local +X
+	 * off the wall into the cell (the WallLight fixture convention at floor level). Never on a
+	 * face carrying a fixture unless the rules allow it. Uniform scale, no per-axis fit. Optional.
+	 */
+	WallDecor,
+	/**
+	 * Decor standing on a room cell (rubble, crates), by seeded density. Anchor: the cell centre
+	 * on the floor, a seeded quarter-turn yaw. Never on Door / Entrance / opening cells. Optional.
+	 */
+	FloorDecor,
+	/** As FloorDecor, on Hallway cells. Optional. */
+	HallwayDecor,
 	COUNT UMETA(Hidden)
+};
+
+/**
+ * One resolved render piece of a tile map (E4): what an instance carrying this id draws — a
+ * single mesh (auto-fit / uniform per its type) or a module (expanded by ADungeonActor). Pieces
+ * come from a slot's own geometry, its weighted Variants, and room-type overrides.
+ */
+struct DUNGEONOUTPUT_API FDungeonTilePiece
+{
+	EDungeonTileType Type = EDungeonTileType::RoomFloor;
+	TSoftObjectPtr<UStaticMesh> Mesh;
+	TSoftObjectPtr<UDungeonTileModule> Module;
 };
 
 /** What an opening in a wall plane is: decides whether a door leaf may hang in it (E3). */
@@ -168,6 +196,12 @@ struct DUNGEONOUTPUT_API FDungeonTileMapResult
 	static constexpr int32 TypeCount = static_cast<int32>(EDungeonTileType::COUNT);
 
 	TArray<FTransform> Transforms[TypeCount];
+
+	/** Per instance of Transforms[type], the index into Pieces it renders with (E4 variants). */
+	TArray<int32> PieceIds[TypeCount];
+
+	/** The resolved pieces instances refer to (see FDungeonTilePiece). */
+	TArray<FDungeonTilePiece> Pieces;
 
 	/** Framed openings (doorways, ramp entries, entrance openings), for door leaves. */
 	TArray<FDungeonOpening> Openings;
