@@ -1,6 +1,6 @@
 # Dungeon Environment Polish — Design Plan (final generation phase)
 
-**Status:** E4 done on `feature/env-e4-variety` (2026-09-27, 135/135 in-editor, PIE-verified): every placement resolves to a PIECE (a slot's own geometry, one of its weighted `Variants`, or a `RoomTypeOverrides` slot) picked by a seeded hash; `FDungeonTileMapResult::PieceIds` / `Pieces` carry it and `ADungeonActor` batches by piece; `WallDecor` / `FloorDecor` / `HallwayDecor` slots place by `DecorRules` densities; the hallway ceiling straight fudge is folded into `TM_HallwayCeilingStraight` (no slot carries a per-axis multiplier). E3 merged (PDP#18 / parent #51). E2 merged (PDP#17 / parent #50). E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
+**Status:** E5 done on `feature/env-e5-lighting` (2026-09-27, 137/137 in-editor, PIE-verified): `FDungeonCoverage` light-tightness report (+ actor accessor and red-box debug overlay; generated dungeons are light-tight by test), `FDungeonInteriorLighting` on the tileset applied by a grid-sized post-process volume on the tile actor (exposure clamp verified via ShowFlag.VisualizeHDR: interior range -3..8, room pinned at -3 instead of chasing to -5, the Lumen cached-lighting warning gone), `HallwayWallLightEvery` fixture rule. E4 merged (PDP#19 / parent #52). E3 merged (PDP#18 / parent #51). E2 merged (PDP#17 / parent #50). E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
 `WallPartition` slot + mapper ownership (not a tileset default: map properties serialize as a
 delta against the class default, so a new default key would appear as an engine cube in every
 existing tileset), coverage tests; demo tileset carries
@@ -207,6 +207,28 @@ Four parts, in cost order:
    names) rather than per dungeon.
 
 Colour, fixture style and density are tileset data so the demo and a future themed set can differ.
+
+**As built (E5, 2026-09-27):**
+
+- Part 1 (light-tight geometry) became a REPORT rather than new overlap rules: `FDungeonCoverage::Analyse`
+  matches every boundary the shared rules require (walled faces once post-ownership, floor under, lid over;
+  the entrance opening excepted) against the mapped pieces, bucketed on the doubled cell lattice — walls by
+  their cell (they anchor at mid-height), slabs by their plane. Generated dungeons (10 seeds x open/closed
+  entrance) are light-tight; `ADungeonActor::DescribeCoverage` prints the summary and the debug overlay
+  draws problem sites red and fixtures yellow. The border seams of the original report were the E1 double
+  dressing and the E2 profile, both gone.
+- Part 2 (emissive fixtures) and part 3 (budgeted real lights) were delivered by E3's torches; E5 adds the
+  hallway rule (`HallwayWallLightEvery`, after the room lights, default 0). Demo: every 5th corridor face,
+  cap 96 → 61 torches.
+- Part 4 (interior post-process): `FDungeonInteriorLighting` → a `UBoxComponent` + `UPostProcessComponent`
+  on the tile actor, sized to the grid on build, disabled on clear. GOTCHA: `UPostProcessComponent` answers
+  "is the view inside?" through its parent shape's PHYSICS body, so the box must have a query-only,
+  ignore-all collision body — with `NoCollision` the volume is silently inert (the HDR readout still showed
+  the project range). Defaults min -3 / max 8 EV100, AO 0.8, blend 400, priority 10. The project-level
+  `r.EyeAdaptation.CachedLightingPreExposure` was left alone: with the clamp the exposure never leaves the
+  safe range, so the warning does not fire.
+- Torch defaults stay 1000 lm / 800 radius; with the clamp the torch-lit walls read correctly and the
+  entrance room is a stop under the shaft — the intended mood. Tune per tileset via the struct.
 
 ### 3.6 Interactables: doors and lights are actors, on the gameplay path
 
