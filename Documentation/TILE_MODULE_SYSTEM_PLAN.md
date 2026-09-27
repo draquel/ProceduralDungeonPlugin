@@ -320,8 +320,11 @@ P1 alone unblocks the wall problem (author a wall+corner module); P2–P4 are po
    pressure that pushed the pack toward flat quads. Worth noting to content authors.
 3. **Collision.** Modules likely carry the collision (crypt wall has depth). Confirm the carved
    void + module collision + `TileThickness` walkable metric all agree (§10).
-4. **Overlapping modules at shared faces.** Single-owner wall placement already prevents two walls
-   on one face (verified: zero coincident wall instances). Modules inherit that — but corner posts
+4. **Overlapping modules at shared faces.** A face between two OPEN cells (room beside corridor,
+   landing beside a ramp flank) used to be dressed from BOTH sides — not coincident transforms, but
+   two walls back to back, and a deep module extruded into the neighbour's cell. Since environment
+   polish E1 the owner side (`FDungeonBoundaryRules::OwnsSharedFace`) places one two-faced
+   `WallPartition`; rock-backed faces keep `WallSegment`. Modules inherit that — but corner posts
    authored into *both* a wall module and a corner module could double up; prefer corner geometry in
    a dedicated corner slot, not baked into every wall.
 5. **Reference-cell mismatch.** If `ReferenceCellSize` ≠ the tileset's working cell and the module

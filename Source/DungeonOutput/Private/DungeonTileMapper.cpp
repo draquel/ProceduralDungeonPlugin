@@ -469,6 +469,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					// Per-face placement rotation composed with each wall-family slot's offset, so a
 					// mesh whose finished face points the wrong way can be flipped in data (Yaw=180).
 					const FRotator WallRot = ApplyRot(EDungeonTileType::WallSegment, FaceRot);
+					const FRotator PartitionRot = ApplyRot(EDungeonTileType::WallPartition, FaceRot);
 					const FRotator DoorRot = ApplyRot(EDungeonTileType::DoorFrame, FaceRot);
 					const FRotator EntranceRot = ApplyRot(EDungeonTileType::EntranceFrame, FaceRot);
 
@@ -561,12 +562,29 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 								FTransform(DoorRot,
 									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::DoorFrame, FS, DoorRot), FS));
 						}
-						else if (bWall && SlotActive(EDungeonTileType::WallSegment))
+						else if (bWall)
 						{
-							const FVector WS = WallScale(EDungeonTileType::WallSegment);
-							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
-								FTransform(WallRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
+							// A face shared with another OPEN cell (room beside corridor, landing beside a
+							// ramp flank) needs a wall from both sides, but is dressed ONCE, by the owner,
+							// with the two-faced WallPartition piece (WallSegment when that slot is unset).
+							// The non-owner places nothing. Rock-backed faces keep WallSegment.
+							const bool bNeighborOpen = Result.Grid.IsInBounds(NX, NY, Z)
+								&& FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(NX, NY, Z).CellType);
+							if (bNeighborOpen && !FDungeonBoundaryRules::OwnsSharedFace(Result.Grid, FIntVector(X, Y, Z), WC.DX, WC.DY))
+							{
+								continue;
+							}
+							const EDungeonTileType WallType = (bNeighborOpen && SlotActive(EDungeonTileType::WallPartition))
+								? EDungeonTileType::WallPartition
+								: EDungeonTileType::WallSegment;
+							if (SlotActive(WallType))
+							{
+								const FRotator Rot = (WallType == EDungeonTileType::WallPartition) ? PartitionRot : WallRot;
+								const FVector WS = WallScale(WallType);
+								Out.Transforms[static_cast<int32>(WallType)].Emplace(
+									FTransform(Rot,
+										CellCenter + WC.Offset + PivotOffset(WallType, WS, Rot), WS));
+							}
 						}
 					}
 				}

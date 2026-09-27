@@ -243,3 +243,24 @@ bool FDungeonBoundaryRules::NeedsVerticalBoundary(const FDungeonGrid& Grid, cons
 	// 6. Different spaces, or two stacked flat hallways = boundary.
 	return true;
 }
+
+bool FDungeonBoundaryRules::OwnsSharedFace(const FDungeonGrid& Grid, const FIntVector& Current, int32 DX, int32 DY)
+{
+	const FIntVector N(Current.X + DX, Current.Y + DY, Current.Z);
+	if (!Grid.IsInBounds(N) || !IsOpenCell(Grid.GetCell(N).CellType))
+	{
+		return true; // rock-backed (or out of bounds): nobody else can dress it
+	}
+
+	// A stair cell never dresses a face toward an open neighbour: the ramp mesh fills the cell and
+	// the tile mapper only walls it against solid. Whoever faces the stair owns the face.
+	const bool bMineStair = IsStairFamilyCell(Grid.GetCell(Current).CellType);
+	const bool bTheirsStair = IsStairFamilyCell(Grid.GetCell(N).CellType);
+	if (bMineStair != bTheirsStair)
+	{
+		return bTheirsStair;
+	}
+
+	// The -X / -Y side of the face owns it: from that cell the face direction is +X / +Y.
+	return DX > 0 || DY > 0;
+}

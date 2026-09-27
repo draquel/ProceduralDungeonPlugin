@@ -14,8 +14,9 @@ void UDungeonTileSet::PopulateDefaultSlots()
 	static const EDungeonTileType BaseTypes[] = {
 		EDungeonTileType::RoomFloor, EDungeonTileType::HallwayFloor,
 		EDungeonTileType::RoomCeiling, EDungeonTileType::HallwayCeiling,
-		EDungeonTileType::WallSegment, EDungeonTileType::DoorFrame,
-		EDungeonTileType::EntranceFrame, EDungeonTileType::StaircaseMesh,
+		EDungeonTileType::WallSegment, EDungeonTileType::WallPartition,
+		EDungeonTileType::DoorFrame, EDungeonTileType::EntranceFrame,
+		EDungeonTileType::StaircaseMesh,
 	};
 	for (EDungeonTileType Type : BaseTypes)
 	{

@@ -5,6 +5,7 @@
 #include "DungeonGenerator.h"
 #include "DungeonTileSet.h"
 #include "DungeonTileMapper.h"
+#include "DungeonBoundaryRules.h"
 
 // ============================================================================
 // Test Helpers
@@ -647,5 +648,190 @@ bool FTileMapperOpenEntranceBelow::RunTest(const FString& Parameters)
 	}
 
 	CleanupTileSet(TS);
+	return true;
+}
+
+// ============================================================================
+// Shared-face ownership (environment polish E1)
+// ============================================================================
+
+namespace DungeonTileMapperTestHelpers
+{
+	/**
+	 * 6x3x1: a two-cell room (1..2, 1) beside a two-cell hallway (3..4, 1) with NO door between
+	 * them, RoomWall around the room, Empty elsewhere. The face between (2,1) and (3,1) needs a
+	 * wall from both sides.
+	 */
+	FDungeonResult CreateRoomBesideHallwayResult()
+	{
+		FDungeonResult Result;
+		Result.GridSize = FIntVector(6, 3, 1);
+		Result.CellWorldSize = 400.0f;
+		Result.Grid.Initialize(Result.GridSize);
+		for (int32 Y = 0; Y < 3; ++Y)
+			for (int32 X = 0; X < 4; ++X)
+			{
+				FDungeonCell& C = Result.Grid.GetCell(X, Y, 0);
+				C.CellType = EDungeonCellType::RoomWall; C.RoomIndex = 1;
+			}
+		for (int32 X = 1; X <= 2; ++X)
+		{
+			FDungeonCell& C = Result.Grid.GetCell(X, 1, 0);
+			C.CellType = EDungeonCellType::Room; C.RoomIndex = 1;
+		}
+		for (int32 X = 3; X <= 4; ++X)
+		{
+			FDungeonCell& C = Result.Grid.GetCell(X, 1, 0);
+			C.CellType = EDungeonCellType::Hallway; C.HallwayIndex = 1; C.RoomIndex = 0;
+		}
+		Result.EntranceRoomIndex = -1;
+		return Result;
+	}
+
+	/** Wall-family instances whose location matches a face centre (engine cube: zero pivot offset). */
+	int32 CountWallFamilyAt(const FDungeonTileMapResult& Map, const FVector& FaceCentre, EDungeonTileType* OutType = nullptr)
+	{
+		static const EDungeonTileType Family[] = {
+			EDungeonTileType::WallSegment, EDungeonTileType::WallPartition,
+			EDungeonTileType::DoorFrame, EDungeonTileType::EntranceFrame };
+		int32 N = 0;
+		for (EDungeonTileType T : Family)
+		{
+			for (const FTransform& Xf : Map.Transforms[static_cast<int32>(T)])
+			{
+				if (Xf.GetLocation().Equals(FaceCentre, 1.0f)) { ++N; if (OutType) { *OutType = T; } }
+			}
+		}
+		return N;
+	}
+}
+
+// --- The face between a room cell and a corridor cell is dressed once, by a partition ---
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTileMapperSharedFaceOnce,
+	"Dungeon.TileMapper.Walls.SharedFaceDressedOnceByOwner",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FTileMapperSharedFaceOnce::RunTest(const FString& Parameters)
+{
+	using namespace DungeonTileMapperTestHelpers;
+
+	UDungeonTileSet* TS = CreateTileSet();
+	const FDungeonResult Result = CreateRoomBesideHallwayResult();
+	// Face between cell (2,1) and (3,1): X = 3 * 400, Y = 1.5 * 400, Z = half cell.
+	const FVector SharedFace(1200.0f, 600.0f, 200.0f);
+	// A rock-backed face for contrast: cell (1,1)'s -X face.
+	const FVector RockFace(400.0f, 600.0f, 200.0f);
+
+	{
+		const FDungeonTileMapResult Map = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector);
+		EDungeonTileType Type = EDungeonTileType::COUNT;
+		TestEqual(TEXT("shared face: exactly one piece"), CountWallFamilyAt(Map, SharedFace, &Type), 1);
+		TestEqual(TEXT("shared face: it is a partition"), Type, EDungeonTileType::WallPartition);
+		TestEqual(TEXT("rock face: exactly one piece"), CountWallFamilyAt(Map, RockFace, &Type), 1);
+		TestEqual(TEXT("rock face: it is a wall segment"), Type, EDungeonTileType::WallSegment);
+		// The owner is the -X side (the room cell): the instance faces +X.
+		for (const FTransform& Xf : Map.Transforms[static_cast<int32>(EDungeonTileType::WallPartition)])
+		{
+			if (Xf.GetLocation().Equals(SharedFace, 1.0f))
+			{
+				TestTrue(TEXT("partition placed from the owning (-X) side, facing +X"),
+					FMath::IsNearlyEqual(FRotator::NormalizeAxis(Xf.Rotator().Yaw), 0.0f, 0.5f));
+			}
+		}
+	}
+
+	// Without a partition slot the owner falls back to the wall segment — still exactly one piece.
+	TS->Slots.Remove(EDungeonTileType::WallPartition);
+	{
+		const FDungeonTileMapResult Map = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector);
+		EDungeonTileType Type = EDungeonTileType::COUNT;
+		TestEqual(TEXT("no partition slot: still one piece"), CountWallFamilyAt(Map, SharedFace, &Type), 1);
+		TestEqual(TEXT("no partition slot: falls back to WallSegment"), Type, EDungeonTileType::WallSegment);
+	}
+
+	CleanupTileSet(TS);
+	return true;
+}
+
+// --- Coverage on generated dungeons: every wall-needing face of every open cell has exactly one
+// wall-family piece, shared faces included (two before E1) ---
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTileMapperWallCoverage,
+	"Dungeon.TileMapper.Walls.EveryFaceDressedExactlyOnce",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FTileMapperWallCoverage::RunTest(const FString& Parameters)
+{
+	using namespace DungeonTileMapperTestHelpers;
+
+	UDungeonConfiguration* Config = NewObject<UDungeonConfiguration>();
+	Config->AddToRoot();
+	Config->GridSize = FIntVector(24, 24, 3);
+	Config->RoomCount = 8;
+	Config->MinRoomSize = FIntVector(3, 3, 1);
+	Config->MaxRoomSize = FIntVector(6, 6, 2);
+	Config->RoomBuffer = 1;
+	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
+	Generator->AddToRoot();
+	UDungeonTileSet* TS = CreateTileSet();
+
+	static const int32 DX[4] = {1, -1, 0, 0};
+	static const int32 DY[4] = {0, 0, 1, -1};
+	int32 SharedFacesSeen = 0;
+
+	for (int64 Seed = 1; Seed <= 12; ++Seed)
+	{
+		const FDungeonResult R = Generator->Generate(Config, Seed);
+		if (R.Rooms.Num() < 2) { continue; }
+		const FDungeonTileMapResult Map = FDungeonTileMapper::MapToTiles(R, *TS, FVector::ZeroVector);
+		const float CS = R.CellWorldSize;
+
+		// Wall-family instances bucketed by face centre (rounded to a unit).
+		TMap<FIntVector, int32> ByFace;
+		static const EDungeonTileType Family[] = {
+			EDungeonTileType::WallSegment, EDungeonTileType::WallPartition,
+			EDungeonTileType::DoorFrame, EDungeonTileType::EntranceFrame };
+		for (EDungeonTileType T : Family)
+		{
+			for (const FTransform& Xf : Map.Transforms[static_cast<int32>(T)])
+			{
+				const FVector L = Xf.GetLocation();
+				ByFace.FindOrAdd(FIntVector(FMath::RoundToInt(L.X), FMath::RoundToInt(L.Y), FMath::RoundToInt(L.Z)))++;
+			}
+		}
+
+		TSet<FIntVector> Checked;
+		for (int32 Z = 0; Z < R.GridSize.Z; ++Z)
+		for (int32 Y = 0; Y < R.GridSize.Y; ++Y)
+		for (int32 X = 0; X < R.GridSize.X; ++X)
+		{
+			const FIntVector Cell(X, Y, Z);
+			const EDungeonCellType Type = R.Grid.GetCell(Cell).CellType;
+			if (!FDungeonBoundaryRules::IsOpenCell(Type)) { continue; }
+			// Stair cells are dressed by the ramp mesh; their walls are their neighbours' business.
+			if (Type == EDungeonCellType::Staircase || Type == EDungeonCellType::StaircaseHead) { continue; }
+			for (int32 D = 0; D < 4; ++D)
+			{
+				const int32 NX = X + DX[D], NY = Y + DY[D];
+				if (!FDungeonBoundaryRules::NeedsWall(R.Grid, Cell, NX, NY, Z)) { continue; }
+				const FIntVector Face(
+					FMath::RoundToInt((X + 0.5f + 0.5f * DX[D]) * CS),
+					FMath::RoundToInt((Y + 0.5f + 0.5f * DY[D]) * CS),
+					FMath::RoundToInt((Z + 0.5f) * CS));
+				if (Checked.Contains(Face)) { continue; }
+				Checked.Add(Face);
+				const bool bShared = R.Grid.IsInBounds(NX, NY, Z)
+					&& FDungeonBoundaryRules::IsOpenCell(R.Grid.GetCell(NX, NY, Z).CellType);
+				SharedFacesSeen += bShared ? 1 : 0;
+				const int32 Count = ByFace.FindRef(Face);
+				TestEqual(FString::Printf(TEXT("seed %lld cell %s dir %d (%s): one wall-family piece"),
+					Seed, *Cell.ToString(), D, bShared ? TEXT("shared") : TEXT("rock")), Count, 1);
+			}
+		}
+	}
+	TestTrue(TEXT("generated dungeons contained shared open faces (test is meaningful)"), SharedFacesSeen > 0);
+
+	CleanupTileSet(TS);
+	Generator->RemoveFromRoot();
+	Config->RemoveFromRoot();
 	return true;
 }

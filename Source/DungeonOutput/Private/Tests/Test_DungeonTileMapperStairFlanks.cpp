@@ -18,7 +18,10 @@ namespace DungeonTileMapperStairFlankTestHelpers
 	int32 CountWallsOnFace(const FDungeonTileMapResult& TileMap, const FVector& CellCenter, float CS, float Yaw)
 	{
 		int32 Count = 0;
-		for (const FTransform& T : TileMap.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)])
+		// Wall-family pieces: a rock-backed WallSegment or, on a face shared with another open cell
+		// (a flank seen from a corridor), the two-faced WallPartition placed by the owning side.
+		for (EDungeonTileType WallType : { EDungeonTileType::WallSegment, EDungeonTileType::WallPartition })
+		for (const FTransform& T : TileMap.Transforms[static_cast<int32>(WallType)])
 		{
 			if (FMath::Abs(FRotator::NormalizeAxis(T.Rotator().Yaw - Yaw)) > 1.0f)
 			{

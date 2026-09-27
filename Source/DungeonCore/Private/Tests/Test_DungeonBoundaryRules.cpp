@@ -415,3 +415,58 @@ bool FBoundaryReservedSolid::RunTest(const FString& Parameters)
 	{ FPair P; P.Cur(ECT::Entrance, 1); TestTrue(TEXT("Entrance -> Reserved above is a ceiling"), P.Above(ECT::Reserved).Ceiling()); }
 	return true;
 }
+
+// ---------------------------------------------------------------------------
+// Shared-face ownership: a face between two open cells is dressed by exactly one side.
+// ---------------------------------------------------------------------------
+
+BOUNDARY_TEST(FBoundarySharedFaceOwner, "Dungeon.BoundaryRules.SharedFaceOwnedByOneSide")
+bool FBoundarySharedFaceOwner::RunTest(const FString& Parameters)
+{
+	// 4x3x1: Room 1 at (1,1), Hallway 1 at (2,1), Staircase (hallway 2, climbing +Y) at (0,1);
+	// everything else Empty (solid).
+	FDungeonGrid Grid;
+	Grid.Initialize(FIntVector(4, 3, 1));
+	{ FDungeonCell& C = Grid.GetCell(1, 1, 0); C.CellType = ECT::Room; C.RoomIndex = 1; }
+	{ FDungeonCell& C = Grid.GetCell(2, 1, 0); C.CellType = ECT::Hallway; C.HallwayIndex = 1; }
+	{ FDungeonCell& C = Grid.GetCell(0, 1, 0); C.CellType = ECT::Staircase; C.HallwayIndex = 2; C.StaircaseDirection = 2; }
+
+	const FIntVector Room(1, 1, 0), Hall(2, 1, 0), Stair(0, 1, 0);
+
+	// Room | Hallway (no door): a wall from both sides per NeedsWall, dressed once by the -X side.
+	TestTrue(TEXT("room->hallway needs a wall"), FDungeonBoundaryRules::NeedsWall(Grid, Room, 2, 1, 0));
+	TestTrue(TEXT("hallway->room needs a wall"), FDungeonBoundaryRules::NeedsWall(Grid, Hall, 1, 1, 0));
+	TestTrue(TEXT("-X side (room) owns the shared face"), FDungeonBoundaryRules::OwnsSharedFace(Grid, Room, +1, 0));
+	TestFalse(TEXT("+X side (hallway) does not"), FDungeonBoundaryRules::OwnsSharedFace(Grid, Hall, -1, 0));
+
+	// Solid neighbours: always owned by the open cell.
+	TestTrue(TEXT("room->Empty (+Y) owned"), FDungeonBoundaryRules::OwnsSharedFace(Grid, Room, 0, +1));
+	TestTrue(TEXT("hallway->Empty (-Y) owned"), FDungeonBoundaryRules::OwnsSharedFace(Grid, Hall, 0, -1));
+	TestTrue(TEXT("out of bounds owned"), FDungeonBoundaryRules::OwnsSharedFace(Grid, Stair, -1, 0));
+
+	// Stair flank (staircase climbs +Y, so its +X face toward the room is a flank): the room owns
+	// it even though the room is on the +X side, because stairs never dress open faces.
+	TestTrue(TEXT("stair flank toward room needs a wall"), FDungeonBoundaryRules::NeedsWall(Grid, Room, 0, 1, 0));
+	TestTrue(TEXT("room owns the face toward the stair"), FDungeonBoundaryRules::OwnsSharedFace(Grid, Room, -1, 0));
+	TestFalse(TEXT("stair does not own its face toward the room"), FDungeonBoundaryRules::OwnsSharedFace(Grid, Stair, +1, 0));
+
+	// Symmetry over every open pair in the grid: exactly one owner per shared face.
+	static const int32 D[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+	for (int32 Y = 0; Y < 3; ++Y)
+	{
+		for (int32 X = 0; X < 4; ++X)
+		{
+			const FIntVector A(X, Y, 0);
+			if (!FDungeonBoundaryRules::IsOpenCell(Grid.GetCell(A).CellType)) { continue; }
+			for (const auto& Dir : D)
+			{
+				const FIntVector B(X + Dir[0], Y + Dir[1], 0);
+				if (!Grid.IsInBounds(B) || !FDungeonBoundaryRules::IsOpenCell(Grid.GetCell(B).CellType)) { continue; }
+				const bool bA = FDungeonBoundaryRules::OwnsSharedFace(Grid, A, Dir[0], Dir[1]);
+				const bool bB = FDungeonBoundaryRules::OwnsSharedFace(Grid, B, -Dir[0], -Dir[1]);
+				TestTrue(FString::Printf(TEXT("exactly one owner for %s <-> %s"), *A.ToString(), *B.ToString()), bA != bB);
+			}
+		}
+	}
+	return true;
+}

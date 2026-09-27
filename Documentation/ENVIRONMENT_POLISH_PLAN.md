@@ -1,6 +1,9 @@
 # Dungeon Environment Polish — Design Plan (final generation phase)
 
-**Status:** Proposed (not implemented). Follows the entrance-placement epic (P0–P3 merged,
+**Status:** E1 implemented on `feature/env-e1-face-ownership` (2026-09-27): `OwnsSharedFace`,
+`WallPartition` slot + mapper ownership, tileset defaults, coverage tests; demo tileset carries
+crypt on `WallSegment` and the thin stone wall on `WallPartition`. E2–E6 proposed. Follows the
+entrance-placement epic (P0–P3 merged,
 `ENTRANCE_PLACEMENT_PLAN.md`) and the tile module system (`TILE_MODULE_SYSTEM_PLAN.md`, P1–P4 done).
 **Scope:** `DungeonOutput` (tile mapper, tile set, dungeon actor), `DungeonEditor` (validation +
 authoring helpers), demo content (tileset + modules), and a small `VoxelWorldPOI` touch for the
