@@ -984,6 +984,37 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 				}
 			}
 		}
+
+		// Hallway walls last (E5): every Nth rock-backed face per hallway, so corridors read
+		// without competing with the rooms for the cap.
+		if (Rules.MaxWallLights > 0 && Rules.HallwayWallLightEvery > 0)
+		{
+			TMap<uint8, int32> FacesSeenPerHallway;
+			for (int32 Z = 0; Z < GridSize.Z && Out.Fixtures.Num() < Rules.MaxWallLights; ++Z)
+			for (int32 Y = 0; Y < GridSize.Y && Out.Fixtures.Num() < Rules.MaxWallLights; ++Y)
+			for (int32 X = 0; X < GridSize.X && Out.Fixtures.Num() < Rules.MaxWallLights; ++X)
+			{
+				const FDungeonCell& Cell = Result.Grid.GetCell(X, Y, Z);
+				if (Cell.CellType != EDungeonCellType::Hallway)
+				{
+					continue;
+				}
+				const FIntVector C(X, Y, Z);
+				for (int32 Dir = 0; Dir < 4; ++Dir)
+				{
+					if (!RockBacked(C, DX[Dir], DY[Dir]))
+					{
+						continue;
+					}
+					int32& Seen = FacesSeenPerHallway.FindOrAdd(Cell.HallwayIndex);
+					++Seen;
+					if (Seen % Rules.HallwayWallLightEvery == 0)
+					{
+						EmitFixture(C, DX[Dir], DY[Dir], FVector::ZeroVector);
+					}
+				}
+			}
+		}
 	}
 
 	// --- Decor (E4): seeded, density-driven dressing from the tileset's DecorRules ---
