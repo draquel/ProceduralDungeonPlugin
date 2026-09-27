@@ -39,6 +39,22 @@ enum class EDungeonTileType : uint8
 	 * WallSegment (which may extrude outward into the rock). Falls back to WallSegment when unset.
 	 */
 	WallPartition,
+	/**
+	 * Post where two walled faces of one open cell meet (a room or corridor corner). Anchor: the
+	 * corner point on the cell floor pulled onto BOTH wall faces (in by WallProfile.FaceInset from
+	 * a rock-backed face, by half PartitionThickness from a partition), local +X along the diagonal
+	 * INTO the cell. Author the post centred on the anchor: it then straddles the face, half of it
+	 * proud. Placed once per corner point. Modules scale uniformly by cell / ReferenceCellSize; a
+	 * single mesh scales uniformly by cell / WallProfile.ReferenceCellSize (no per-axis fit). Optional.
+	 */
+	WallCornerInner,
+	/**
+	 * Post where a wall run ENDS at an opening that carries no frame: the mouth of a side corridor,
+	 * a room wall stopping at an open face. Anchor: the corner point pulled onto the ending wall's
+	 * face (same depths as WallCornerInner), +X along the wall's direction of travel into the open
+	 * face. Never placed beside a door / entrance frame (the frame's jambs cover that corner). Optional.
+	 */
+	WallCornerOuter,
 	COUNT UMETA(Hidden)
 };
 

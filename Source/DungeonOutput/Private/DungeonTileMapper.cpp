@@ -179,13 +179,34 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	};
 
 	// Wall target: Thin × CS × CS — mesh local X=thin, Y=width, Z=height (pre-rotation)
+	// The wall profile, scaled to this cell size. Single wall meshes are fitted to it: a
+	// rock-backed wall or frame keeps the TileThickness slab but is shifted so its finished face
+	// lands FaceInset inside the plane; a partition is PartitionThickness thick, centred on the
+	// plane. Modules are authored to the profile and placed as-is (the conformance check proves it).
+	const FDungeonWallProfile& Profile = TileSet.WallProfile;
+	const float ProfileScale = CS / FMath::Max(Profile.ReferenceCellSize, 1.0f);
+	const float FaceInsetW = Profile.FaceInset * ProfileScale;
+	const float PartitionThickW = Profile.PartitionThickness * ProfileScale;
+
 	auto WallScale = [&](EDungeonTileType Type) -> FVector
 	{
 		const int32 Idx = static_cast<int32>(Type);
 		if (bTypeIsModule[Idx]) { return FVector(ModuleUniformScale[Idx]); }
 		const FVector& M = ScaleMultipliers[Idx];
 		const FVector& E = MeshInfos[Idx].Extent;
-		return FVector(Thin / E.X * M.X, CS / E.Y * M.Y, CS / E.Z * M.Z);
+		const float Thickness = (Type == EDungeonTileType::WallPartition) ? PartitionThickW : Thin;
+		return FVector(Thickness / E.X * M.X, CS / E.Y * M.Y, CS / E.Z * M.Z);
+	};
+
+	// Where a single wall mesh's slab sits relative to the face plane: the auto-fit centres it on
+	// the plane (face at -Thin/2), so a rock-backed piece slides outward by (Thin/2 - FaceInset)
+	// to put its finished face at the profile inset. Partitions stay centred. Zero for modules.
+	auto WallFaceShift = [&](EDungeonTileType Type, int32 DX, int32 DY) -> FVector
+	{
+		const int32 Idx = static_cast<int32>(Type);
+		if (bTypeIsModule[Idx] || Type == EDungeonTileType::WallPartition) { return FVector::ZeroVector; }
+		const float Shift = Thin * 0.5f - FaceInsetW;
+		return FVector(DX * Shift, DY * Shift, 0.0f);
 	};
 
 	// Pivot correction: offset placement so the mesh's bounding box center
@@ -491,7 +512,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 								const FVector WS = WallScale(EDungeonTileType::WallSegment);
 								Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
 									FTransform(WallRot,
-										CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
+										CellCenter + WC.Offset + WallFaceShift(EDungeonTileType::WallSegment, WC.DX, WC.DY)
+											+ PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 							}
 						}
 						else
@@ -517,7 +539,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 									const FVector FS = WallScale(FrameType);
 									Out.Transforms[static_cast<int32>(FrameType)].Emplace(
 										FTransform(FrameRot,
-											CellCenter + WC.Offset + PivotOffset(FrameType, FS, FrameRot), FS));
+											CellCenter + WC.Offset + WallFaceShift(FrameType, WC.DX, WC.DY)
+												+ PivotOffset(FrameType, FS, FrameRot), FS));
 								}
 							}
 						}
@@ -537,7 +560,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 							const FVector WS = WallScale(EDungeonTileType::WallSegment);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::WallSegment)].Emplace(
 								FTransform(WallRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
+									CellCenter + WC.Offset + WallFaceShift(EDungeonTileType::WallSegment, WC.DX, WC.DY)
+										+ PivotOffset(EDungeonTileType::WallSegment, WS, WallRot), WS));
 						}
 					}
 					else
@@ -560,7 +584,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 							const FVector FS = WallScale(EDungeonTileType::DoorFrame);
 							Out.Transforms[static_cast<int32>(EDungeonTileType::DoorFrame)].Emplace(
 								FTransform(DoorRot,
-									CellCenter + WC.Offset + PivotOffset(EDungeonTileType::DoorFrame, FS, DoorRot), FS));
+									CellCenter + WC.Offset + WallFaceShift(EDungeonTileType::DoorFrame, WC.DX, WC.DY)
+										+ PivotOffset(EDungeonTileType::DoorFrame, FS, DoorRot), FS));
 						}
 						else if (bWall)
 						{
@@ -583,11 +608,129 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 								const FVector WS = WallScale(WallType);
 								Out.Transforms[static_cast<int32>(WallType)].Emplace(
 									FTransform(Rot,
-										CellCenter + WC.Offset + PivotOffset(WallType, WS, Rot), WS));
+										CellCenter + WC.Offset + WallFaceShift(WallType, WC.DX, WC.DY)
+											+ PivotOffset(WallType, WS, Rot), WS));
 							}
 						}
 					}
 				}
+			}
+		}
+	}
+
+	// --- Corner posts (optional slots) ---
+	// Placed once per corner point on the cell floor. Inner: two walled faces of one open cell
+	// meet. Outer: a wall run ends at an open face that carries no frame (the mouth of a side
+	// corridor, a room wall stopping at an opening); never beside a door / entrance frame, whose
+	// jambs cover that corner. "Walled" = NeedsWall, whoever owns the piece.
+	const bool bInnerCorners = SlotActive(EDungeonTileType::WallCornerInner);
+	const bool bOuterCorners = SlotActive(EDungeonTileType::WallCornerOuter);
+	if (bInnerCorners || bOuterCorners)
+	{
+		auto CornerScale = [&](EDungeonTileType Type) -> FVector
+		{
+			const int32 Idx = static_cast<int32>(Type);
+			return bTypeIsModule[Idx] ? FVector(ModuleUniformScale[Idx]) : FVector(ProfileScale);
+		};
+		auto IsFrameCell = [](EDungeonCellType T)
+		{
+			return T == EDungeonCellType::Door || T == EDungeonCellType::Entrance;
+		};
+		auto CellTypeAt = [&](int32 CX, int32 CY, int32 CZ) -> EDungeonCellType
+		{
+			return Result.Grid.IsInBounds(CX, CY, CZ) ? Result.Grid.GetCell(CX, CY, CZ).CellType : EDungeonCellType::Empty;
+		};
+		auto Walled = [&](const FIntVector& C, int32 WDX, int32 WDY) -> bool
+		{
+			return FDungeonBoundaryRules::NeedsWall(Result.Grid, C, C.X + WDX, C.Y + WDY, C.Z);
+		};
+
+		// How far inside the cell plane a walled face's visible surface sits: a rock-backed wall is
+		// finished at FaceInset; a partition (open neighbour) is centred on the plane, so its face
+		// is half its thickness in. Posts are pulled in by this along each walled face's normal so
+		// they stand ON the face instead of hidden behind the inset.
+		auto FaceDepth = [&](const FIntVector& C, int32 WDX, int32 WDY) -> float
+		{
+			const int32 NX = C.X + WDX, NY = C.Y + WDY;
+			const bool bNeighborOpen = Result.Grid.IsInBounds(NX, NY, C.Z)
+				&& FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(NX, NY, C.Z).CellType);
+			return (bNeighborOpen && SlotActive(EDungeonTileType::WallPartition)) ? PartitionThickW * 0.5f : FaceInsetW;
+		};
+
+		// Corner lattice key: doubled cell coords + face offsets, so a point shared by up to four
+		// cells maps to one key. Inset = pull-in along each walled face's normal (see FaceDepth).
+		TSet<FIntVector> Placed;
+		auto Place = [&](EDungeonTileType Type, const FIntVector& C, int32 CDXv, int32 CDYv, const FVector& Inset, float Yaw)
+		{
+			const FIntVector Key(2 * C.X + CDXv, 2 * C.Y + CDYv, C.Z);
+			if (Placed.Contains(Key)) { return; }
+			Placed.Add(Key);
+			const FVector Base = Result.GridToWorld(C) + WorldOffset;
+			const FVector Corner = Base + FVector(HalfCS + CDXv * HalfCS, HalfCS + CDYv * HalfCS, 0.0f) + Inset;
+			const FRotator Rot = ApplyRot(Type, FRotator(0.0f, Yaw, 0.0f));
+			Out.Transforms[static_cast<int32>(Type)].Emplace(FTransform(Rot, Corner, CornerScale(Type)));
+		};
+
+		for (int32 Z = 0; Z < GridSize.Z; ++Z)
+		for (int32 Y = 0; Y < GridSize.Y; ++Y)
+		for (int32 X = 0; X < GridSize.X; ++X)
+		{
+			const FIntVector C(X, Y, Z);
+			const EDungeonCellType T = Result.Grid.GetCell(C).CellType;
+			if (!FDungeonBoundaryRules::IsOpenCell(T)
+				|| T == EDungeonCellType::Staircase || T == EDungeonCellType::StaircaseHead)
+			{
+				continue;
+			}
+			for (int32 A = 0; A < 2; ++A)          // X faces: +X, -X
+			for (int32 B = 2; B < 4; ++B)          // Y faces: +Y, -Y
+			{
+				const int32 DXA = DX[A], DYB = DY[B];
+				const bool bWalledA = Walled(C, DXA, 0);
+				const bool bWalledB = Walled(C, 0, DYB);
+
+				if (bWalledA && bWalledB)
+				{
+					if (bInnerCorners)
+					{
+						// +X points along the diagonal into the cell; pulled onto both wall faces.
+						const FVector Inset(-DXA * FaceDepth(C, DXA, 0), -DYB * FaceDepth(C, 0, DYB), 0.0f);
+						Place(EDungeonTileType::WallCornerInner, C, DXA, DYB, Inset,
+							FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(-DYB), static_cast<float>(-DXA))));
+					}
+					continue;
+				}
+				if (!bOuterCorners || IsFrameCell(T) || bWalledA == bWalledB)
+				{
+					continue;
+				}
+				// Exactly one of the two faces is walled: does that wall continue into the
+				// neighbour across the open face? If not, it ends here.
+				const int32 WDX = bWalledA ? DXA : 0, WDY = bWalledA ? 0 : DYB;   // the walled face
+				const int32 ODX = bWalledA ? 0 : DXA, ODY = bWalledA ? DYB : 0;   // the open face
+				const FIntVector N(C.X + ODX, C.Y + ODY, C.Z);
+				const EDungeonCellType NT = CellTypeAt(N.X, N.Y, N.Z);
+				if (!FDungeonBoundaryRules::IsOpenCell(NT) || IsFrameCell(NT)
+					|| NT == EDungeonCellType::Staircase || NT == EDungeonCellType::StaircaseHead)
+				{
+					continue;
+				}
+				if (Walled(N, WDX, WDY))
+				{
+					continue; // the wall runs on
+				}
+				// The wall stops because the neighbour's face is an opening, unless that opening
+				// is a door / entrance frame (its jambs cover the corner).
+				if (IsFrameCell(CellTypeAt(N.X + WDX, N.Y + WDY, N.Z)))
+				{
+					continue;
+				}
+				// +X points along the wall's direction of travel, into the open face; pulled onto
+				// the ending wall's face (nothing along the open face, the post marks the wall end).
+				const float Depth = FaceDepth(C, WDX, WDY);
+				const FVector Inset(-WDX * Depth, -WDY * Depth, 0.0f);
+				Place(EDungeonTileType::WallCornerOuter, C, DXA, DYB, Inset,
+					FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(ODY), static_cast<float>(ODX))));
 			}
 		}
 	}

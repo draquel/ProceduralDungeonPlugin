@@ -42,6 +42,57 @@ struct DUNGEONOUTPUT_API FDungeonTileSlot
 };
 
 /**
+ * The wall profile every wall-family piece of a tileset is authored to, so walls, partitions,
+ * door and entrance frames and corner posts align by construction instead of by memory. All
+ * distances are at ReferenceCellSize (like module authoring) and scale with the cell.
+ *
+ * Module frame reminder (see UDungeonModuleTools): the anchor is the face centre with local +X
+ * OUTWARD across the face, so a piece's finished face toward the room lies at negative X.
+ *
+ *   WallSegment / DoorFrame / EntranceFrame body: finished face at X = -FaceInset; the body may
+ *     extrude outward (into the rock) freely; decorative elements (frame jambs, pilasters) may
+ *     stand proud of the face by at most MaxProtrusion.
+ *   WallPartition: symmetric about the plane, X in [-PartitionThickness/2, +PartitionThickness/2]
+ *     (plus MaxProtrusion for decoration on either side).
+ *   Single-mesh slots are fitted by the mapper to the same numbers.
+ *
+ * FDungeonWallProfileConformance measures modules against this; the editor validator and
+ * Dungeon.WallProfile.* tests report anything off.
+ */
+USTRUCT(BlueprintType)
+struct DUNGEONOUTPUT_API FDungeonWallProfile
+{
+	GENERATED_BODY()
+
+	/** Cell size the distances below are expressed at. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile", meta = (ClampMin = "1.0"))
+	float ReferenceCellSize = 400.0f;
+
+	/** Finished face distance INSIDE the cell plane for rock-backed walls and frames. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile", meta = (ClampMin = "0.0"))
+	float FaceInset = 40.0f;
+
+	/** Full thickness of a partition (a wall shared by two open cells), centred on the plane. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile", meta = (ClampMin = "1.0"))
+	float PartitionThickness = 80.0f;
+
+	/** Clear opening of a doorway (informational for authors and the door-leaf actor; not measured yet). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile", meta = (ClampMin = "1.0"))
+	float OpeningWidth = 240.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile", meta = (ClampMin = "1.0"))
+	float OpeningHeight = 320.0f;
+
+	/** How far decoration (jambs, pilasters, trim) may stand proud of the finished face. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile", meta = (ClampMin = "0.0"))
+	float MaxProtrusion = 30.0f;
+
+	/** Measurement tolerance. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Profile", meta = (ClampMin = "0.0"))
+	float Tolerance = 2.0f;
+};
+
+/**
  * Maps each dungeon tile type to its geometry (mesh or module) + orientation, via one
  * FDungeonTileSlot per type (Slots). Assign this to ADungeonActor to control dungeon appearance.
  *
@@ -65,6 +116,17 @@ public:
 	 *  doors, entrances, and staircases are treated as walls, producing end caps at transitions. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
 	bool bHallwayVariantsHallwayOnly = false;
+
+	/** The wall profile the wall-family slots are authored to (see FDungeonWallProfile). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	FDungeonWallProfile WallProfile;
+
+	/**
+	 * Measure every wall-family module against WallProfile. One line per problem; empty = conforms.
+	 * Loads the module meshes. Also run by the editor asset validator on save.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "TileSet")
+	TArray<FString> CheckWallProfile() const;
 
 	// --- Accessors (read Slots; safe for missing types) ---
 
