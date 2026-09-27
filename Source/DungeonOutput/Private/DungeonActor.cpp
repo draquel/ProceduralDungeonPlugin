@@ -58,28 +58,11 @@ void ADungeonActor::GenerateDungeon()
 	}
 	const FDungeonTileMapResult& TileMap = CachedTileMap;
 
-	// Resolve each tile type to its single mesh + a display name, from the consolidated slots.
-	struct FTileSlot
-	{
-		EDungeonTileType Type;
-		TSoftObjectPtr<UStaticMesh> Mesh;
-		FName Name;
-	};
-
-	TArray<FTileSlot> Slots;
-	Slots.Reserve(FDungeonTileMapResult::TypeCount);
-	const UEnum* TypeEnum = StaticEnum<EDungeonTileType>();
-	for (int32 i = 0; i < FDungeonTileMapResult::TypeCount; ++i)
-	{
-		const EDungeonTileType Type = static_cast<EDungeonTileType>(i);
-		const FName Name = TypeEnum ? FName(*TypeEnum->GetNameStringByValue(i)) : NAME_None;
-		Slots.Add({ Type, TileSet->GetMesh(Type), Name });
-	}
-
-	// --- Resolve tiles to render batches (mesh + material identity), expanding modules ---
-	// One HISM is created per unique (mesh, material) across the whole tileset, so identical
-	// geometry — whether from different tile types or from module elements — shares one instanced
-	// component. Legacy single-mesh slots emit one instance each; a module slot expands to one
+	// --- Resolve instances to render batches (mesh + material identity), by PIECE ---
+	// Every instance carries a piece id (E4: a slot's own geometry, a weighted variant, or a
+	// room-type override). One HISM is created per unique (mesh, material) across the whole map,
+	// so identical geometry — from different tile types, pieces or module elements — shares one
+	// instanced component. A single-mesh piece emits one instance; a module piece expands to one
 	// instance per element at (ModuleElement.RelativeTransform * TileAnchor). See
 	// Documentation/TILE_MODULE_SYSTEM_PLAN.md.
 	struct FRenderBatch
@@ -97,74 +80,102 @@ void ADungeonActor::GenerateDungeon()
 	};
 
 	TMap<FName, FRenderBatch> Batches;
+	TMap<int32, UDungeonTileModule*> ModuleByPiece;
+	TMap<int32, UStaticMesh*> MeshByPiece;
+	TMap<FSoftObjectPath, UStaticMesh*> ElementMeshes;
+	const UEnum* TypeEnum = StaticEnum<EDungeonTileType>();
 
-	for (const FTileSlot& Slot : Slots)
+	for (int32 TypeIdx = 0; TypeIdx < FDungeonTileMapResult::TypeCount; ++TypeIdx)
 	{
-		const TArray<FTransform>& Transforms = TileMap.Transforms[static_cast<int32>(Slot.Type)];
-		if (Transforms.Num() == 0)
+		const TArray<FTransform>& Transforms = TileMap.Transforms[TypeIdx];
+		const TArray<int32>& Ids = TileMap.PieceIds[TypeIdx];
+		const FString TypeName = TypeEnum ? TypeEnum->GetNameStringByValue(TypeIdx) : FString::FromInt(TypeIdx);
+		for (int32 i = 0; i < Transforms.Num(); ++i)
 		{
-			continue;
-		}
-
-		// Module override for this type? (StaircaseMesh is a bespoke ramp — mesh-only, matches the
-		// mapper's skip.)
-		UDungeonTileModule* Module = nullptr;
-		if (Slot.Type != EDungeonTileType::StaircaseMesh)
-		{
-			const TSoftObjectPtr<UDungeonTileModule> ModulePtr = TileSet->GetModule(Slot.Type);
-			if (!ModulePtr.IsNull())
+			const int32 PieceId = Ids.IsValidIndex(i) ? Ids[i] : INDEX_NONE;
+			if (!TileMap.Pieces.IsValidIndex(PieceId))
 			{
-				UDungeonTileModule* Loaded = ModulePtr.LoadSynchronous();
-				if (Loaded && Loaded->HasGeometry())
-				{
-					Module = Loaded;
-				}
+				UE_LOG(LogDungeonOutput, Warning, TEXT("Tile type %s instance %d has no piece — skipped"), *TypeName, i);
+				continue;
 			}
-		}
-
-		if (Module)
-		{
-			for (const FDungeonModuleElement& Element : Module->Elements)
+			const FDungeonTilePiece& Piece = TileMap.Pieces[PieceId];
+			if (!Piece.Module.IsNull())
 			{
-				if (Element.Mesh.IsNull())
+				UDungeonTileModule* Module = nullptr;
+				if (UDungeonTileModule** Cached = ModuleByPiece.Find(PieceId))
+				{
+					Module = *Cached;
+				}
+				else
+				{
+					Module = Piece.Module.LoadSynchronous();
+					ModuleByPiece.Add(PieceId, Module);
+					if (!Module)
+					{
+						UE_LOG(LogDungeonOutput, Warning, TEXT("Module for %s: failed to load"), *TypeName);
+					}
+				}
+				if (!Module)
 				{
 					continue;
 				}
-				UStaticMesh* ElementMesh = Element.Mesh.LoadSynchronous();
-				if (!ElementMesh)
+				for (const FDungeonModuleElement& Element : Module->Elements)
 				{
-					UE_LOG(LogDungeonOutput, Warning, TEXT("Module for %s: failed to load element mesh"), *Slot.Name.ToString());
-					continue;
-				}
-				UMaterialInterface* ElementMat = Element.MaterialOverride.IsNull()
-					? nullptr : Element.MaterialOverride.LoadSynchronous();
-
-				FRenderBatch& Batch = Batches.FindOrAdd(BatchKey(ElementMesh, ElementMat));
-				Batch.Mesh = ElementMesh;
-				Batch.Material = ElementMat;
-				Batch.Instances.Reserve(Batch.Instances.Num() + Transforms.Num());
-				for (const FTransform& Anchor : Transforms)
-				{
+					if (Element.Mesh.IsNull())
+					{
+						continue;
+					}
+					UStaticMesh* ElementMesh = nullptr;
+					if (UStaticMesh** Cached = ElementMeshes.Find(Element.Mesh.ToSoftObjectPath()))
+					{
+						ElementMesh = *Cached;
+					}
+					else
+					{
+						ElementMesh = Element.Mesh.LoadSynchronous();
+						ElementMeshes.Add(Element.Mesh.ToSoftObjectPath(), ElementMesh);
+						if (!ElementMesh)
+						{
+							UE_LOG(LogDungeonOutput, Warning, TEXT("Module for %s: failed to load element mesh"), *TypeName);
+						}
+					}
+					if (!ElementMesh)
+					{
+						continue;
+					}
+					UMaterialInterface* ElementMat = Element.MaterialOverride.IsNull()
+						? nullptr : Element.MaterialOverride.LoadSynchronous();
+					FRenderBatch& Batch = Batches.FindOrAdd(BatchKey(ElementMesh, ElementMat));
+					Batch.Mesh = ElementMesh;
+					Batch.Material = ElementMat;
 					// child-local * parent-world = world; the anchor carries the uniform cell scale.
-					Batch.Instances.Add(Element.RelativeTransform * Anchor);
+					Batch.Instances.Add(Element.RelativeTransform * Transforms[i]);
 				}
 			}
-		}
-		else
-		{
-			if (Slot.Mesh.IsNull())
+			else
 			{
-				continue;
+				UStaticMesh* LoadedMesh = nullptr;
+				if (UStaticMesh** Cached = MeshByPiece.Find(PieceId))
+				{
+					LoadedMesh = *Cached;
+				}
+				else
+				{
+					LoadedMesh = Piece.Mesh.LoadSynchronous();
+					MeshByPiece.Add(PieceId, LoadedMesh);
+					if (!LoadedMesh)
+					{
+						UE_LOG(LogDungeonOutput, Warning, TEXT("Failed to load mesh for tile type %s"), *TypeName);
+					}
+				}
+				if (!LoadedMesh)
+				{
+					continue;
+				}
+				FRenderBatch& Batch = Batches.FindOrAdd(BatchKey(LoadedMesh, nullptr));
+				Batch.Mesh = LoadedMesh;
+				Batch.Instances.Add(Transforms[i]);
 			}
-			UStaticMesh* LoadedMesh = Slot.Mesh.LoadSynchronous();
-			if (!LoadedMesh)
-			{
-				UE_LOG(LogDungeonOutput, Warning, TEXT("Failed to load mesh for tile type %s"), *Slot.Name.ToString());
-				continue;
-			}
-			FRenderBatch& Batch = Batches.FindOrAdd(BatchKey(LoadedMesh, nullptr));
-			Batch.Mesh = LoadedMesh;
-			Batch.Instances.Append(Transforms);
 		}
 	}
 

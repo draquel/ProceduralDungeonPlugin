@@ -100,26 +100,55 @@ void FDungeonWallProfileConformance::Check(const UDungeonTileSet& TileSet, TArra
 		EDungeonTileType::DoorFrame, EDungeonTileType::EntranceFrame };
 	const UEnum* TypeEnum = StaticEnum<EDungeonTileType>();
 
-	for (EDungeonTileType Type : Family)
+	// Every module a wall-family slot can resolve to: the slot's own, each variant's, and the
+	// same for every room-type override. Single meshes are skipped (the mapper fits them).
+	auto CheckModule = [&](EDungeonTileType Type, const TSoftObjectPtr<UDungeonTileModule>& ModulePtr, const TCHAR* Where)
 	{
-		const FDungeonTileSlot& Slot = TileSet.GetSlot(Type);
-		if (!Slot.HasModule())
+		if (ModulePtr.IsNull())
 		{
-			continue; // single mesh: the mapper fits it to the profile
+			return;
 		}
-		const UDungeonTileModule* Module = Slot.Module.LoadSynchronous();
+		const FString Name = FString::Printf(TEXT("%s%s"),
+			TypeEnum ? *TypeEnum->GetNameStringByValue(static_cast<int64>(Type)) : TEXT("?"), Where);
+		const UDungeonTileModule* Module = ModulePtr.LoadSynchronous();
 		if (!Module)
 		{
-			OutIssues.Add(FString::Printf(TEXT("%s: module failed to load"),
-				TypeEnum ? *TypeEnum->GetNameStringByValue(static_cast<int64>(Type)) : TEXT("?")));
-			continue;
+			OutIssues.Add(FString::Printf(TEXT("%s: module failed to load"), *Name));
+			return;
 		}
 		FDungeonWallProfileMeasure M;
 		M.Type = Type;
 		if (!MeasureModule(*Module, TileSet.WallProfile.ReferenceCellSize, M))
 		{
-			continue; // no geometry: nothing to measure
+			return; // no geometry: nothing to measure
 		}
-		CheckMeasure(M, TileSet.WallProfile, OutIssues);
+		TArray<FString> Issues;
+		CheckMeasure(M, TileSet.WallProfile, Issues);
+		for (const FString& Issue : Issues)
+		{
+			// The measure names the type; add where the module came from when it is not the base slot.
+			OutIssues.Add(Where[0] ? Issue.Replace(*TypeEnum->GetNameStringByValue(static_cast<int64>(Type)), *Name) : Issue);
+		}
+	};
+	auto CheckSlot = [&](EDungeonTileType Type, const FDungeonTileSlot& Slot, const FString& Where)
+	{
+		CheckModule(Type, Slot.Module, *Where);
+		for (int32 i = 0; i < Slot.Variants.Num(); ++i)
+		{
+			CheckModule(Type, Slot.Variants[i].Module, *FString::Printf(TEXT("%s variant %d"), *Where, i));
+		}
+	};
+	for (EDungeonTileType Type : Family)
+	{
+		CheckSlot(Type, TileSet.GetSlot(Type), FString());
+		for (const TPair<EDungeonRoomType, FDungeonRoomTypeOverride>& OPair : TileSet.RoomTypeOverrides)
+		{
+			if (const FDungeonTileSlot* OSlot = OPair.Value.Slots.Find(Type))
+			{
+				const UEnum* RoomEnum = StaticEnum<EDungeonRoomType>();
+				CheckSlot(Type, *OSlot, FString::Printf(TEXT(" (%s override)"),
+					RoomEnum ? *RoomEnum->GetNameStringByValue(static_cast<int64>(OPair.Key)) : TEXT("?")));
+			}
+		}
 	}
 }

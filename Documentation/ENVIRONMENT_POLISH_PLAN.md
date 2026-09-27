@@ -1,6 +1,6 @@
 # Dungeon Environment Polish — Design Plan (final generation phase)
 
-**Status:** E3 done on `feature/env-e3-interactables` (2026-09-27, 132/132 in-editor, PIE-verified incl. state kept across stream-out / stream-in): the mapper emits `FDungeonOpening` (Doorway / StairEntry / EntranceOpening, with the leaf hinge) and `FDungeonFixture` (wall lights per `FDungeonFixtureRules`) beside the tiles; `ADungeonActor::BuildDungeon` is the ONE build every consumer uses; VoxelWorldPOI adds `APOIDungeonInteractables` (structure), `APOIDungeonDoor`, `APOIDungeonTorch` and the placement subsystem's per-dungeon `InteractableStates` record + `RebuildStampedDungeon`. E2 merged (PDP#17 / parent #50). E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
+**Status:** E4 done on `feature/env-e4-variety` (2026-09-27, 135/135 in-editor, PIE-verified): every placement resolves to a PIECE (a slot's own geometry, one of its weighted `Variants`, or a `RoomTypeOverrides` slot) picked by a seeded hash; `FDungeonTileMapResult::PieceIds` / `Pieces` carry it and `ADungeonActor` batches by piece; `WallDecor` / `FloorDecor` / `HallwayDecor` slots place by `DecorRules` densities; the hallway ceiling straight fudge is folded into `TM_HallwayCeilingStraight` (no slot carries a per-axis multiplier). E3 merged (PDP#18 / parent #51). E2 merged (PDP#17 / parent #50). E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
 `WallPartition` slot + mapper ownership (not a tileset default: map properties serialize as a
 delta against the class default, so a new default key would appear as an engine cube in every
 existing tileset), coverage tests; demo tileset carries
@@ -155,6 +155,34 @@ two single-sided pack quads back to back).
   faces), `FloorDecor` (rubble, puddles on some room cells), `HallwayDecor`. Decor is instanced
   like everything else; density is a tileset number, selection is seeded.
 - Fold the hallway ceiling scale fudges into modules so no slot carries a per-axis multiplier.
+
+**As built (E4, 2026-09-27):**
+
+- Pieces. The mapper flattens every slot's own mesh / module plus its `Variants` (each with its own
+  rotation offset, scale multiplier and `Weight`) into a piece table, per tile type, and again per
+  `RoomTypeOverrides` entry. A placement calls `Pick(type, cell, salt)`: the cell's room type selects
+  the override list when one exists for the type, else the base list; a weighted draw from
+  `Hash01(seed, cell, type, salt)` (FNV-1a + murmur fmix — FNV alone left nearby salts correlated,
+  so a density roll and the pick that followed it were not independent) chooses the piece. Every
+  instance carries its piece id; `ADungeonActor` groups instances by piece and expands modules per
+  element. The fit helpers (floor / wall scale, pivot, slab lift, rotation compose) read the PIECE,
+  so a single-mesh variant is auto-fit exactly like the slot's own mesh, and a module variant is
+  placed at the uniform cell scale.
+- A type renders only if its BASE slot has geometry; an override swaps what, never where or whether.
+  Hallway-variant base pieces now compose their rotation offset like everything else (before, the
+  base hallway floor / ceiling ignored it).
+- Decor: `WallDecor` on rock-backed room / corridor faces (fixture faces skipped by default),
+  `FloorDecor` on room cells, `HallwayDecor` on hallway cells; never the entrance opening cell.
+  Wall decor anchors on the finished face at floor level (+X into the cell — the fixture convention),
+  cell decor at the cell centre with a seeded quarter-turn yaw; uniform profile scale, no per-axis
+  fit, so author decor as modules or base-pivot meshes at reference scale.
+- Content lessons: a floor VARIANT must match its base's convention — a single-mesh variant beside a
+  module base gets the slab fit (the flagstone stretched 4.3x in Z and stepped above the module's
+  slab), so the turned flagstone is a module (`TM_FloorFlagstoneTurned`). Wall variants are modules
+  authored to the profile (`TM_WallPlain`, one pack quad on the face); the conformance check now
+  covers variant and override modules. Demo: crypt 3 : plain 1 walls, flagstone 2 : turned 1
+  floors, wall decor shield / shelf / web, floor decor barrel / crate / rubble / bricks / wood,
+  boss room = plain ceiling + coffins, treasure room = crates.
 
 ### 3.5 Lighting
 
