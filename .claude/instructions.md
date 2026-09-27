@@ -51,8 +51,13 @@ DungeonVoxelIntegration → Optional VoxelWorlds bridge (disabled by default)
 
 ### Output Classes
 - `ADungeonActor` — Runtime actor owning a generated dungeon
-- `FDungeonTileMapper` — Grid cell → static mesh mapping with ISM batching
-- `UDungeonTileSet` — Data asset mapping cell types to meshes
+- `FDungeonTileMapper` — Grid cell → tile instances (per piece), plus `Openings` (door leaves), `Fixtures` (wall lights); the wall profile fit and corner posts live here
+- `UDungeonTileSet` — Data asset: per-type `FDungeonTileSlot` (mesh or module, weighted `Variants`), `RoomTypeOverrides`, `WallProfile`, `FixtureRules`, `DecorRules`, `InteriorLighting`, door-leaf / wall-light meshes
+- `FDungeonBoundaryRules` (DungeonCore) — the ONE source of wall / floor / ceiling decisions, incl. `OwnsSharedFace`; the tile mapper and voxel stamper both call it
+- `FDungeonWallProfileConformance` — measures wall-family modules (variants and overrides included) against the tileset profile; `UDungeonTileSetValidator` (DungeonEditor) surfaces it as asset validation
+- `FDungeonCoverage` — light-tightness report of a tile map (needed boundaries vs placed pieces); `ADungeonActor::DescribeCoverage`
+- `ADungeonActor::BuildDungeon` — the single generate + map entry point every consumer (the actor, POI gameplay) goes through
+- See `Documentation/ENVIRONMENT_POLISH_PLAN.md` (E1–E6 as built) and `TILE_MODULE_SYSTEM_PLAN.md`
 
 ### VoxelWorlds Integration Classes
 - `UDungeonVoxelStamper` — Converts dungeon cells to voxel edit operations

@@ -1,6 +1,6 @@
 # Dungeon Environment Polish — Design Plan (final generation phase)
 
-**Status:** E5 done on `feature/env-e5-lighting` (2026-09-27, 137/137 in-editor, PIE-verified): `FDungeonCoverage` light-tightness report (+ actor accessor and red-box debug overlay; generated dungeons are light-tight by test), `FDungeonInteriorLighting` on the tileset applied by a grid-sized post-process volume on the tile actor (exposure clamp verified via ShowFlag.VisualizeHDR: interior range -3..8, room pinned at -3 instead of chasing to -5, the Lumen cached-lighting warning gone), `HallwayWallLightEvery` fixture rule. E4 merged (PDP#19 / parent #52). E3 merged (PDP#18 / parent #51). E2 merged (PDP#17 / parent #50). E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
+**Status:** EPIC COMPLETE — E6 sweep + sign-off done 2026-09-27 (see §8). E5 merged (PDP#20 / parent #53). E4 merged (PDP#19 / parent #52). E3 merged (PDP#18 / parent #51). E2 merged (PDP#17 / parent #50). E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
 `WallPartition` slot + mapper ownership (not a tileset default: map properties serialize as a
 delta against the class default, so a new default key would appear as an engine cube in every
 existing tileset), coverage tests; demo tileset carries
@@ -374,3 +374,35 @@ into a place.
 7. **Tests.** E1–E2 stay pure (mapper + validator tests). E3's actors need a functional PIE check
    (open a door, light a torch, stream out and back in, state kept) — manual in `VoxelDemo` with the
    `vox.*` tooling until a functional-test harness for POI structures exists.
+
+## 8. E6 sweep + sign-off (2026-09-27)
+
+PIE pass on the tiled demo POI (`DA_POIType_DungeonTiled`, vertical shaft, 8 rooms / 3 floors) with
+the light-leak checklist; the voxel-carved demo type is untouched by E1–E5 (tile-only work; the
+interactables structure is on the tiled type alone) and was visited for regression only.
+
+| Check | Result |
+|-------|--------|
+| Live coverage report (`ADungeonActor::DescribeCoverage`) | walls 223/223 (0 doubled), floors 241/241, ceilings 240/240 — light-tight (the entrance lid is the one open ceiling, by design) |
+| Generated-dungeon coverage test | 10 seeds × open/closed entrance light-tight (137/137 suite) |
+| Wall profile conformance (`CheckWallProfile`) | 0 issues incl. variant / override modules |
+| Doors | 19 leaves in 19 doorways, seated in the smooth-doorway frames, swing 90° into the jamb passage; none clip a torch (0 torches within 120 of a hinge) |
+| Torches | 61 (doorway jambs, every 3rd room face, every 5th corridor face), all lit, cap 96; none on a partition |
+| Partitions | two-sided, textured from both cells; posts at partition corners pulled to the half-thickness face |
+| Corners | inner posts on both faces in room corners, outer posts flanking corridor mouths, none beside frames |
+| Variety | crypt / plain walls mixed, turned flagstones flush, wall shields / shelves / webs, floor barrels / crates / rubble, boss room plain ceiling + coffins, treasure crates |
+| Exposure | interior range −3..8 in the HDR readout, no Lumen cached-lighting warning, torch walls read correctly, corridor at −0.7 EV100 |
+| State | door open / torch doused survives stream-out (0 actors) and stream-in |
+
+Gotcha found in the sweep: the coverage report must bucket a single-mesh instance by its mesh
+BOUNDS centre, not the instance location — the pack's corner-pivot floors and ceilings (and the
+plain boss ceiling) put the pivot on the cell corner, so the first live report showed 40 floors
+and 59 ceilings "missing" that were plainly there. Modules anchor on the cell / face centre and
+need no correction.
+
+Sign-off montage: `Documentation/Images/environment_polish_signoff.jpg` (entrance room both diagonals, door cell toward the room, corridor, boss room, HDR readout).
+
+**Remaining, outside this epic:** a side-tunnel (`SlopedTunnel`) tiled demo type does not exist
+yet, so that entrance style is covered by the mapper / coverage tests only; the project-level
+`r.EyeAdaptation.CachedLightingPreExposure` is untouched (the interior clamp keeps the exposure in
+range); torch intensity / AO are tileset data to tune per theme; locked doors wait for keys.
