@@ -400,3 +400,18 @@ bool FBoundaryStairAxisTable::RunTest(const FString& Parameters)
 	{ FPair P; P.Cur(ECT::Hallway, 0, 9); TestTrue(TEXT("Hallway -> body climb face"), SideStair(P, ECT::Staircase, 1, 1).Wall()); }
 	return true;
 }
+
+// ---------------------------------------------------------------------------
+// Reserved (generation-time approach keep-out) is solid for every rule.
+// ---------------------------------------------------------------------------
+
+BOUNDARY_TEST(FBoundaryReservedSolid, "Dungeon.BoundaryRules.ReservedIsSolid")
+bool FBoundaryReservedSolid::RunTest(const FString& Parameters)
+{
+	TestFalse(TEXT("Reserved is not an open cell"), FDungeonBoundaryRules::IsOpenCell(ECT::Reserved));
+	{ FPair P; P.Cur(ECT::Room, 1); TestTrue(TEXT("Room -> Reserved side is a wall"), P.Side(ECT::Reserved).Wall()); }
+	{ FPair P; P.Cur(ECT::Room, 1); TestTrue(TEXT("Room -> Reserved above is a ceiling"), P.Above(ECT::Reserved).Ceiling()); }
+	{ FPair P; P.Cur(ECT::Hallway, 0, 1); TestTrue(TEXT("Hallway -> Reserved side is a wall"), P.Side(ECT::Reserved).Wall()); }
+	{ FPair P; P.Cur(ECT::Entrance, 1); TestTrue(TEXT("Entrance -> Reserved above is a ceiling"), P.Above(ECT::Reserved).Ceiling()); }
+	return true;
+}

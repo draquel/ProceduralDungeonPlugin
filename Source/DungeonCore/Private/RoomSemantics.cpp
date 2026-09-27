@@ -78,6 +78,95 @@ int32 FRoomSemantics::SelectEntranceRoom(
 }
 
 // ---------------------------------------------------------------------------
+// ComputeEntranceApproach
+// ---------------------------------------------------------------------------
+
+FDungeonEntranceApproachInfo FRoomSemantics::ComputeEntranceApproach(
+	const FDungeonRoom& Room,
+	const FIntVector& EntranceCell,
+	const FDungeonEntranceSpec& Spec,
+	EDungeonGridFace Face,
+	const FIntVector& GridSize)
+{
+	FDungeonEntranceApproachInfo Info;
+	Info.Approach = Spec.Approach;
+	Info.OpeningCell = EntranceCell;
+	Info.Face = (Spec.Approach == EDungeonEntranceApproach::FromSide) ? Face : EDungeonGridFace::Any;
+	Info.KeepOutMin = FIntVector::ZeroValue;
+	Info.KeepOutMax = FIntVector(-1, -1, -1);
+
+	const int32 C = FMath::Max(Spec.Clearance, 0);
+	const int32 RoomTopZ = Room.Position.Z + Room.Size.Z - 1;
+	const int32 RoomMaxX = Room.Position.X + Room.Size.X - 1;
+	const int32 RoomMaxY = Room.Position.Y + Room.Size.Y - 1;
+
+	switch (Spec.Approach)
+	{
+	case EDungeonEntranceApproach::FromAbove:
+		Info.OpeningCell.Z = RoomTopZ;
+		Info.KeepOutMin = FIntVector(EntranceCell.X - C, EntranceCell.Y - C, RoomTopZ + 1);
+		Info.KeepOutMax = FIntVector(EntranceCell.X + C, EntranceCell.Y + C, GridSize.Z - 1);
+		break;
+
+	case EDungeonEntranceApproach::FromBelow:
+		Info.OpeningCell.Z = Room.Position.Z;
+		Info.KeepOutMin = FIntVector(EntranceCell.X - C, EntranceCell.Y - C, 0);
+		Info.KeepOutMax = FIntVector(EntranceCell.X + C, EntranceCell.Y + C, Room.Position.Z - 1);
+		break;
+
+	case EDungeonEntranceApproach::FromSide:
+	{
+		// The corridor runs on the entrance floor (plus Clearance floors of headroom) from the
+		// room's face cell in the entrance row/column out to the grid edge.
+		const int32 ZMin = EntranceCell.Z;
+		const int32 ZMax = EntranceCell.Z + C;
+		switch (Face)
+		{
+		case EDungeonGridFace::MinX:
+			Info.OpeningCell.X = Room.Position.X;
+			Info.KeepOutMin = FIntVector(0, EntranceCell.Y - C, ZMin);
+			Info.KeepOutMax = FIntVector(Room.Position.X - 1, EntranceCell.Y + C, ZMax);
+			break;
+		case EDungeonGridFace::MaxX:
+			Info.OpeningCell.X = RoomMaxX;
+			Info.KeepOutMin = FIntVector(RoomMaxX + 1, EntranceCell.Y - C, ZMin);
+			Info.KeepOutMax = FIntVector(GridSize.X - 1, EntranceCell.Y + C, ZMax);
+			break;
+		case EDungeonGridFace::MinY:
+			Info.OpeningCell.Y = Room.Position.Y;
+			Info.KeepOutMin = FIntVector(EntranceCell.X - C, 0, ZMin);
+			Info.KeepOutMax = FIntVector(EntranceCell.X + C, Room.Position.Y - 1, ZMax);
+			break;
+		case EDungeonGridFace::MaxY:
+			Info.OpeningCell.Y = RoomMaxY;
+			Info.KeepOutMin = FIntVector(EntranceCell.X - C, RoomMaxY + 1, ZMin);
+			Info.KeepOutMax = FIntVector(EntranceCell.X + C, GridSize.Y - 1, ZMax);
+			break;
+		default:
+			break; // Any is not a resolved face: no corridor
+		}
+		break;
+	}
+
+	default:
+		break;
+	}
+
+	// Clamp to the grid. A box that was already empty on some axis stays empty.
+	if (Info.HasKeepOut())
+	{
+		Info.KeepOutMin = FIntVector(
+			FMath::Max(Info.KeepOutMin.X, 0), FMath::Max(Info.KeepOutMin.Y, 0), FMath::Max(Info.KeepOutMin.Z, 0));
+		Info.KeepOutMax = FIntVector(
+			FMath::Min(Info.KeepOutMax.X, GridSize.X - 1),
+			FMath::Min(Info.KeepOutMax.Y, GridSize.Y - 1),
+			FMath::Min(Info.KeepOutMax.Z, GridSize.Z - 1));
+	}
+
+	return Info;
+}
+
+// ---------------------------------------------------------------------------
 // ComputeGraphMetrics
 // ---------------------------------------------------------------------------
 

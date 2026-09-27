@@ -3,7 +3,11 @@
 
 bool FDungeonBoundaryRules::IsOpenCell(EDungeonCellType Type)
 {
-	return Type != EDungeonCellType::Empty && Type != EDungeonCellType::RoomWall;
+	// Reserved is the generation-time approach keep-out: solid like Empty (it is Empty by the
+	// time a backend sees the grid, but a leaked cell must never read as a passage).
+	return Type != EDungeonCellType::Empty
+		&& Type != EDungeonCellType::RoomWall
+		&& Type != EDungeonCellType::Reserved;
 }
 
 bool FDungeonBoundaryRules::IsRoomFamily(EDungeonCellType Type)

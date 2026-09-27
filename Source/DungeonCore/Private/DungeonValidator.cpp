@@ -31,6 +31,7 @@ FDungeonValidationResult FDungeonValidator::ValidateAll(const FDungeonResult& Re
 	FDungeonValidationResult Validation;
 
 	ValidateEntrance(Result, Validation.Issues);
+	ValidateEntranceApproach(Result, Validation.Issues);
 	ValidateMetrics(Result, Validation.Issues);
 	ValidateCellBounds(Result, Validation.Issues);
 	ValidateNoRoomOverlap(Result, Validation.Issues);
@@ -86,6 +87,149 @@ void FDungeonValidator::ValidateEntrance(const FDungeonResult& Result, TArray<FD
 				Result.EntranceCell.X, Result.EntranceCell.Y, Result.EntranceCell.Z,
 				static_cast<int32>(Cell.CellType), static_cast<int32>(EDungeonCellType::Entrance)),
 			Result.EntranceCell));
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ValidateEntranceApproach
+// ---------------------------------------------------------------------------
+
+void FDungeonValidator::ValidateEntranceApproach(const FDungeonResult& Result, TArray<FDungeonValidationIssue>& OutIssues)
+{
+	static const FString Category = TEXT("EntranceApproach");
+
+	// 1. Reserved is generation-only.
+	{
+		int32 Leaked = 0;
+		FIntVector First = FIntVector::ZeroValue;
+		const FIntVector& GS = Result.Grid.GridSize;
+		for (int32 i = 0; i < Result.Grid.Cells.Num(); ++i)
+		{
+			if (Result.Grid.Cells[i].CellType == EDungeonCellType::Reserved)
+			{
+				if (Leaked == 0 && GS.X > 0 && GS.Y > 0)
+				{
+					First = FIntVector(i % GS.X, (i / GS.X) % GS.Y, i / (GS.X * GS.Y));
+				}
+				++Leaked;
+			}
+		}
+		if (Leaked > 0)
+		{
+			OutIssues.Add(FDungeonValidationIssue(Category,
+				FString::Printf(TEXT("%d transient Reserved cell(s) leaked into the result (first at (%d,%d,%d))"),
+					Leaked, First.X, First.Y, First.Z), First));
+		}
+	}
+
+	const FDungeonEntranceApproachInfo& A = Result.EntranceApproach;
+	if (A.Approach == EDungeonEntranceApproach::None)
+	{
+		return;
+	}
+
+	// 2. A requested approach that fell back is exactly the failure this system exists to prevent.
+	if (!A.bSatisfied)
+	{
+		OutIssues.Add(FDungeonValidationIssue(Category,
+			FString::Printf(TEXT("Entrance approach %d was requested but could not be satisfied (entrance placed unconstrained, nothing reserved)"),
+				static_cast<int32>(A.Approach))));
+		return;
+	}
+
+	const FDungeonRoom* Room = Result.GetEntranceRoom();
+	if (!Room)
+	{
+		OutIssues.Add(FDungeonValidationIssue(Category, TEXT("Approach satisfied but no entrance room exists")));
+		return;
+	}
+
+	// 3. Opening cell inside the entrance room, in the entrance column.
+	const FIntVector RoomMax = Room->Position + Room->Size - FIntVector(1, 1, 1);
+	const bool bInRoom =
+		A.OpeningCell.X >= Room->Position.X && A.OpeningCell.X <= RoomMax.X &&
+		A.OpeningCell.Y >= Room->Position.Y && A.OpeningCell.Y <= RoomMax.Y &&
+		A.OpeningCell.Z >= Room->Position.Z && A.OpeningCell.Z <= RoomMax.Z;
+	if (!bInRoom)
+	{
+		OutIssues.Add(FDungeonValidationIssue(Category,
+			FString::Printf(TEXT("OpeningCell (%d,%d,%d) is outside the entrance room"),
+				A.OpeningCell.X, A.OpeningCell.Y, A.OpeningCell.Z), A.OpeningCell, Result.EntranceRoomIndex));
+	}
+
+	switch (A.Approach)
+	{
+	case EDungeonEntranceApproach::FromAbove:
+		if (A.OpeningCell.Z != RoomMax.Z)
+		{
+			OutIssues.Add(FDungeonValidationIssue(Category,
+				FString::Printf(TEXT("FromAbove opening Z %d is not the room's top floor %d"), A.OpeningCell.Z, RoomMax.Z),
+				A.OpeningCell, Result.EntranceRoomIndex));
+		}
+		break;
+	case EDungeonEntranceApproach::FromBelow:
+		if (A.OpeningCell.Z != Room->Position.Z)
+		{
+			OutIssues.Add(FDungeonValidationIssue(Category,
+				FString::Printf(TEXT("FromBelow opening Z %d is not the room's floor %d"), A.OpeningCell.Z, Room->Position.Z),
+				A.OpeningCell, Result.EntranceRoomIndex));
+		}
+		break;
+	case EDungeonEntranceApproach::FromSide:
+	{
+		bool bOnFace = false;
+		switch (A.Face)
+		{
+		case EDungeonGridFace::MinX: bOnFace = A.OpeningCell.X == Room->Position.X; break;
+		case EDungeonGridFace::MaxX: bOnFace = A.OpeningCell.X == RoomMax.X; break;
+		case EDungeonGridFace::MinY: bOnFace = A.OpeningCell.Y == Room->Position.Y; break;
+		case EDungeonGridFace::MaxY: bOnFace = A.OpeningCell.Y == RoomMax.Y; break;
+		default: break;
+		}
+		if (!bOnFace)
+		{
+			OutIssues.Add(FDungeonValidationIssue(Category,
+				FString::Printf(TEXT("FromSide opening (%d,%d,%d) is not on the room's %d face"),
+					A.OpeningCell.X, A.OpeningCell.Y, A.OpeningCell.Z, static_cast<int32>(A.Face)),
+				A.OpeningCell, Result.EntranceRoomIndex));
+		}
+		break;
+	}
+	default:
+		break;
+	}
+
+	// 4. The keep-out is clear.
+	if (A.HasKeepOut())
+	{
+		int32 Blocked = 0;
+		FIntVector First = FIntVector::ZeroValue;
+		EDungeonCellType FirstType = EDungeonCellType::Empty;
+		for (int32 Z = A.KeepOutMin.Z; Z <= A.KeepOutMax.Z; ++Z)
+		{
+			for (int32 Y = A.KeepOutMin.Y; Y <= A.KeepOutMax.Y; ++Y)
+			{
+				for (int32 X = A.KeepOutMin.X; X <= A.KeepOutMax.X; ++X)
+				{
+					if (!Result.Grid.IsInBounds(X, Y, Z))
+					{
+						continue;
+					}
+					const EDungeonCellType Type = Result.Grid.GetCell(X, Y, Z).CellType;
+					if (Type != EDungeonCellType::Empty)
+					{
+						if (Blocked == 0) { First = FIntVector(X, Y, Z); FirstType = Type; }
+						++Blocked;
+					}
+				}
+			}
+		}
+		if (Blocked > 0)
+		{
+			OutIssues.Add(FDungeonValidationIssue(Category,
+				FString::Printf(TEXT("%d cell(s) obstruct the entrance approach keep-out (first: (%d,%d,%d) type %d)"),
+					Blocked, First.X, First.Y, First.Z, static_cast<int32>(FirstType)), First));
+		}
 	}
 }
 

@@ -47,6 +47,13 @@ struct DUNGEONCORE_API FDungeonValidator
 	/** Entrance room and cell exist and are marked correctly. */
 	static void ValidateEntrance(const FDungeonResult& Result, TArray<FDungeonValidationIssue>& OutIssues);
 
+	/**
+	 * The entrance approach recorded on the result holds in the final grid: no Reserved cell
+	 * leaked; when an approach was requested it was satisfied; the opening cell lies in the
+	 * entrance room (on the resolved face for FromSide); every keep-out cell is Empty.
+	 */
+	static void ValidateEntranceApproach(const FDungeonResult& Result, TArray<FDungeonValidationIssue>& OutIssues);
+
 	/** Cell type counts match reported metrics. */
 	static void ValidateMetrics(const FDungeonResult& Result, TArray<FDungeonValidationIssue>& OutIssues);
 

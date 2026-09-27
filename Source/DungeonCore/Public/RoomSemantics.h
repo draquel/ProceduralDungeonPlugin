@@ -78,6 +78,24 @@ struct DUNGEONCORE_API FRoomSemantics
 		const UDungeonConfiguration& Config,
 		FDungeonSeed& Seed);
 
+	/**
+	 * Resolve the opening cell and keep-out box for an entrance room under a spec. Pure geometry:
+	 * the same function reserves the volume during placement, records it on the result, and is
+	 * what the validator checks the final grid against.
+	 *   FromAbove: column over the room's top cell up to the grid top.
+	 *   FromBelow: column under the room's floor cell down to floor 0.
+	 *   FromSide:  the entrance floor's row/column from the room face to the grid edge.
+	 * Clearance widens the box; boxes are clamped to the grid and empty when nothing lies beyond
+	 * the room (e.g. FromAbove on the top floor). bSatisfied is NOT set here.
+	 * @param Face  The resolved face for FromSide (Spec.Face with Any already drawn); ignored otherwise.
+	 */
+	static FDungeonEntranceApproachInfo ComputeEntranceApproach(
+		const FDungeonRoom& Room,
+		const FIntVector& EntranceCell,
+		const FDungeonEntranceSpec& Spec,
+		EDungeonGridFace Face,
+		const FIntVector& GridSize);
+
 	/** BFS from entrance; populates Room.GraphDistanceFromEntrance, Room.bOnMainPath, returns contexts. */
 	static TArray<FRoomSemanticContext> ComputeGraphMetrics(
 		FDungeonResult& Result);
