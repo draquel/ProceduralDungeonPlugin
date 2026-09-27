@@ -25,19 +25,26 @@ enum class EDungeonStampMode : uint8
 	CarveOnly,
 };
 
-/** Visual style for connecting the dungeon entrance to the terrain surface. */
+/**
+ * Visual style for connecting the dungeon entrance to the terrain surface. Each style needs the
+ * matching FDungeonEntranceSpec approach on the dungeon config (the stitcher refuses a mismatch);
+ * a legacy result with approach None accepts any style best-effort.
+ */
 UENUM(BlueprintType)
 enum class EDungeonEntranceStyle : uint8
 {
-	/** Straight vertical column from surface down to entrance. */
+	/** Straight vertical column from the surface down onto the entrance room's lid. Needs FromAbove. */
 	VerticalShaft,
 
-	/** Gradual stepped descent toward the dungeon entrance. */
+	/**
+	 * Horizontal tunnel through the reserved corridor out of the grid's side, then a walkable
+	 * ramp up to the surface outside the dungeon footprint. Needs FromSide.
+	 */
 	SlopedTunnel,
 
-	/** Organic noise-displaced opening for a natural cave feel. */
+	/** Organic noise-displaced vertical opening for a natural cave feel. Needs FromAbove (Clearance 1 advised). */
 	CaveOpening,
 
-	/** Minimal 1x1 hole punched straight through — no wall shell. */
+	/** Minimal 1x1 hole punched straight down — no wall shell. Needs FromAbove. */
 	Trapdoor,
 };

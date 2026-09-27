@@ -575,3 +575,77 @@ bool FTileMapperOpenEntranceCeilingTallRoom::RunTest(const FString& Parameters)
 	CleanupTileSet(TS);
 	return true;
 }
+
+// --- Approach-aware opening: a FromSide approach opens the WALL on the face of the opening cell
+// (the room face the tunnel enters through), not a ceiling ---
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTileMapperOpenEntranceSide,
+	"Dungeon.TileMapper.Entrance.FromSideOpensFaceWall",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FTileMapperOpenEntranceSide::RunTest(const FString& Parameters)
+{
+	using namespace DungeonTileMapperTestHelpers;
+
+	UDungeonTileSet* TS = CreateTileSet();
+	FDungeonResult Result = CreateSingleRoomResult();
+	Result.Grid.GetCell(2, 2, 0).CellType = EDungeonCellType::Entrance;
+	Result.EntranceCell = FIntVector(2, 2, 0);
+	Result.EntranceRoomIndex = 0;
+	Result.EntranceApproach.Approach = EDungeonEntranceApproach::FromSide;
+	Result.EntranceApproach.bSatisfied = true;
+	Result.EntranceApproach.Face = EDungeonGridFace::MinX;
+	Result.EntranceApproach.OpeningCell = FIntVector(1, 2, 0); // the room's -X face cell in the entrance row
+
+	const int32 WallIdx = static_cast<int32>(EDungeonTileType::WallSegment);
+	const FDungeonTileMapResult Closed = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector);
+	TestEqual(TEXT("Closed: 12 perimeter walls"), Closed.Transforms[WallIdx].Num(), 12);
+	TestEqual(TEXT("Closed: 9 ceilings"), Closed.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 9);
+
+	const FDungeonTileMapResult Open = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector, /*bOpenEntranceCeiling=*/true);
+	TestEqual(TEXT("Open: 11 walls (face wall open)"), Open.Transforms[WallIdx].Num(), 11);
+	TestEqual(TEXT("Open: ceilings untouched for a side approach"), Open.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 9);
+	TestEqual(TEXT("Open: floors untouched"), Open.Transforms[static_cast<int32>(EDungeonTileType::RoomFloor)].Num(), 9);
+
+	// The -X wall of cell (1,2): cell centre (600,1000), wall offset -200 in X -> (400,1000).
+	for (const FTransform& Xf : Open.Transforms[WallIdx])
+	{
+		const FVector P = Xf.GetLocation();
+		const bool bFaceWall = FMath::Abs(P.X - 400.0f) < 1.0f && FMath::Abs(P.Y - 1000.0f) < 1.0f;
+		TestFalse(TEXT("No wall on the opening face"), bFaceWall);
+	}
+
+	CleanupTileSet(TS);
+	return true;
+}
+
+// --- FromBelow opens the FLOOR of the opening cell ---
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTileMapperOpenEntranceBelow,
+	"Dungeon.TileMapper.Entrance.FromBelowOpensFloor",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FTileMapperOpenEntranceBelow::RunTest(const FString& Parameters)
+{
+	using namespace DungeonTileMapperTestHelpers;
+
+	UDungeonTileSet* TS = CreateTileSet();
+	FDungeonResult Result = CreateSingleRoomResult();
+	Result.Grid.GetCell(2, 2, 0).CellType = EDungeonCellType::Entrance;
+	Result.EntranceCell = FIntVector(2, 2, 0);
+	Result.EntranceRoomIndex = 0;
+	Result.EntranceApproach.Approach = EDungeonEntranceApproach::FromBelow;
+	Result.EntranceApproach.bSatisfied = true;
+	Result.EntranceApproach.OpeningCell = FIntVector(2, 2, 0);
+
+	const int32 FloorIdx = static_cast<int32>(EDungeonTileType::RoomFloor);
+	const FDungeonTileMapResult Open = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector, /*bOpenEntranceCeiling=*/true);
+	TestEqual(TEXT("Open: 8 floors (opening cell's floor open)"), Open.Transforms[FloorIdx].Num(), 8);
+	TestEqual(TEXT("Open: ceilings untouched for a below approach"), Open.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 9);
+	for (const FTransform& Xf : Open.Transforms[FloorIdx])
+	{
+		const FVector P = Xf.GetLocation();
+		TestFalse(TEXT("No floor under the opening cell"), FMath::Abs(P.X - 1000.0f) < 1.0f && FMath::Abs(P.Y - 1000.0f) < 1.0f);
+	}
+
+	CleanupTileSet(TS);
+	return true;
+}

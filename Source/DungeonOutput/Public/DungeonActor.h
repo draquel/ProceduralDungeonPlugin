@@ -39,8 +39,9 @@ public:
 	int64 Seed = 0;
 
 	/**
-	 * Skip the designated entrance cell's ceiling tile so a vertical passage from above (e.g. a
-	 * voxel-stitched shaft) drops into the entrance room. Leave off for standalone dungeons.
+	 * Leave the entrance opening unbuilt so a stitched passage (e.g. a voxel shaft or side
+	 * tunnel) can enter the entrance room: the lid, floor or wall of the opening cell per the
+	 * dungeon's entrance approach. Leave off for standalone dungeons.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon")
 	bool bOpenEntranceCeiling = false;

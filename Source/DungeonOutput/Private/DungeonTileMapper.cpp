@@ -48,10 +48,30 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	const float HalfCS = CS * 0.5f;
 	const float Thin = TileThickness(CS);
 
-	// The cell whose LID opens for a passage from above: the top cell of the entrance room's
-	// column over EntranceCell. For a two-floor entrance room the ground-floor cell has no
-	// ceiling of its own (same room above), so skipping "its" ceiling would leave the lid closed.
-	const FIntVector OpeningCell = Result.GetEntranceOpeningCell();
+	// The entrance opening (bOpenEntranceCeiling): which cell, and which of its faces, the
+	// stitched passage enters through. Decided from the dungeon's recorded approach so the tiles
+	// and the voxel carve agree:
+	//   FromAbove (and legacy None): the LID of the top cell of the entrance room's column over
+	//     EntranceCell. For a two-floor entrance room the ground-floor cell has no ceiling of its
+	//     own (same room above), so skipping "its" ceiling would leave the lid closed.
+	//   FromBelow: the FLOOR of the opening cell.
+	//   FromSide:  the WALL on the resolved face of the opening cell.
+	const FDungeonEntranceApproachInfo& Approach = Result.EntranceApproach;
+	const bool bApproachKnown = Approach.Approach != EDungeonEntranceApproach::None && Approach.bSatisfied;
+	const EDungeonEntranceApproach OpeningKind = bApproachKnown ? Approach.Approach : EDungeonEntranceApproach::FromAbove;
+	const FIntVector OpeningCell = bApproachKnown ? Approach.OpeningCell : Result.GetEntranceOpeningCell();
+	int32 OpeningFaceDX = 0, OpeningFaceDY = 0;
+	if (OpeningKind == EDungeonEntranceApproach::FromSide)
+	{
+		switch (Approach.Face)
+		{
+		case EDungeonGridFace::MinX: OpeningFaceDX = -1; break;
+		case EDungeonGridFace::MaxX: OpeningFaceDX = +1; break;
+		case EDungeonGridFace::MinY: OpeningFaceDY = -1; break;
+		case EDungeonGridFace::MaxY: OpeningFaceDY = +1; break;
+		default: break;
+		}
+	}
 
 	// --- Compute per-mesh bounding box info for scale-to-fit and pivot correction ---
 	// Each mesh may have different native dimensions and pivot locations.
@@ -347,9 +367,14 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					return {BaseType, 0.0f};
 				};
 
+				const bool bIsOpeningCell = bOpenEntranceCeiling
+					&& X == OpeningCell.X && Y == OpeningCell.Y && Z == OpeningCell.Z;
+
 				// Floor: place if cell below is a different space, solid, or OOB.
 				// Bottom face of the floor mesh is aligned flush with the cell's lower boundary.
-				if (bHasFloorMesh && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, FIntVector(X, Y, Z), X, Y, Z - 1))
+				// The opening cell's floor stays OPEN for a passage rising from below.
+				const bool bIsOpenEntranceFloor = bIsOpeningCell && OpeningKind == EDungeonEntranceApproach::FromBelow;
+				if (bHasFloorMesh && !bIsOpenEntranceFloor && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, FIntVector(X, Y, Z), X, Y, Z - 1))
 				{
 					if (bIsHallway)
 					{
@@ -381,8 +406,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 				// Top face of the ceiling mesh is aligned flush with the cell's upper boundary.
 				// The entrance room's lid (ceiling of the opening cell) stays OPEN when a vertical
 				// passage enters from above (bOpenEntranceCeiling).
-				const bool bIsOpenEntranceCeiling = bOpenEntranceCeiling
-					&& X == OpeningCell.X && Y == OpeningCell.Y && Z == OpeningCell.Z;
+				const bool bIsOpenEntranceCeiling = bIsOpeningCell && OpeningKind == EDungeonEntranceApproach::FromAbove;
 				if (bHasCeilingMesh && !bIsOpenEntranceCeiling && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, FIntVector(X, Y, Z), X, Y, Z + 1))
 				{
 					const FVector CeilingPos = CellCenter + FVector(0.0f, 0.0f, CS);
@@ -431,6 +455,14 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 
 				for (const FWallCheck& WC : WallChecks)
 				{
+					// The opening cell's wall on the approach face stays OPEN for a side tunnel
+					// (the stitcher carves the corridor right up to this face).
+					if (bIsOpeningCell && OpeningKind == EDungeonEntranceApproach::FromSide
+						&& WC.DX == OpeningFaceDX && WC.DY == OpeningFaceDY)
+					{
+						continue;
+					}
+
 					const int32 NX = X + WC.DX;
 					const int32 NY = Y + WC.DY;
 					const FRotator FaceRot(0.0f, WC.Yaw, 0.0f);

@@ -5,14 +5,18 @@
 #include "DungeonEntranceStitcher.generated.h"
 
 struct FDungeonResult;
+struct FDungeonPassageSegment;
+struct FDungeonEntrancePassagePlan;
 class UVoxelChunkManager;
 class UDungeonVoxelConfig;
 
 /**
  * Connects the dungeon entrance to the terrain surface.
  *
- * Carves a traversable passage from the voxel terrain surface down to the
- * dungeon entrance cell, using one of four visual styles. Works with the
+ * Carves a traversable passage between the voxel terrain surface and the dungeon entrance using
+ * one of four visual styles. The geometry comes from FDungeonEntrancePassagePlan, which reads
+ * FDungeonResult::EntranceApproach so the carve stays inside the volume the generator kept
+ * clear; a style that does not match the dungeon's approach is refused. Works with the
  * VoxelEditManager to create undo-able edits marked as System source.
  */
 UCLASS(BlueprintType)
@@ -23,17 +27,19 @@ class DUNGEONVOXELINTEGRATION_API UDungeonEntranceStitcher : public UObject
 public:
 	/**
 	 * Stitch a passage from the terrain surface to the dungeon entrance.
-	 * @param Result The generated dungeon data (uses EntranceCell and CellWorldSize).
+	 * @param Result The generated dungeon data (EntranceCell, EntranceApproach, CellWorldSize).
 	 * @param ChunkManager The voxel chunk manager to edit.
 	 * @param WorldOffset World-space offset applied to dungeon grid coordinates.
-	 * @param Style Visual style for the entrance passage.
+	 * @param Style Visual style for the entrance passage. Must agree with the dungeon's approach:
+	 *        VerticalShaft / CaveOpening / Trapdoor need FromAbove, SlopedTunnel needs FromSide;
+	 *        a legacy result (approach None) accepts any style best-effort.
 	 * @param Config Material and scale configuration.
-	 * @param bStopAtEntranceCellTop Stop the carve at the entrance ROOM's lid (the top plane of
-	 *        FDungeonResult::GetEntranceOpeningCell — the entrance cell itself for single-floor
-	 *        rooms) instead of the entrance cell's bottom. For tile-dressed dungeons (CarveOnly +
-	 *        ADungeonActor): the mapper opens that cell's ceiling, and carving deeper would run
-	 *        the shaft (and its wall shell) down through the tiled room interior.
-	 * @return Number of voxels modified, or -1 on failure.
+	 * @param bStopAtEntranceCellTop Stop a vertical carve at the entrance ROOM's lid (the top plane
+	 *        of FDungeonResult::GetEntranceOpeningCell) instead of the entrance cell's bottom, and
+	 *        a side tunnel at the room face instead of carving the opening cell. For tile-dressed
+	 *        dungeons (CarveOnly + ADungeonActor): the mapper opens that lid / wall, and carving
+	 *        deeper would run the passage (and its wall shell) through the tiled room interior.
+	 * @return Number of voxels modified, or -1 on failure (including a style / approach mismatch).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "DungeonVoxelIntegration|Entrance")
 	int32 StitchEntrance(
@@ -67,18 +73,12 @@ private:
 		uint8 WallMaterialID,
 		uint8 BiomeID);
 
-	/** Bottom Z of the entrance carve: the entrance cell's bottom, or its top when stopping there. */
-	static float ComputeEntranceZ(const FDungeonResult& Result, const FVector& WorldOffset, bool bStopAtEntranceCellTop);
-
-	int32 StitchVerticalShaft(const FDungeonResult& Result, UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize, float EntranceZ);
-
-	int32 StitchSlopedTunnel(const FDungeonResult& Result, UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize, float EntranceZ);
-
-	int32 StitchCaveOpening(const FDungeonResult& Result, UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize, float EntranceZ);
-
-	int32 StitchTrapdoor(const FDungeonResult& Result, UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset, UDungeonVoxelConfig* Config, float VoxelSize, float EntranceZ);
+	/** The CaveOpening style: a noise-displaced, tapering column around the plan's single segment. */
+	int32 CarveCaveOpening(
+		class UVoxelEditManager* EditManager,
+		UVoxelChunkManager* ChunkManager,
+		const FDungeonPassageSegment& Segment,
+		float SurfaceZ,
+		float VoxelSize,
+		UDungeonVoxelConfig* Config);
 };
