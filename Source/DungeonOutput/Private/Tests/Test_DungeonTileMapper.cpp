@@ -716,6 +716,9 @@ bool FTileMapperSharedFaceOnce::RunTest(const FString& Parameters)
 	using namespace DungeonTileMapperTestHelpers;
 
 	UDungeonTileSet* TS = CreateTileSet();
+	// The partition slot is not a tileset default (see UDungeonTileSet::PopulateDefaultSlots);
+	// give it the same cube as the wall segment so the two are told apart by type only.
+	TS->Slots.Add(EDungeonTileType::WallPartition, TS->GetSlot(EDungeonTileType::WallSegment));
 	const FDungeonResult Result = CreateRoomBesideHallwayResult();
 	// Face between cell (2,1) and (3,1): X = 3 * 400, Y = 1.5 * 400, Z = half cell.
 	const FVector SharedFace(1200.0f, 600.0f, 200.0f);
@@ -773,6 +776,7 @@ bool FTileMapperWallCoverage::RunTest(const FString& Parameters)
 	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
 	Generator->AddToRoot();
 	UDungeonTileSet* TS = CreateTileSet();
+	TS->Slots.Add(EDungeonTileType::WallPartition, TS->GetSlot(EDungeonTileType::WallSegment));
 
 	static const int32 DX[4] = {1, -1, 0, 0};
 	static const int32 DY[4] = {0, 0, 1, -1};

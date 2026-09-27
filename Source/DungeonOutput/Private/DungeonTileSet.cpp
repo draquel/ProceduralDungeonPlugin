@@ -11,12 +11,15 @@ UDungeonTileSet::UDungeonTileSet()
 void UDungeonTileSet::PopulateDefaultSlots()
 {
 	const FSoftObjectPath DefaultCube(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	// Do NOT add new tile types here once tilesets exist: a TMap property serializes as a delta
+	// against the class default, so a key added to the default appears in every already-saved
+	// tileset on load (as the engine cube) until that asset is re-saved. WallPartition is left
+	// out for that reason — an unset partition slot falls back to WallSegment in the mapper.
 	static const EDungeonTileType BaseTypes[] = {
 		EDungeonTileType::RoomFloor, EDungeonTileType::HallwayFloor,
 		EDungeonTileType::RoomCeiling, EDungeonTileType::HallwayCeiling,
-		EDungeonTileType::WallSegment, EDungeonTileType::WallPartition,
-		EDungeonTileType::DoorFrame, EDungeonTileType::EntranceFrame,
-		EDungeonTileType::StaircaseMesh,
+		EDungeonTileType::WallSegment, EDungeonTileType::DoorFrame,
+		EDungeonTileType::EntranceFrame, EDungeonTileType::StaircaseMesh,
 	};
 	for (EDungeonTileType Type : BaseTypes)
 	{

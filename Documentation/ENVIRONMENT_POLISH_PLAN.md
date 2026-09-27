@@ -1,7 +1,9 @@
 # Dungeon Environment Polish — Design Plan (final generation phase)
 
 **Status:** E1 implemented on `feature/env-e1-face-ownership` (2026-09-27): `OwnsSharedFace`,
-`WallPartition` slot + mapper ownership, tileset defaults, coverage tests; demo tileset carries
+`WallPartition` slot + mapper ownership (not a tileset default: map properties serialize as a
+delta against the class default, so a new default key would appear as an engine cube in every
+existing tileset), coverage tests; demo tileset carries
 crypt on `WallSegment` and the thin stone wall on `WallPartition`. E2–E6 proposed. Follows the
 entrance-placement epic (P0–P3 merged,
 `ENTRANCE_PLACEMENT_PLAN.md`) and the tile module system (`TILE_MODULE_SYSTEM_PLAN.md`, P1–P4 done).
