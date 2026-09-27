@@ -4,11 +4,14 @@
 #include "GameFramework/Actor.h"
 #include "DungeonTypes.h"
 #include "DungeonTileMapper.h"
+#include "DungeonCoverage.h"
 #include "DungeonActor.generated.h"
 
 class UDungeonConfiguration;
 class UDungeonTileSet;
 class UHierarchicalInstancedStaticMeshComponent;
+class UBoxComponent;
+class UPostProcessComponent;
 
 /**
  * Blueprint-exposed actor that generates and displays a dungeon.
@@ -115,6 +118,17 @@ public:
 	int32 GetTotalInstanceCount() const;
 
 	/**
+	 * Light-tightness of the last build (E5): every needed wall / floor / ceiling matched against
+	 * the placed pieces (see FDungeonCoverageReport). Empty before GenerateDungeon.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Coverage")
+	FDungeonCoverageReport GetCoverageReport() const;
+
+	/** GetCoverageReport().Describe(): the summary line plus one line per problem. */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Coverage")
+	FString DescribeCoverage() const;
+
+	/**
 	 * Debug dump of the grid cells in an inclusive grid-coordinate box, one line per cell:
 	 * "(x,y,z) Type room=R hall=H floor=F stair=S". The grid itself is C++ only (too large for
 	 * Blueprint), so this is the way to inspect cell neighbourhoods from Blueprint or Python when
@@ -160,6 +174,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization"))
 	bool bShowGridBounds = true;
 
+	/** Mark uncovered / doubled boundaries from the coverage report (red boxes) and wall-light fixtures (yellow). */
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization"))
+	bool bShowCoverageProblems = true;
+
 	/** Thickness of debug lines. */
 	UPROPERTY(EditAnywhere, Category = "Dungeon|Debug Visualization", meta = (EditCondition = "bShowDebugVisualization", ClampMin = "0.5", ClampMax = "10.0"))
 	float DebugLineThickness = 2.0f;
@@ -187,6 +205,17 @@ private:
 	/** Live tile HISMs, keyed by render batch (mesh+material identity), one per unique batch. */
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> TileComponents;
+
+	/** The grid box the interior post-process is bounded to (E5). */
+	UPROPERTY(VisibleAnywhere, Category = "Dungeon|Interior")
+	TObjectPtr<UBoxComponent> InteriorBounds;
+
+	/** Interior exposure clamp / AO from the tileset's InteriorLighting, applied inside InteriorBounds. */
+	UPROPERTY(VisibleAnywhere, Category = "Dungeon|Interior")
+	TObjectPtr<UPostProcessComponent> InteriorPostProcess;
+
+	/** Size the box to the grid and push the tileset's interior settings (after a build); disable when cleared. */
+	void ApplyInteriorPostProcess(bool bEnable);
 
 	bool bHasDungeon = false;
 

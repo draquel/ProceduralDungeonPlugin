@@ -6,6 +6,8 @@
 #include "DungeonTileMapper.h"
 #include "DungeonTileModule.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/BoxComponent.h"
+#include "Components/PostProcessComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/StaticMesh.h"
 
@@ -22,6 +24,75 @@ ADungeonActor::ADungeonActor()
 
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
+
+	// Interior post-process (E5): a box over the grid carries the exposure clamp / AO the tileset
+	// asks for. The post-process component takes its bounds from its parent shape; both stay
+	// inert until a build sizes the box and enables the volume.
+	InteriorBounds = CreateDefaultSubobject<UBoxComponent>(TEXT("InteriorBounds"));
+	InteriorBounds->SetupAttachment(Root);
+	// The post-process component answers "is the view inside?" through its parent shape's PHYSICS
+	// body (UShapeComponent::GetSquaredDistanceToCollision), so the box must own one: query-only,
+	// ignoring every channel, it never blocks, overlaps or traces anything but still exists.
+	InteriorBounds->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	InteriorBounds->SetCollisionResponseToAllChannels(ECR_Ignore);
+	InteriorBounds->SetGenerateOverlapEvents(false);
+	InteriorBounds->SetCanEverAffectNavigation(false);
+	InteriorBounds->SetBoxExtent(FVector(50.0f));
+
+	InteriorPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("InteriorPostProcess"));
+	InteriorPostProcess->SetupAttachment(InteriorBounds);
+	InteriorPostProcess->bUnbound = false;
+	InteriorPostProcess->bEnabled = false;
+}
+
+void ADungeonActor::ApplyInteriorPostProcess(bool bEnable)
+{
+	if (!InteriorBounds || !InteriorPostProcess)
+	{
+		return;
+	}
+	const bool bOn = bEnable && bHasDungeon && TileSet && TileSet->InteriorLighting.bInteriorPostProcess
+		&& CachedResult.CellWorldSize > 0.0f;
+	InteriorPostProcess->bEnabled = bOn;
+	if (!bOn)
+	{
+		return;
+	}
+	const FDungeonInteriorLighting& L = TileSet->InteriorLighting;
+	const FVector GridExtent = FVector(CachedResult.GridSize) * CachedResult.CellWorldSize * 0.5f;
+	InteriorBounds->SetRelativeLocation(GridExtent);
+	InteriorBounds->SetBoxExtent(GridExtent);
+
+	FPostProcessSettings& S = InteriorPostProcess->Settings;
+	S.bOverride_AutoExposureMinBrightness = true;
+	S.AutoExposureMinBrightness = L.MinExposureEV100;
+	S.bOverride_AutoExposureMaxBrightness = true;
+	S.AutoExposureMaxBrightness = FMath::Max(L.MaxExposureEV100, L.MinExposureEV100);
+	S.bOverride_AutoExposureBias = true;
+	S.AutoExposureBias = L.ExposureCompensation;
+	S.bOverride_AutoExposureSpeedUp = true;
+	S.AutoExposureSpeedUp = L.ExposureSpeedUp;
+	S.bOverride_AutoExposureSpeedDown = true;
+	S.AutoExposureSpeedDown = L.ExposureSpeedDown;
+	S.bOverride_LumenAmbientOcclusionIntensity = true;
+	S.LumenAmbientOcclusionIntensity = L.AmbientOcclusionIntensity;
+	InteriorPostProcess->BlendRadius = L.BlendRadius;
+	InteriorPostProcess->Priority = L.Priority;
+	InteriorPostProcess->BlendWeight = 1.0f;
+}
+
+FDungeonCoverageReport ADungeonActor::GetCoverageReport() const
+{
+	if (!bHasDungeon)
+	{
+		return FDungeonCoverageReport();
+	}
+	return FDungeonCoverage::Analyse(CachedResult, CachedTileMap, GetActorLocation(), bOpenEntranceCeiling);
+}
+
+FString ADungeonActor::DescribeCoverage() const
+{
+	return bHasDungeon ? GetCoverageReport().Describe() : FString(TEXT("no dungeon generated"));
 }
 
 void ADungeonActor::GenerateDungeon()
@@ -217,6 +288,7 @@ void ADungeonActor::GenerateDungeon()
 	}
 
 	bHasDungeon = true;
+	ApplyInteriorPostProcess(true);
 
 #if WITH_EDITOR
 	UpdateTickState();
@@ -262,6 +334,7 @@ void ADungeonActor::ClearDungeon()
 	}
 	TileComponents.Empty();
 	bHasDungeon = false;
+	ApplyInteriorPostProcess(false);
 
 #if WITH_EDITOR
 	UpdateTickState();
@@ -451,6 +524,21 @@ void ADungeonActor::DrawDebugVisualization()
 		const FVector GridExtent = (GridMax - GridMin) * 0.5f;
 
 		DrawDebugBox(World, GridCenter, GridExtent, FColor(128, 128, 128), false, 0.0f, 0, 1.0f);
+	}
+
+	// Coverage problems (E5): red boxes where a needed boundary has no piece or two; wall-light
+	// fixtures as yellow points so the light rule can be eyeballed against the geometry.
+	if (bShowCoverageProblems)
+	{
+		const FDungeonCoverageReport Report = GetCoverageReport();
+		for (const FVector& P : Report.ProblemLocations)
+		{
+			DrawDebugBox(World, P, FVector(CellSize * 0.2f), FColor::Red, false, 0.0f, 0, DebugLineThickness);
+		}
+		for (const FDungeonFixture& F : CachedTileMap.Fixtures)
+		{
+			DrawDebugPoint(World, F.Anchor.GetLocation(), 12.0f, FColor::Yellow, false, 0.0f, 0);
+		}
 	}
 
 	// --- Rooms ---

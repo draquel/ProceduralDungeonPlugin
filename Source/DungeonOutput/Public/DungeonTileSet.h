@@ -102,6 +102,54 @@ struct DUNGEONOUTPUT_API FDungeonRoomTypeOverride
 	TMap<EDungeonTileType, FDungeonTileSlot> Slots;
 };
 
+/**
+ * Interior lighting control (E5, §3.5 part 4): the post-process ADungeonActor applies inside its
+ * grid box. The point of it is exposure: without a clamp the auto exposure chases the dark
+ * corridors down to the floor of Lumen's cached-lighting range (the "clipped" warning) and then
+ * blows out the first torch-lit room. Values are EV100 (the project extends the default
+ * luminance range).
+ */
+USTRUCT(BlueprintType)
+struct DUNGEONOUTPUT_API FDungeonInteriorLighting
+{
+	GENERATED_BODY()
+
+	/** Apply an interior post-process volume over the dungeon grid. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interior")
+	bool bInteriorPostProcess = true;
+
+	/** Darkest the interior auto exposure may adapt to (EV100). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interior", meta = (UIMin = "-10.0", UIMax = "20.0"))
+	float MinExposureEV100 = -3.0f;
+
+	/** Brightest the interior auto exposure may adapt to (EV100). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interior", meta = (UIMin = "-10.0", UIMax = "20.0"))
+	float MaxExposureEV100 = 8.0f;
+
+	/** Exposure compensation inside (stops). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interior", meta = (UIMin = "-5.0", UIMax = "5.0"))
+	float ExposureCompensation = 0.0f;
+
+	/** Adaptation speed when brightening / darkening (stops per second). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interior", meta = (ClampMin = "0.1"))
+	float ExposureSpeedUp = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interior", meta = (ClampMin = "0.1"))
+	float ExposureSpeedDown = 2.0f;
+
+	/** Lumen ambient occlusion intensity inside (0 = off, 1 = full). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interior", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AmbientOcclusionIntensity = 0.8f;
+
+	/** Blend distance from the grid box edge (world units) so the shaft / tunnel crossfades. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interior", meta = (ClampMin = "0.0"))
+	float BlendRadius = 400.0f;
+
+	/** Volume priority over the level's own post-process volumes. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interior")
+	float Priority = 10.0f;
+};
+
 /** Where decor goes (E4): densities are per candidate site, selection is seeded per cell / face. */
 USTRUCT(BlueprintType)
 struct DUNGEONOUTPUT_API FDungeonDecorRules
@@ -208,6 +256,10 @@ struct DUNGEONOUTPUT_API FDungeonFixtureRules
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fixtures", meta = (ClampMin = "0"))
 	int32 RoomWallLightEvery = 3;
 
+	/** Every Nth rock-backed wall face of a hallway (in cell order, after the room lights) takes a wall light; 0 = none (corridors stay dark). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fixtures", meta = (ClampMin = "0"))
+	int32 HallwayWallLightEvery = 0;
+
 	/** Hard cap of wall lights per dungeon (doorway lights first, then room walls). 0 = no fixtures at all. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fixtures", meta = (ClampMin = "0"))
 	int32 MaxWallLights = 24;
@@ -264,6 +316,10 @@ public:
 	/** Per-room-type slot replacements (E4, see FDungeonRoomTypeOverride). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
 	TMap<EDungeonRoomType, FDungeonRoomTypeOverride> RoomTypeOverrides;
+
+	/** Interior exposure / AO the tile actor applies over the grid (E5, see FDungeonInteriorLighting). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	FDungeonInteriorLighting InteriorLighting;
 
 	/**
 	 * Door leaf mesh for Doorway openings (E3), hung by gameplay, never instanced. Leaf convention
