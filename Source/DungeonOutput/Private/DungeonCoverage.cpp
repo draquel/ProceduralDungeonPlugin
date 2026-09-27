@@ -3,6 +3,7 @@
 #include "DungeonTypes.h"
 #include "DungeonTileMapper.h"
 #include "DungeonBoundaryRules.h"
+#include "Engine/StaticMesh.h"
 
 FString FDungeonCoverageReport::Describe() const
 {
@@ -45,15 +46,38 @@ FDungeonCoverageReport FDungeonCoverage::Analyse(const FDungeonResult& Result, c
 		const FVector L = World - WorldOffset;
 		return FIntVector(FMath::RoundToInt(2.0f * L.X / CS), FMath::RoundToInt(2.0f * L.Y / CS), FMath::FloorToInt((L.Z + CS * 0.5f) / CS));
 	};
+	// An instance's transform carries the PIVOT. A module anchors on the cell / face centre by
+	// convention, but a single mesh with an off-centre pivot (the pack's corner-pivot floors and
+	// ceilings) sits wherever its pivot is; the mapper's pivot correction put the mesh's BOUNDS
+	// centre on the intended spot, so that is what gets bucketed.
+	TMap<int32, FVector> PieceCentres;
+	auto Centre = [&](EDungeonTileType T, int32 i) -> FVector
+	{
+		const FTransform& Xf = TileMap.Transforms[static_cast<int32>(T)][i];
+		const TArray<int32>& Ids = TileMap.PieceIds[static_cast<int32>(T)];
+		const int32 Id = Ids.IsValidIndex(i) ? Ids[i] : INDEX_NONE;
+		if (!TileMap.Pieces.IsValidIndex(Id) || !TileMap.Pieces[Id].Module.IsNull())
+		{
+			return Xf.GetLocation();
+		}
+		FVector* Local = PieceCentres.Find(Id);
+		if (!Local)
+		{
+			const UStaticMesh* Mesh = TileMap.Pieces[Id].Mesh.LoadSynchronous();
+			Local = &PieceCentres.Add(Id, Mesh ? Mesh->GetBoundingBox().GetCenter() : FVector::ZeroVector);
+		}
+		return Xf.TransformPosition(*Local);
+	};
+
 	TMap<FIntVector, int32> Walls, Slabs;
 	static const EDungeonTileType WallFamily[] = {
 		EDungeonTileType::WallSegment, EDungeonTileType::WallPartition,
 		EDungeonTileType::DoorFrame, EDungeonTileType::EntranceFrame };
 	for (EDungeonTileType T : WallFamily)
 	{
-		for (const FTransform& Xf : TileMap.Transforms[static_cast<int32>(T)])
+		for (int32 i = 0; i < TileMap.Transforms[static_cast<int32>(T)].Num(); ++i)
 		{
-			Walls.FindOrAdd(WallKey(Xf.GetLocation()))++;
+			Walls.FindOrAdd(WallKey(Centre(T, i)))++;
 		}
 	}
 	static const EDungeonTileType SlabFamily[] = {
@@ -64,9 +88,9 @@ FDungeonCoverageReport FDungeonCoverage::Analyse(const FDungeonResult& Result, c
 		EDungeonTileType::HallwayCeilingCrossroad, EDungeonTileType::HallwayCeilingEndCap };
 	for (EDungeonTileType T : SlabFamily)
 	{
-		for (const FTransform& Xf : TileMap.Transforms[static_cast<int32>(T)])
+		for (int32 i = 0; i < TileMap.Transforms[static_cast<int32>(T)].Num(); ++i)
 		{
-			Slabs.FindOrAdd(SlabKey(Xf.GetLocation()))++;
+			Slabs.FindOrAdd(SlabKey(Centre(T, i)))++;
 		}
 	}
 

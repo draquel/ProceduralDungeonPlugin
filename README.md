@@ -83,6 +83,15 @@ If using VoxelWorlds integration, enable both plugins and set `DungeonVoxelInteg
 4. Set a seed (or leave 0: the config's `FixedSeed` when `bUseFixedSeed` is on, otherwise random)
 5. Call `GenerateDungeon()` — from Blueprint, on BeginPlay, or from the editor
 
+A tileset is one `FDungeonTileSlot` per tile type (a single mesh auto-fit to the cell, or a multi-mesh
+module placed at one uniform scale), each with weighted `Variants` picked per placement from the seed;
+`RoomTypeOverrides` swap slots for typed rooms; `WallProfile` declares the face inset / partition
+thickness / door leaf every wall-family piece is authored to (`CheckWallProfile()` and the editor
+asset validator report anything off); `FixtureRules` and `DecorRules` place wall lights and decor by
+rule and density; `InteriorLighting` clamps exposure inside the dungeon. `DescribeCoverage()` on the
+actor reports any boundary without a piece. Interactable doors and torches are gameplay actors hung
+from the mapper's `Openings` / `Fixtures` by the game (see the environment polish doc).
+
 ### Basic Usage (C++)
 
 ```cpp
@@ -234,6 +243,9 @@ See [IMPLEMENTATION_PHASES in ARCHITECTURE.md](Documentation/ARCHITECTURE.md) fo
 ## Documentation
 
 - **[Architecture](Documentation/ARCHITECTURE.md)** — Complete system design, data structures, pipeline, integration layer, design decisions
+- **[Tile module system](Documentation/TILE_MODULE_SYSTEM_PLAN.md)** — Multi-mesh modules per tile type, authoring conventions, the module tool
+- **[Entrance placement](Documentation/ENTRANCE_PLACEMENT_PLAN.md)** — Entrance approach spec (shaft / tunnel), keep-out reservation, opening cell
+- **[Environment polish](Documentation/ENVIRONMENT_POLISH_PLAN.md)** — Face ownership + partitions, the wall profile + conformance check + corner posts, openings + fixtures for interactable doors and torches, seeded variants / room-type overrides / decor, coverage report + interior exposure volume (E1–E6, as built)
 
 > A standalone algorithm-reference walkthrough and a quick-start guide are planned but not yet
 > written; for now the algorithm and getting-started material lives in ARCHITECTURE.md.
