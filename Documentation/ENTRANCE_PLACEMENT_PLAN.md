@@ -15,8 +15,10 @@ config-only rebuild dressed a different layout than the carve — and the stitch
 (all interiors, then shells that never touch an interior sample or an open dungeon cell) with
 floor + ceiling shells on side tunnels, because overlapping ramp columns re-solidified each
 other and the ramp had no floor through natural caves. Live: pawn auto-ran from the mouth down
-the whole ramp into the tiled entrance room. Known cosmetic: the ramp's ceiling shell just under
-the surface reads as a stone apron around the mouth.
+the whole ramp into the tiled entrance room. The stone apron the first ramp left around the mouth
+(shell voxels written into already-solid ground re-textured the top layers) is fixed: shells are
+only written `SurfaceSkinVoxels` (2) or more below the LOCAL terrain surface, sampled per lattice
+column. The same rule removes the old thin stone ring around a shaft mouth.
 **Decisions taken:** vertical approaches prefer the **top floor** (`Floor = Top`; the demo POI
 configs move to `TopFloor` in P0 so the column above the entrance is empty by construction).
 **Scope:** `DungeonCore` (entrance spec, entrance-first placement, approach keep-out, validator),

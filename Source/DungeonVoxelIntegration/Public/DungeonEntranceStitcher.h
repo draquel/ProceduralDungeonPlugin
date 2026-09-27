@@ -73,7 +73,12 @@ private:
 	/**
 	 * Pass 2: place the column's shell (sides, plus floor and ceiling when the segment asks) on
 	 * every sample of the widened box that is not passage interior, not inside an open dungeon
-	 * cell, and below WallTopZ (a shell above the terrain surface would collar the mouth).
+	 * cell, and at least SurfaceSkinVoxels below the LOCAL terrain surface. A shell above the
+	 * surface would collar the mouth; a shell in the top voxel layers re-textures ground that
+	 * is solid anyway to dungeon stone (the ramp's overlapping columns painted a wide stone
+	 * apron around the mouth), so those layers keep their natural material.
+	 * @param SampleSurfaceZ Terrain surface height at a world XY (cached per lattice column).
+	 * @param SurfaceCache   Per-(IX,IY) surface heights, shared across the segments of one carve.
 	 * @return Voxels written.
 	 */
 	int32 PlaceColumnShell(
@@ -84,7 +89,8 @@ private:
 		const FDungeonResult& Result,
 		const FVector& WorldOffset,
 		float VoxelSize,
-		float WallTopZ,
+		TFunctionRef<float(float WorldX, float WorldY)> SampleSurfaceZ,
+		TMap<FIntPoint, float>& SurfaceCache,
 		uint8 WallMaterialID,
 		uint8 BiomeID);
 
