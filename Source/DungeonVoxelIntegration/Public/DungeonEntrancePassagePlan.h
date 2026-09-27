@@ -15,7 +15,13 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonPassageSegment
 	float HalfExtentXY = 0.0f;
 	float BottomZ = 0.0f;
 	float TopZ = 0.0f;
+	/** Wall shell around the column's XY footprint (below the terrain surface only). */
 	bool bWalls = true;
+	/**
+	 * Also shell the column's floor and ceiling: a horizontal passage through the natural cave
+	 * layer needs a floor to walk on and a lid, where a vertical shaft is enclosed by its sides.
+	 */
+	bool bFloorCeilingShell = false;
 
 	/** Grid cell the column stands in when bInsideGrid; otherwise the passage has left the grid footprint. */
 	FIntVector Cell = FIntVector::ZeroValue;
@@ -89,6 +95,9 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonEntrancePassagePlan
 	 *                               dungeons) instead of the entrance cell's bottom. A side tunnel
 	 *                               then stops at the room face (the mapper opens the wall) instead of
 	 *                               carving the opening cell itself (voxel lining).
+	 * @param SideTunnelFloorLift    FromSide only: raise the tunnel floor this much above the cell
+	 *                               bottom so it meets the room's WALKABLE floor (the tile slab or
+	 *                               stone lining thickness) instead of stepping up into it.
 	 * @param SampleSurfaceZ         Terrain surface height at a world XY.
 	 */
 	static FDungeonEntrancePassagePlan Build(
@@ -97,5 +106,6 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonEntrancePassagePlan
 		EDungeonEntranceStyle Style,
 		float VoxelSize,
 		bool bStopAtEntranceCellTop,
+		float SideTunnelFloorLift,
 		TFunctionRef<float(float WorldX, float WorldY)> SampleSurfaceZ);
 };

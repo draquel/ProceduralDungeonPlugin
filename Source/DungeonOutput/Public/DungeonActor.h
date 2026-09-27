@@ -46,6 +46,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon")
 	bool bOpenEntranceCeiling = false;
 
+	/**
+	 * Generate with EntranceOverride instead of the config's Entrance spec. A tile actor dressing
+	 * a voxel-stamped dungeon MUST use the same spec the stamp was generated with, or it rebuilds
+	 * a different layout over the carved voids (the spec changes room placement).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon")
+	bool bUseEntranceOverride = false;
+
+	/** The entrance approach to honour when bUseEntranceOverride is set (see FDungeonEntranceSpec). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon", meta = (EditCondition = "bUseEntranceOverride"))
+	FDungeonEntranceSpec EntranceOverride;
+
 	/** Generate the dungeon and create tile geometry. */
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
 	void GenerateDungeon();

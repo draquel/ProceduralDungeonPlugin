@@ -34,6 +34,26 @@ TArray<FVector> UDungeonGenerator::GetCellWorldPositionsByType(const FDungeonRes
 
 FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 Seed)
 {
+	if (!Config)
+	{
+		UE_LOG(LogDungeonGenerator, Error, TEXT("Generate called with null Config"));
+		return FDungeonResult();
+	}
+	return GenerateInternal(Config, Seed, Config->Entrance);
+}
+
+FDungeonResult UDungeonGenerator::GenerateWithEntrance(UDungeonConfiguration* Config, int64 Seed, const FDungeonEntranceSpec& EntranceOverride)
+{
+	if (!Config)
+	{
+		UE_LOG(LogDungeonGenerator, Error, TEXT("GenerateWithEntrance called with null Config"));
+		return FDungeonResult();
+	}
+	return GenerateInternal(Config, Seed, EntranceOverride);
+}
+
+FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config, int64 Seed, const FDungeonEntranceSpec& EntranceSpec)
+{
 	FDungeonResult Result;
 
 	if (!Config)
@@ -81,18 +101,18 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 	// 3a: with an approach declared, the entrance room goes FIRST, placed to suit the approach,
 	// and its approach volume is stamped Reserved so the remaining rooms and the hallway
 	// pathfinder keep out of it. Reserved is cleared back to Empty in Step 10.
-	if (Config->Entrance.Approach != EDungeonEntranceApproach::None)
+	if (EntranceSpec.Approach != EDungeonEntranceApproach::None)
 	{
-		if (FRoomPlacement::PlaceEntranceRoom(Result.Grid, *Config, MainSeed, Result.Rooms, Result.EntranceApproach))
+		if (FRoomPlacement::PlaceEntranceRoom(Result.Grid, *Config, EntranceSpec, MainSeed, Result.Rooms, Result.EntranceApproach))
 		{
 			UE_LOG(LogDungeonGenerator, Log, TEXT("Step 3a: entrance room placed first (approach=%d, floor=%d)"),
-				static_cast<int32>(Config->Entrance.Approach), Result.Rooms[0].Position.Z);
+				static_cast<int32>(EntranceSpec.Approach), Result.Rooms[0].Position.Z);
 		}
 		else
 		{
 			UE_LOG(LogDungeonGenerator, Warning,
 				TEXT("Step 3a: entrance approach %d could not be satisfied; falling back to unconstrained placement (nothing reserved)"),
-				static_cast<int32>(Config->Entrance.Approach));
+				static_cast<int32>(EntranceSpec.Approach));
 		}
 	}
 

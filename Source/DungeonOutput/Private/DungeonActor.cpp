@@ -52,7 +52,9 @@ void ADungeonActor::GenerateDungeon()
 
 	// Generate dungeon data
 	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
-	CachedResult = Generator->Generate(DungeonConfig, Seed);
+	CachedResult = bUseEntranceOverride
+		? Generator->GenerateWithEntrance(DungeonConfig, Seed, EntranceOverride)
+		: Generator->Generate(DungeonConfig, Seed);
 
 	UE_LOG(LogDungeonOutput, Log, TEXT("Generated dungeon: %d rooms, %d hallways, %d staircases in %.1fms"),
 		CachedResult.Rooms.Num(), CachedResult.Hallways.Num(),

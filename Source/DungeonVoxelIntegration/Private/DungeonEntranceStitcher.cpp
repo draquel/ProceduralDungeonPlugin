@@ -4,11 +4,35 @@
 #include "DungeonVoxelLattice.h"
 #include "DungeonVoxelIntegration.h"
 #include "DungeonTypes.h"
+#include "DungeonBoundaryRules.h"
 #include "VoxelData.h"
 #include "VoxelEditManager.h"
 #include "VoxelChunkManager.h"
 #include "IVoxelWorldMode.h"
 #include "VoxelWorldConfiguration.h"
+
+namespace
+{
+	/**
+	 * 2-voxel shell: a single-voxel skin meshes as a pinched thin feature in smooth (MC/DC)
+	 * worlds wherever the passage crosses open cave space — unstable normals streak the
+	 * triplanar texturing. Two voxels give the mesher a solid interior sample so both faces
+	 * mesh cleanly (and the shell survives a grazing edit).
+	 */
+	constexpr float ShellVoxels = 2.0f;
+
+	/** True when a world position lies inside an open (traversable) cell of the dungeon grid. */
+	bool IsInsideOpenDungeonCell(const FDungeonResult& Result, const FVector& WorldOffset, const FVector& WorldPos)
+	{
+		const float CS = Result.CellWorldSize;
+		const FIntVector Cell(
+			FMath::FloorToInt32((WorldPos.X - WorldOffset.X) / CS),
+			FMath::FloorToInt32((WorldPos.Y - WorldOffset.Y) / CS),
+			FMath::FloorToInt32((WorldPos.Z - WorldOffset.Z) / CS));
+		return Result.Grid.IsInBounds(Cell)
+			&& FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(Cell).CellType);
+	}
+}
 
 // ============================================================================
 // Surface Detection
@@ -47,52 +71,28 @@ float UDungeonEntranceStitcher::DetectSurfaceHeight(UVoxelChunkManager* ChunkMan
 }
 
 // ============================================================================
-// Column Carver
+// Two-pass column carve
 // ============================================================================
 
-int32 UDungeonEntranceStitcher::CarveColumn(
-	UVoxelEditManager* EditManager,
-	UVoxelChunkManager* ChunkManager,
-	const FVector& Center,
-	float HalfExtentXY,
-	float TopZ,
-	float BottomZ,
-	float VoxelSize,
-	bool bPlaceWalls,
-	float WallTopZ,
-	uint8 WallMaterialID,
-	uint8 BiomeID)
+void UDungeonEntranceStitcher::CollectColumnInterior(
+	const FDungeonVoxelLattice& Lattice,
+	const FDungeonPassageSegment& Segment,
+	TSet<FIntVector>& OutInterior)
 {
-	int32 VoxelsModified = 0;
-	const FVoxelData AirVoxel = FVoxelData::Air();
-	const FVoxelData WallVoxel = FVoxelData::Solid(WallMaterialID, BiomeID);
-
-	// 2-voxel wall shell: a single-voxel skin meshes as a pinched thin feature in smooth
-	// (MC/DC) worlds wherever the shaft crosses open cave space — unstable normals streak the
-	// triplanar texturing. Two voxels give the mesher a solid interior sample so both faces
-	// mesh cleanly (and the shell survives a grazing edit).
-	const float WallThickness = 2.0f * VoxelSize;
-	const float OuterExtent = HalfExtentXY + (bPlaceWalls ? WallThickness : 0.0f);
-
-	const UVoxelWorldConfiguration* VoxelConfig = ChunkManager->GetConfiguration();
-	if (!VoxelConfig)
-	{
-		return 0;
-	}
-
-	// Resolve on the voxel lattice, not by float-stepping from the shaft centre: the shaft origin
-	// has an arbitrary phase against the voxel grid, so stepping by VoxelSize skips voxels and
-	// double-writes others, leaving an uncarved rind down the shaft wall.
-	const FDungeonVoxelLattice Lattice(VoxelConfig->WorldOrigin, VoxelSize);
+	// Resolve on the voxel lattice, not by float-stepping from the column centre: the passage
+	// origin has an arbitrary phase against the voxel grid, so stepping by VoxelSize skips voxels
+	// and double-writes others, leaving an uncarved rind down the wall.
+	const FVector& C = Segment.Center;
+	const float H = Segment.HalfExtentXY;
 
 	FIntVector Min, Max;
 	Lattice.RangeForBox(
-		FVector(Center.X - OuterExtent, Center.Y - OuterExtent, BottomZ),
-		FVector(Center.X + OuterExtent, Center.Y + OuterExtent, TopZ),
+		FVector(C.X - H, C.Y - H, Segment.BottomZ),
+		FVector(C.X + H, C.Y + H, Segment.TopZ),
 		Min, Max);
 	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
 	{
-		return 0;
+		return;
 	}
 
 	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
@@ -103,36 +103,96 @@ int32 UDungeonEntranceStitcher::CarveColumn(
 			{
 				const FIntVector Index(IX, IY, IZ);
 				const FVector WorldPos = Lattice.SamplePosition(Index); // where this voxel is generated / meshed
-				const FVector EditPos = Lattice.EditPosition(Index);    // what resolves to it in ApplyEdit
-				const float DistX = FMath::Abs(WorldPos.X - Center.X);
-				const float DistY = FMath::Abs(WorldPos.Y - Center.Y);
-
-				// The carve may overshoot the terrain surface (breaking the mouth open), but the
-				// wall shell must not follow it up: solid ring voxels placed in the air above the
-				// surface would build a knee-high collar the character cannot step over.
-				const bool bWallLayer = bPlaceWalls && WorldPos.Z < WallTopZ;
-
-				if (DistX < HalfExtentXY && DistY < HalfExtentXY)
+				if (FMath::Abs(WorldPos.X - C.X) < H && FMath::Abs(WorldPos.Y - C.Y) < H)
 				{
-					// Interior — carve to air
-					if (EditManager->ApplyEdit(EditPos, AirVoxel, EEditMode::Set))
-					{
-						++VoxelsModified;
-					}
-				}
-				else if (bWallLayer)
-				{
-					// Shell — place wall
-					if (EditManager->ApplyEdit(EditPos, WallVoxel, EEditMode::Set))
-					{
-						++VoxelsModified;
-					}
+					OutInterior.Add(Index);
 				}
 			}
 		}
 	}
+}
 
-	return VoxelsModified;
+int32 UDungeonEntranceStitcher::PlaceColumnShell(
+	UVoxelEditManager* EditManager,
+	const FDungeonVoxelLattice& Lattice,
+	const FDungeonPassageSegment& Segment,
+	const TSet<FIntVector>& Interior,
+	const FDungeonResult& Result,
+	const FVector& WorldOffset,
+	float VoxelSize,
+	float WallTopZ,
+	uint8 WallMaterialID,
+	uint8 BiomeID)
+{
+	if (!Segment.bWalls)
+	{
+		return 0;
+	}
+
+	const FVoxelData WallVoxel = FVoxelData::Solid(WallMaterialID, BiomeID);
+	const float Thickness = ShellVoxels * VoxelSize;
+	const FVector& C = Segment.Center;
+	const float Outer = Segment.HalfExtentXY + Thickness;
+	const float ZPad = Segment.bFloorCeilingShell ? Thickness : 0.0f;
+
+	FIntVector Min, Max;
+	Lattice.RangeForBox(
+		FVector(C.X - Outer, C.Y - Outer, Segment.BottomZ - ZPad),
+		FVector(C.X + Outer, C.Y + Outer, Segment.TopZ + ZPad),
+		Min, Max);
+	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+	{
+		return 0;
+	}
+
+	int32 Written = 0;
+	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
+	{
+		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
+		{
+			for (int32 IX = Min.X; IX <= Max.X; ++IX)
+			{
+				const FIntVector Index(IX, IY, IZ);
+				if (Interior.Contains(Index))
+				{
+					continue; // passage interior (this or an overlapping column): never re-solidified
+				}
+				const FVector WorldPos = Lattice.SamplePosition(Index);
+
+				// The carve may overshoot the terrain surface (breaking the mouth open), but the
+				// shell must not follow it up: solid voxels placed in the air above the surface
+				// would build a knee-high collar the character cannot step over.
+				if (WorldPos.Z >= WallTopZ)
+				{
+					continue;
+				}
+				// Never wall off the dungeon itself (the room face the corridor enters, the room
+				// below a lid): its voids are the stamper's, and tile-dressed rooms are air.
+				if (IsInsideOpenDungeonCell(Result, WorldOffset, WorldPos))
+				{
+					continue;
+				}
+
+				const float DX = FMath::Abs(WorldPos.X - C.X);
+				const float DY = FMath::Abs(WorldPos.Y - C.Y);
+				const bool bWithinOuterXY = DX < Outer && DY < Outer;
+				const bool bWithinInnerXY = DX < Segment.HalfExtentXY && DY < Segment.HalfExtentXY;
+				const bool bWithinZ = WorldPos.Z >= Segment.BottomZ && WorldPos.Z < Segment.TopZ;
+				const bool bSideShell = bWithinOuterXY && !bWithinInnerXY && bWithinZ;
+				const bool bCapShell = Segment.bFloorCeilingShell && bWithinOuterXY && !bWithinZ;
+				if (!bSideShell && !bCapShell)
+				{
+					continue;
+				}
+
+				if (EditManager->ApplyEdit(Lattice.EditPosition(Index), WallVoxel, EEditMode::Set))
+				{
+					++Written;
+				}
+			}
+		}
+	}
+	return Written;
 }
 
 // ============================================================================
@@ -156,9 +216,8 @@ int32 UDungeonEntranceStitcher::CarveCaveOpening(
 	const FVoxelData AirVoxel = FVoxelData::Air();
 	const FVoxelData WallVoxel = FVoxelData::Solid(Config->WallMaterialID, Config->DungeonBiomeID);
 
-	// Carve a column with noise-displaced radius per Z-level. 2-voxel shell for the same
-	// reason as CarveColumn: a 1-voxel skin streaks in smooth worlds where it crosses caves.
-	const float WallThickness = 2.0f * VoxelSize;
+	// Carve a column with noise-displaced radius per Z-level; 2-voxel shell (see ShellVoxels).
+	const float WallThickness = ShellVoxels * VoxelSize;
 	const float TotalHeight = CarveTopZ - EntranceZ;
 
 	const UVoxelWorldConfiguration* VoxelConfig = ChunkManager->GetConfiguration();
@@ -237,7 +296,8 @@ int32 UDungeonEntranceStitcher::StitchEntrance(
 	const FVector& WorldOffset,
 	EDungeonEntranceStyle Style,
 	UDungeonVoxelConfig* Config,
-	bool bStopAtEntranceCellTop)
+	bool bStopAtEntranceCellTop,
+	float SideTunnelFloorLift)
 {
 	if (!ChunkManager)
 	{
@@ -269,7 +329,7 @@ int32 UDungeonEntranceStitcher::StitchEntrance(
 	// The geometry is decided from the dungeon's recorded approach, so the carve stays inside the
 	// volume the generator kept clear. A mismatched style is refused rather than carved blindly.
 	const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(
-		Result, WorldOffset, Style, VoxelSize, bStopAtEntranceCellTop,
+		Result, WorldOffset, Style, VoxelSize, bStopAtEntranceCellTop, SideTunnelFloorLift,
 		[this, ChunkManager](float X, float Y) { return DetectSurfaceHeight(ChunkManager, X, Y); });
 
 	if (!Plan.IsValid())
@@ -302,13 +362,28 @@ int32 UDungeonEntranceStitcher::StitchEntrance(
 	}
 	else
 	{
+		const FDungeonVoxelLattice Lattice(VoxelConfig->WorldOrigin, VoxelSize);
+
+		// Pass 1: the union of every column's interior, then air.
+		TSet<FIntVector> Interior;
 		for (const FDungeonPassageSegment& Seg : Plan.Segments)
 		{
-			VoxelsModified += CarveColumn(EditManager, ChunkManager,
-				FVector(Seg.Center.X, Seg.Center.Y, 0.0f),
-				Seg.HalfExtentXY, Seg.TopZ, Seg.BottomZ, VoxelSize,
-				Seg.bWalls, /*WallTopZ=*/Plan.SurfaceZ,
-				Seg.bWalls ? Config->WallMaterialID : 0, Seg.bWalls ? Config->DungeonBiomeID : 0);
+			CollectColumnInterior(Lattice, Seg, Interior);
+		}
+		const FVoxelData AirVoxel = FVoxelData::Air();
+		for (const FIntVector& Index : Interior)
+		{
+			if (EditManager->ApplyEdit(Lattice.EditPosition(Index), AirVoxel, EEditMode::Set))
+			{
+				++VoxelsModified;
+			}
+		}
+
+		// Pass 2: shells, never over an interior sample or an open dungeon cell.
+		for (const FDungeonPassageSegment& Seg : Plan.Segments)
+		{
+			VoxelsModified += PlaceColumnShell(EditManager, Lattice, Seg, Interior, Result, WorldOffset,
+				VoxelSize, /*WallTopZ=*/Plan.SurfaceZ, Config->WallMaterialID, Config->DungeonBiomeID);
 		}
 	}
 

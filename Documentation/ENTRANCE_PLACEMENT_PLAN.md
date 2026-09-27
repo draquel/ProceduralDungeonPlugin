@@ -1,10 +1,22 @@
 # Entrance Placement Control — Review & Design Plan
 
 **Status:** P0 merged (PDP#11 / parent #44) and P1 merged (PDP#12 / parent #45), 2026-09-26.
-P2 implemented on `feature/entrance-approach-p2`: `FDungeonEntrancePassagePlan` (pure carve
-geometry from `EntranceApproach`, unit-tested), stitcher refuses style/approach mismatches,
-`SlopedTunnel` re-shaped as a `FromSide` corridor + walkable ramp outside the footprint, tile mapper
-opens the lid / floor / face wall per approach. P3 proposed.
+P2 merged (PDP#13 / parent #46): `FDungeonEntrancePassagePlan` (pure carve geometry from
+`EntranceApproach`, unit-tested), stitcher refuses style/approach mismatches, `SlopedTunnel`
+re-shaped as a `FromSide` corridor + walkable ramp outside the footprint, tile mapper opens the
+lid / floor / face wall per approach. P3 implemented (`feature/entrance-approach-p3` +
+parent `feature/dungeon-entrance-p3`): `UDungeonGenerator::GenerateWithEntrance` override, side
+tunnel floor lift to the walkable floor, POI subsystem derives the spec from the type's
+`EntranceStyle`, anchors a side tunnel by its predicted mouth, and records `bVerticalPassage` /
+`EntranceRoomFloorWorld` so shaft dressing (elevator, platforms) skips side tunnels and in-room
+content anchors on the room, not the mouth. Two things the first live side tunnel exposed and P3
+also fixes: `ADungeonActor` takes the same entrance override (`bUseEntranceOverride`) — a
+config-only rebuild dressed a different layout than the carve — and the stitcher carves two-pass
+(all interiors, then shells that never touch an interior sample or an open dungeon cell) with
+floor + ceiling shells on side tunnels, because overlapping ramp columns re-solidified each
+other and the ramp had no floor through natural caves. Live: pawn auto-ran from the mouth down
+the whole ramp into the tiled entrance room. Known cosmetic: the ramp's ceiling shell just under
+the surface reads as a stone apron around the mouth.
 **Decisions taken:** vertical approaches prefer the **top floor** (`Floor = Top`; the demo POI
 configs move to `TopFloor` in P0 so the column above the entrance is empty by construction).
 **Scope:** `DungeonCore` (entrance spec, entrance-first placement, approach keep-out, validator),

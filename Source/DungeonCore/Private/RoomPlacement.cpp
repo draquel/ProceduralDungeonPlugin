@@ -35,12 +35,11 @@ namespace
 bool FRoomPlacement::PlaceEntranceRoom(
 	FDungeonGrid& Grid,
 	const UDungeonConfiguration& Config,
+	const FDungeonEntranceSpec& Spec,
 	FDungeonSeed& Seed,
 	TArray<FDungeonRoom>& OutRooms,
 	FDungeonEntranceApproachInfo& OutApproach)
 {
-	const FDungeonEntranceSpec& Spec = Config.Entrance;
-
 	OutApproach = FDungeonEntranceApproachInfo();
 	OutApproach.Approach = Spec.Approach;
 	OutApproach.bSatisfied = false;
