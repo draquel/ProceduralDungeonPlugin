@@ -53,11 +53,17 @@ public:
 	 * solid one, so with 0 it lies within half a voxel of the plane on EITHER side and can stand
 	 * up to VoxelSize / 2 inside the cell, behind the tiles. 0.5 moves the whole band outward: the
 	 * surface then lies in [plane, plane + VoxelSize) and rock never crosses a cell plane inward,
-	 * so module faces (and recesses behind them, such as wall niches) may sit at any inset. The
-	 * outer seal moves out with it, so its thickness is unchanged. Ignored by the voxel-lined
-	 * modes, whose stone lining defines the walls.
+	 * so module faces may sit at any inset. The outer seal moves out with it, so its thickness is
+	 * unchanged. Ignored by the voxel-lined modes, whose stone lining defines the walls.
+	 *
+	 * Size it to the DEEPEST wall-family piece: the surface lies in
+	 * (plane + Margin - VoxelSize / 2, plane + Margin + VoxelSize / 2], so a module that extrudes
+	 * D past the cell plane (the pack crypt wall: 70, its niches open onto the rock behind) needs
+	 * Margin >= D + VoxelSize / 2 — 1.2 voxels at VoxelSize 100, 1.5 for headroom. With only 0.5
+	 * the rock shows inside every niche. Keep Margin * 2 below the rock left between two open
+	 * cells a buffer cell apart (CellWorldSize).
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scale", meta = (ClampMin = "0", ClampMax = "1"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scale", meta = (ClampMin = "0", ClampMax = "3"))
 	float CarveMarginVoxels = 0.0f;
 
 	/** Biome ID assigned to all dungeon voxels. */

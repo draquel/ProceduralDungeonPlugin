@@ -3,6 +3,7 @@
 #include "DungeonTileSet.h"
 #include "DungeonTileModule.h"
 #include "Engine/StaticMesh.h"
+#include "PhysicsEngine/BodySetup.h"
 
 bool FDungeonWallProfileConformance::IsWallFamily(EDungeonTileType Type)
 {
@@ -19,6 +20,8 @@ bool FDungeonWallProfileConformance::MeasureModule(const UDungeonTileModule& Mod
 	bool bAny = false;
 	Out.InnerX = TNumericLimits<float>::Max();
 	Out.OuterX = -TNumericLimits<float>::Max();
+	Out.MinZ = TNumericLimits<float>::Max();
+	Out.MaxZ = -TNumericLimits<float>::Max();
 	Out.ElementCount = 0;
 
 	for (const FDungeonModuleElement& E : Module.Elements)
@@ -42,6 +45,8 @@ bool FDungeonWallProfileConformance::MeasureModule(const UDungeonTileModule& Mod
 
 		Out.InnerX = FMath::Min(Out.InnerX, MinX);
 		Out.OuterX = FMath::Max(Out.OuterX, MaxX);
+		Out.MinZ = FMath::Min(Out.MinZ, static_cast<float>(InFrame.Min.Z) * Rescale);
+		Out.MaxZ = FMath::Max(Out.MaxZ, static_cast<float>(InFrame.Max.Z) * Rescale);
 		if (Area > BestArea)
 		{
 			BestArea = Area;
@@ -59,6 +64,18 @@ void FDungeonWallProfileConformance::CheckMeasure(const FDungeonWallProfileMeasu
 	const UEnum* TypeEnum = StaticEnum<EDungeonTileType>();
 	const FString TypeName = TypeEnum ? TypeEnum->GetNameStringByValue(static_cast<int64>(M.Type)) : FString::FromInt(static_cast<int32>(M.Type));
 	const float Tol = P.Tolerance;
+
+	// Every wall-family piece stands on the cell: anchor at mid-height, so the module spans about
+	// [-Ref/2, +Ref/2] in Z. A piece hanging below the floor or rising past the ceiling is almost
+	// always a rotation authored on the wrong axis (a pack quad given PITCH 180 instead of yaw
+	// 180 faces the right way in plan and runs down into the floor below — the partition that
+	// shipped one-sided). Decoration may overhang by MaxProtrusion.
+	const float HalfCell = P.ReferenceCellSize * 0.5f;
+	if (M.MinZ < -HalfCell - P.MaxProtrusion - Tol || M.MaxZ > HalfCell + P.MaxProtrusion + Tol)
+	{
+		OutIssues.Add(FString::Printf(TEXT("%s: geometry spans Z %.1f..%.1f, outside the cell height %.1f..%.1f (an element rotated about the wrong axis?)"),
+			*TypeName, M.MinZ, M.MaxZ, -HalfCell, HalfCell));
+	}
 
 	if (M.Type == EDungeonTileType::WallPartition)
 	{
@@ -147,6 +164,76 @@ void FDungeonWallProfileConformance::Check(const UDungeonTileSet& TileSet, TArra
 			{
 				const UEnum* RoomEnum = StaticEnum<EDungeonRoomType>();
 				CheckSlot(Type, *OSlot, FString::Printf(TEXT(" (%s override)"),
+					RoomEnum ? *RoomEnum->GetNameStringByValue(static_cast<int64>(OPair.Key)) : TEXT("?")));
+			}
+		}
+	}
+}
+
+void FDungeonWallProfileConformance::CheckCollision(const UDungeonTileSet& TileSet, TArray<FString>& OutIssues)
+{
+	static const EDungeonTileType Family[] = {
+		EDungeonTileType::WallSegment, EDungeonTileType::WallPartition,
+		EDungeonTileType::DoorFrame, EDungeonTileType::EntranceFrame };
+	const UEnum* TypeEnum = StaticEnum<EDungeonTileType>();
+	TSet<FSoftObjectPath> Seen;
+
+	auto CheckMesh = [&](EDungeonTileType Type, const TSoftObjectPtr<UStaticMesh>& MeshPtr, const FString& Where)
+	{
+		if (MeshPtr.IsNull() || Seen.Contains(MeshPtr.ToSoftObjectPath()))
+		{
+			return;
+		}
+		Seen.Add(MeshPtr.ToSoftObjectPath());
+		const UStaticMesh* Mesh = MeshPtr.LoadSynchronous();
+		const UBodySetup* Body = Mesh ? Mesh->GetBodySetup() : nullptr;
+		if (!Body)
+		{
+			return;
+		}
+		// Thin along the mesh's own X (the wall convention: X = thickness, finished face +X).
+		const FVector Size = Mesh->GetBoundingBox().GetSize();
+		const bool bThin = Size.X < 2.0f * TileSet.WallProfile.Tolerance;
+		const bool bComplexOnly = Body->CollisionTraceFlag == CTF_UseComplexAsSimple
+			|| (Body->CollisionTraceFlag == CTF_UseDefault && Body->AggGeom.GetElementCount() == 0);
+		if (bThin && bComplexOnly && !Body->bDoubleSidedGeometry)
+		{
+			OutIssues.Add(FString::Printf(TEXT("%s%s: %s is a thin mesh with single-sided complex collision — passable from its back; enable Double Sided Geometry on the mesh"),
+				TypeEnum ? *TypeEnum->GetNameStringByValue(static_cast<int64>(Type)) : TEXT("?"), *Where, *Mesh->GetName()));
+		}
+	};
+	auto CheckModuleMeshes = [&](EDungeonTileType Type, const TSoftObjectPtr<UDungeonTileModule>& ModulePtr, const FString& Where)
+	{
+		const UDungeonTileModule* Module = ModulePtr.IsNull() ? nullptr : ModulePtr.LoadSynchronous();
+		if (!Module)
+		{
+			return;
+		}
+		for (const FDungeonModuleElement& E : Module->Elements)
+		{
+			CheckMesh(Type, E.Mesh, Where);
+		}
+	};
+	auto CheckSlotMeshes = [&](EDungeonTileType Type, const FDungeonTileSlot& Slot, const FString& Where)
+	{
+		CheckMesh(Type, Slot.Mesh, Where);
+		CheckModuleMeshes(Type, Slot.Module, Where);
+		for (int32 i = 0; i < Slot.Variants.Num(); ++i)
+		{
+			const FString VWhere = FString::Printf(TEXT("%s variant %d"), *Where, i);
+			CheckMesh(Type, Slot.Variants[i].Mesh, VWhere);
+			CheckModuleMeshes(Type, Slot.Variants[i].Module, VWhere);
+		}
+	};
+	for (EDungeonTileType Type : Family)
+	{
+		CheckSlotMeshes(Type, TileSet.GetSlot(Type), FString());
+		for (const TPair<EDungeonRoomType, FDungeonRoomTypeOverride>& OPair : TileSet.RoomTypeOverrides)
+		{
+			if (const FDungeonTileSlot* OSlot = OPair.Value.Slots.Find(Type))
+			{
+				const UEnum* RoomEnum = StaticEnum<EDungeonRoomType>();
+				CheckSlotMeshes(Type, *OSlot, FString::Printf(TEXT(" (%s override)"),
 					RoomEnum ? *RoomEnum->GetNameStringByValue(static_cast<int64>(OPair.Key)) : TEXT("?")));
 			}
 		}

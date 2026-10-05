@@ -169,5 +169,6 @@ TArray<FString> UDungeonTileSet::CheckWallProfile() const
 {
 	TArray<FString> Issues;
 	FDungeonWallProfileConformance::Check(*this, Issues);
+	FDungeonWallProfileConformance::CheckCollision(*this, Issues);
 	return Issues;
 }

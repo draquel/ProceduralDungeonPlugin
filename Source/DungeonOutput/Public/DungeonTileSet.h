@@ -346,8 +346,10 @@ public:
 	FRotator WallLightRotationOffset = FRotator(0.0f, -90.0f, 0.0f);
 
 	/**
-	 * Measure every wall-family module against WallProfile. One line per problem; empty = conforms.
-	 * Loads the module meshes. Also run by the editor asset validator on save.
+	 * Measure every wall-family module against WallProfile (face plane, partition faces, element
+	 * height) and every wall-family mesh's collision (thin single-sided complex collision is
+	 * passable from the back). One line per problem; empty = conforms. Loads the meshes. Also run
+	 * by the editor asset validator on save.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "TileSet")
 	TArray<FString> CheckWallProfile() const;

@@ -310,7 +310,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 	// inside the cell behind the tiles. The voxel-lined modes keep the exact cell box — their
 	// stone lining IS the wall. The open-sample set and the seal slabs use the same expanded box.
 	const float CarveMargin = (StampMode == EDungeonStampMode::CarveOnly)
-		? FMath::Clamp(Config->CarveMarginVoxels, 0.0f, 1.0f) * VoxelSize
+		? FMath::Clamp(Config->CarveMarginVoxels, 0.0f, 3.0f) * VoxelSize
 		: 0.0f;
 
 	// Every voxel write below resolves through this lattice rather than stepping in cell space:
@@ -490,9 +490,16 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 	// ------------------------------------------------------------------
 	// Pass 3: Place staircase step geometry inside body cells
+	// (skipped in CarveOnly — the tile ramp IS the staircase, and solid voxels written over the
+	// exact stair box re-fill the carve margin of every open neighbour, so the meshed rock then
+	// stands up to VoxelSize / 2 INSIDE the room or hall alongside, through its partition)
 	// ------------------------------------------------------------------
 	for (const FDungeonStaircase& Staircase : Result.Staircases)
 	{
+		if (StampMode == EDungeonStampMode::CarveOnly)
+		{
+			break;
+		}
 		const int32 StepVoxels = PlaceStaircaseSteps(
 			EditManager, ChunkManager, Staircase, Lattice, WorldOffset,
 			CellWorldSize, VoxelsPerCell,
