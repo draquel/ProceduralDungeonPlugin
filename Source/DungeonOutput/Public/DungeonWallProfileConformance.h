@@ -18,6 +18,9 @@ struct DUNGEONOUTPUT_API FDungeonWallProfileMeasure
 	/** Innermost / outermost extent over ALL elements (decoration included). */
 	float InnerX = 0.0f;
 	float OuterX = 0.0f;
+	/** Lowest / highest extent over all elements, module frame (anchor at the cell's MID-height). */
+	float MinZ = 0.0f;
+	float MaxZ = 0.0f;
 	int32 ElementCount = 0;
 };
 
@@ -43,4 +46,12 @@ struct DUNGEONOUTPUT_API FDungeonWallProfileConformance
 
 	/** Every module-backed wall-family slot of the tileset. Single-mesh slots are fitted by the mapper and pass. */
 	static void Check(const UDungeonTileSet& TileSet, TArray<FString>& OutIssues);
+
+	/**
+	 * Collision of every wall-family mesh (slot meshes, variants, module elements): a THIN mesh
+	 * (no thickness along its finished-face normal, like a pack wall quad) whose complex collision
+	 * is single-sided blocks from its front only — a pawn walks through it from the back. Reports
+	 * such meshes unless their body setup is double-sided.
+	 */
+	static void CheckCollision(const UDungeonTileSet& TileSet, TArray<FString>& OutIssues);
 };

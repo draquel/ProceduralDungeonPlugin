@@ -406,3 +406,37 @@ Sign-off montage: `Documentation/Images/environment_polish_signoff.jpg` (entranc
 yet, so that entrance style is covered by the mapper / coverage tests only; the project-level
 `r.EyeAdaptation.CachedLightingPreExposure` is untouched (the interior clamp keeps the exposure in
 range); torch intensity / AO are tileset data to tune per theme; locked doors wait for keys.
+
+## 9. Post-sign-off fixes (2026-10-05)
+
+Three reports after E6, each pinned to a cause before fixing:
+
+1. **Rock through the back of the crypt wall (niches).** `CarveMarginVoxels` 0.5 puts the meshed
+   rock in [plane, plane + VoxelSize); the demo runs VoxelSize 100 and the crypt body extrudes 70
+   past the plane, so the rock surface landed inside the niche recesses. Fix: the margin's clamp is
+   0..3 voxels and its doc gives the rule (surface in (Margin - V/2, Margin + V/2]; size it to the
+   deepest piece, keep 2 x Margin + V <= CellWorldSize so a one-cell buffer keeps a solid sample);
+   demo voxel config 1.5. Verified: niches clean.
+2. **Thin walls passable from one side; stair flanks and "walls inside rooms" see-through.** The
+   demo partition module (`TM_WallPartitionThin`) was authored by the E2 script with
+   `unreal.Rotator(0, yaw, 0)` — positional args are (roll, pitch, yaw) — so its room-side quad got
+   PITCH 180: right face direction in plan, but it ran down into the floor below. Every partition
+   was therefore the far-side quad alone, one-sided for collision (walk through from the owner's
+   room) and transparent to the room (the stair's ramp and rock showed). Fix: module re-authored
+   with keyword rotators; conformance now reports any wall-family element outside the cell height
+   (`Dungeon.WallProfile.ElementHeightWithinCell`) and any thin single-sided complex-collision mesh
+   (`CheckCollision`, in `CheckWallProfile()`), which would have flagged both the pitched quad and
+   the door body quad (walkable from the hallway side beside the leaf). The pack's thin meshes
+   (wall quad, doorway wall, arch wall, ceiling plane) are set Double Sided Geometry locally —
+   that content is outside the repo (`Content/Dungeon_Modular_V1` is ignored), so a fresh checkout
+   must redo it or the validator will say so.
+3. **Stair step voxels in the room alongside.** Pass 3 of the stamper wrote solid step voxels over
+   the exact stair box, refilling the open neighbour's carve margin, so the rock surface stood up to
+   V/2 inside the room through its partition. CarveOnly dungeons now skip Pass 3: the tile ramp is
+   the staircase (collision included), the cell stays void behind it.
+
+Door-frame gaps reported at the same time were the partition's missing room-side quad beside door
+bodies (an 80 step between the frame at -40 and the far quad at +40); re-check after the fix. If a
+gap remains at a corridor MOUTH, the candidate is the outer-corner post rule skipping frame cells
+(`DungeonTileMapper.cpp`, "jambs cover the corner"): the 40-deep inset of the side wall is exposed
+there and the post should plug it.

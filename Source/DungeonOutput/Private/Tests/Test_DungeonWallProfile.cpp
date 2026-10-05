@@ -368,3 +368,64 @@ bool FWallProfileCorners::RunTest(const FString& Parameters)
 	TS->RemoveFromRoot();
 	return true;
 }
+
+// ---------------------------------------------------------------------------
+// Height: a wall-family element that runs below the floor or above the ceiling (a pack quad
+// rotated about the wrong axis) is reported; the demo's 2026-10 one-sided partition was exactly
+// this — PITCH 180 instead of yaw 180 — and the face-plane measure alone passed it.
+// ---------------------------------------------------------------------------
+PROFILE_TEST(FWallProfileHeight, "Dungeon.WallProfile.ElementHeightWithinCell")
+bool FWallProfileHeight::RunTest(const FString& Parameters)
+{
+	FDungeonWallProfile P;
+	TArray<FString> Issues;
+	// A wall body standing on the cell: Z -200..200 at ref 400 (the cube's 100 height scaled 4).
+	{
+		UDungeonTileModule* M = MakeCubeModule({ { 10.0f, FVector(1.0f, 4.0f, 4.0f) } });
+		FDungeonWallProfileMeasure Me; Me.Type = EDungeonTileType::WallSegment;
+		FDungeonWallProfileConformance::MeasureModule(*M, 400.0f, Me);
+		TestTrue(TEXT("standing body spans the cell height"), FMath::IsNearlyEqual(Me.MinZ, -200.0f, 0.01f) && FMath::IsNearlyEqual(Me.MaxZ, 200.0f, 0.01f));
+		Issues.Reset(); FDungeonWallProfileConformance::CheckMeasure(Me, P, Issues);
+		TestEqual(TEXT("standing body: no height issue"), Issues.Num(), 0);
+		M->RemoveFromRoot();
+	}
+	// A pack-style piece (base at its own origin, rising +Z) given PITCH 180 at the floor anchor:
+	// its face plane is unchanged, but it runs down into the floor below. Emulated with the
+	// centred cube: raise it 200 first (base at 0), then pitch 180 and place at the floor (-200).
+	{
+		UDungeonTileModule* M = NewObject<UDungeonTileModule>();
+		M->AddToRoot();
+		M->ReferenceCellSize = 400.0f;
+		FDungeonModuleElement El;
+		El.Mesh = TSoftObjectPtr<UStaticMesh>(EngineCube);
+		El.RelativeTransform = FTransform(FVector(0.0f, 0.0f, 200.0f))
+			* FTransform(FRotator(180.0f, 0.0f, 0.0f), FVector(10.0f, 0.0f, -200.0f), FVector(1.0f, 4.0f, 4.0f));
+		M->Elements.Add(El);
+		FDungeonWallProfileMeasure Me; Me.Type = EDungeonTileType::WallSegment;
+		FDungeonWallProfileConformance::MeasureModule(*M, 400.0f, Me);
+		TestTrue(TEXT("pitched body hangs below the floor"), Me.MaxZ < -100.0f);
+		Issues.Reset(); FDungeonWallProfileConformance::CheckMeasure(Me, P, Issues);
+		TestTrue(TEXT("pitched body is reported"), Issues.Num() >= 1 && Issues[0].Contains(TEXT("outside the cell height")));
+		M->RemoveFromRoot();
+	}
+	// Decoration may overhang by MaxProtrusion: a cornice 20 above the ceiling passes at 30.
+	{
+		UDungeonTileModule* M = NewObject<UDungeonTileModule>();
+		M->AddToRoot();
+		M->ReferenceCellSize = 400.0f;
+		FDungeonModuleElement Body;
+		Body.Mesh = TSoftObjectPtr<UStaticMesh>(EngineCube);
+		Body.RelativeTransform = FTransform(FRotator::ZeroRotator, FVector(10.0f, 0.0f, 0.0f), FVector(1.0f, 4.0f, 4.0f));
+		M->Elements.Add(Body);
+		FDungeonModuleElement Cornice;
+		Cornice.Mesh = TSoftObjectPtr<UStaticMesh>(EngineCube);
+		Cornice.RelativeTransform = FTransform(FRotator::ZeroRotator, FVector(-20.0f, 0.0f, 210.0f), FVector(0.2f, 4.0f, 0.2f));
+		M->Elements.Add(Cornice);
+		FDungeonWallProfileMeasure Me; Me.Type = EDungeonTileType::WallSegment;
+		FDungeonWallProfileConformance::MeasureModule(*M, 400.0f, Me);
+		Issues.Reset(); FDungeonWallProfileConformance::CheckMeasure(Me, P, Issues);
+		TestEqual(TEXT("cornice within MaxProtrusion: no issue"), Issues.Num(), 0);
+		M->RemoveFromRoot();
+	}
+	return true;
+}
