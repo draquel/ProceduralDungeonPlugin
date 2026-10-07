@@ -1081,6 +1081,17 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					{
 						continue; // the passage lands here
 					}
+					// Floor decor stands on a floor: only cells that actually place one (the same
+					// gate the floor tiles use). The upper cells of a two-storey room have no floor
+					// of their own, so decor emitted at their plane floated one cell up in the air.
+					if (!FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, C, X, Y, Z - 1))
+					{
+						continue;
+					}
+					if (OpeningKind == EDungeonEntranceApproach::FromBelow && C == OpeningCell)
+					{
+						continue; // the entrance shaft rises through this cell's open floor
+					}
 					if (Hash01(C, CellDecor, SaltDecorFloorRoll) >= Density)
 					{
 						continue;

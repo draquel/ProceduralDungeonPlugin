@@ -40,6 +40,26 @@ namespace DungeonTileVarietyTestHelpers
 		return R;
 	}
 
+	/** (N+2)x(N+2)xLevels: an NxN room at (1,1) spanning every level (a tall room: open vertically). */
+	FDungeonResult MakeTallRoom(int32 N, int32 Levels, int64 Seed)
+	{
+		FDungeonResult R;
+		R.Seed = Seed;
+		R.GridSize = FIntVector(N + 2, N + 2, Levels); R.CellWorldSize = 400.0f; R.Grid.Initialize(R.GridSize);
+		for (int32 Z = 0; Z < Levels; ++Z)
+		{
+			for (int32 Y = 0; Y < N + 2; ++Y) for (int32 X = 0; X < N + 2; ++X)
+			{ FDungeonCell& C = R.Grid.GetCell(X, Y, Z); C.CellType = EDungeonCellType::RoomWall; C.RoomIndex = 1; }
+			for (int32 Y = 1; Y <= N; ++Y) for (int32 X = 1; X <= N; ++X)
+			{ FDungeonCell& C = R.Grid.GetCell(X, Y, Z); C.CellType = EDungeonCellType::Room; C.RoomIndex = 1; }
+		}
+		FDungeonRoom Room;
+		Room.RoomIndex = 1; Room.RoomType = EDungeonRoomType::Generic; Room.Position = FIntVector(1, 1, 0); Room.Size = FIntVector(N, N, Levels);
+		R.Rooms.Add(Room);
+		R.EntranceRoomIndex = -1;
+		return R;
+	}
+
 	/** 7x5x1 corridor along y=2 from x=1..5. */
 	FDungeonResult MakeCorridor(int64 Seed)
 	{
@@ -223,6 +243,21 @@ bool FTileDecor::RunTest(const FString& Parameters)
 			TestTrue(TEXT("floor decor yaw is a quarter turn"), FMath::IsNearlyEqual(Yaw, Step * 90.0f, 0.01f));
 			++YawSteps[(Step % 4 + 4) % 4];
 		}
+	}
+
+	// A two-storey room: floor decor stands only where a floor is placed (the lower level); the
+	// upper cells have no floor of their own and must not float decor at their plane. Wall decor
+	// still dresses both levels' walls.
+	{
+		TS->DecorRules.WallDecorDensity = 1.0f; TS->DecorRules.FloorDecorDensity = 1.0f; TS->DecorRules.HallwayDecorDensity = 1.0f;
+		const FDungeonTileMapResult Map = FDungeonTileMapper::MapToTiles(MakeTallRoom(3, 2, 9), *TS, FVector::ZeroVector);
+		const TArray<FTransform>& Floor = Map.Transforms[static_cast<int32>(EDungeonTileType::FloorDecor)];
+		TestEqual(TEXT("two-storey room: floor decor only on the floored level"), Floor.Num(), 9);
+		for (const FTransform& Xf : Floor)
+		{
+			TestTrue(TEXT("two-storey room: floor decor at the lower floor"), FMath::IsNearlyEqual(Xf.GetLocation().Z, 0.0f, 0.5f));
+		}
+		TestEqual(TEXT("two-storey room: wall decor on both levels"), Map.Transforms[static_cast<int32>(EDungeonTileType::WallDecor)].Num(), 24);
 	}
 
 	// Density 0: nothing. A fixture face never takes wall decor (bSkipFixtureFaces).
