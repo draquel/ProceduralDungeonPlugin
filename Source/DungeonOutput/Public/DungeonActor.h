@@ -13,10 +13,19 @@ class UHierarchicalInstancedStaticMeshComponent;
 class UBoxComponent;
 class UPostProcessComponent;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnDungeonInteractableSpawned, ADungeonActor*, Dungeon, AActor*, Interactable, bool, bIsDoor);
+
 /**
  * Blueprint-exposed actor that generates and displays a dungeon.
  * Place in a level, assign a DungeonConfiguration and TileSet, then call GenerateDungeon.
  * Uses one HISMC per tile type for efficient instanced rendering.
+ *
+ * The tiles are the visual half. The gameplay half — door leaves in the Doorway openings and
+ * torches on the wall-light fixtures the mapper emits — are ACTORS, because they move, hold
+ * state, replicate and take interactions, none of which an instance can do. In a game world the
+ * actor spawns them itself on authority after every build (bSpawnInteractables, DoorActorClass /
+ * WallLightActorClass, see IDungeonInteractable); a game layer that keeps its own records (the
+ * POI system) turns that off and hangs its own subclasses from GetOpenings() / GetFixtures().
  */
 UCLASS(BlueprintType, Blueprintable, meta = (DisplayName = "Dungeon Actor"))
 class DUNGEONOUTPUT_API ADungeonActor : public AActor
@@ -83,6 +92,49 @@ public:
 
 	/** The tile map of the last GenerateDungeon (instances, openings, fixtures); empty before. */
 	const FDungeonTileMapResult& GetTileMap() const { return CachedTileMap; }
+
+	/** Framed openings of the last build (doorways, ramp entries, entrance openings), world space. */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
+	TArray<FDungeonOpening> GetOpenings() const { return CachedTileMap.Openings; }
+
+	/** Wall-mounted fixtures of the last build (wall lights per the tileset's rules), world space. */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
+	TArray<FDungeonFixture> GetFixtures() const { return CachedTileMap.Fixtures; }
+
+	/**
+	 * Spawn the gameplay half in a game world on authority: one DoorActorClass per Doorway opening
+	 * (at its LeafHinge) and one WallLightActorClass per WallLight fixture (at its Anchor), each
+	 * told its record through IDungeonInteractable, then OnInteractableSpawned. Runs automatically
+	 * after GenerateDungeon when bSpawnInteractables is set; call it yourself after changing the
+	 * classes. Previously spawned interactables are destroyed first.
+	 * @return Number of actors spawned (0 outside a game world, without authority, or with no dungeon).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Interactables")
+	int32 SpawnInteractables();
+
+	/** Destroy every interactable this actor spawned (ClearDungeon and EndPlay do this). */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Interactables")
+	void DestroyInteractables();
+
+	/** The interactables this actor spawned and still owns (doors first, then torches). */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
+	TArray<AActor*> GetInteractables() const;
+
+	/** Hang doors and wall lights automatically after each build (game worlds, authority). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Interactables")
+	bool bSpawnInteractables = true;
+
+	/** Door leaf actor per Doorway opening (ADungeonDoorActor or a subclass; implements IDungeonInteractable). None = no doors. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Interactables")
+	TSubclassOf<AActor> DoorActorClass;
+
+	/** Torch actor per WallLight fixture (ADungeonTorchActor or a subclass; implements IDungeonInteractable). None = no lights. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Interactables")
+	TSubclassOf<AActor> WallLightActorClass;
+
+	/** Fires on authority for each interactable right after its Setup call: set a remembered state here. */
+	UPROPERTY(BlueprintAssignable, Category = "Dungeon|Interactables")
+	FOnDungeonInteractableSpawned OnInteractableSpawned;
 
 	/**
 	 * THE dungeon build: generate (with or without an entrance override) and map to tiles. Every
@@ -188,6 +240,8 @@ public:
 #endif
 
 	// AActor interface
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual bool ShouldTickIfViewportsOnly() const override;
 
@@ -216,6 +270,13 @@ private:
 
 	/** Size the box to the grid and push the tileset's interior settings (after a build); disable when cleared. */
 	void ApplyInteriorPostProcess(bool bEnable);
+
+	/** Doors then torches spawned by SpawnInteractables (authority, game worlds only). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AActor>> Interactables;
+
+	/** Spawn one actor of Class at Transform, run its IDungeonInteractable setup, broadcast. */
+	AActor* SpawnInteractable(TSubclassOf<AActor> Class, const FTransform& Transform, const FDungeonOpening* Opening, const FDungeonFixture* Fixture);
 
 	bool bHasDungeon = false;
 

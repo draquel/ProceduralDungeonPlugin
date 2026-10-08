@@ -1,10 +1,14 @@
 #include "DungeonActor.h"
 #include "DungeonOutput.h"
+#include "DungeonDoorActor.h"
 #include "DungeonGenerator.h"
 #include "DungeonConfig.h"
+#include "DungeonInteractable.h"
 #include "DungeonTileSet.h"
 #include "DungeonTileMapper.h"
 #include "DungeonTileModule.h"
+#include "DungeonTorchActor.h"
+#include "Engine/World.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/PostProcessComponent.h"
@@ -43,6 +47,126 @@ ADungeonActor::ADungeonActor()
 	InteriorPostProcess->SetupAttachment(InteriorBounds);
 	InteriorPostProcess->bUnbound = false;
 	InteriorPostProcess->bEnabled = false;
+
+	// The plugin's own door and torch; game layers swap in subclasses or Blueprints.
+	DoorActorClass = ADungeonDoorActor::StaticClass();
+	WallLightActorClass = ADungeonTorchActor::StaticClass();
+}
+
+void ADungeonActor::BeginPlay()
+{
+	Super::BeginPlay();
+	// A dungeon built before play (a level script, construction, or a build that ran on a
+	// not-yet-begun world) gets its gameplay half now; builds after this spawn their own.
+	if (bHasDungeon && bSpawnInteractables && Interactables.Num() == 0)
+	{
+		SpawnInteractables();
+	}
+}
+
+void ADungeonActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	DestroyInteractables();
+	Super::EndPlay(EndPlayReason);
+}
+
+AActor* ADungeonActor::SpawnInteractable(TSubclassOf<AActor> Class, const FTransform& Transform, const FDungeonOpening* Opening, const FDungeonFixture* Fixture)
+{
+	UWorld* World = GetWorld();
+	if (!World || !Class)
+	{
+		return nullptr;
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	Params.Owner = this;
+	// Unscaled: the record's scale is carried by the actor's own leaf / mesh scale (see the
+	// Setup functions), so the swing and the light never run under a non-uniform transform.
+	const FTransform Unscaled(Transform.GetRotation(), Transform.GetLocation());
+	AActor* Actor = World->SpawnActor<AActor>(Class, Unscaled, Params);
+	if (!Actor)
+	{
+		return nullptr;
+	}
+	if (Actor->GetClass()->ImplementsInterface(UDungeonInteractable::StaticClass()))
+	{
+		if (Opening)
+		{
+			IDungeonInteractable::Execute_SetupFromOpening(Actor, *Opening, TileSet);
+		}
+		else if (Fixture)
+		{
+			IDungeonInteractable::Execute_SetupFromFixture(Actor, *Fixture, TileSet);
+		}
+	}
+	Interactables.Add(Actor);
+	OnInteractableSpawned.Broadcast(this, Actor, Opening != nullptr);
+	return Actor;
+}
+
+int32 ADungeonActor::SpawnInteractables()
+{
+	DestroyInteractables();
+	UWorld* World = GetWorld();
+	if (!World || !World->IsGameWorld() || !HasAuthority() || !bHasDungeon)
+	{
+		return 0;
+	}
+	int32 Doorways = 0, Doors = 0, Torches = 0;
+	if (DoorActorClass)
+	{
+		for (const FDungeonOpening& Opening : CachedTileMap.Openings)
+		{
+			if (Opening.Kind != EDungeonOpeningKind::Doorway)
+			{
+				continue;
+			}
+			++Doorways;
+			if (SpawnInteractable(DoorActorClass, Opening.LeafHinge, &Opening, nullptr))
+			{
+				++Doors;
+			}
+		}
+	}
+	if (WallLightActorClass)
+	{
+		for (const FDungeonFixture& Fixture : CachedTileMap.Fixtures)
+		{
+			if (Fixture.Kind == EDungeonFixtureKind::WallLight && SpawnInteractable(WallLightActorClass, Fixture.Anchor, nullptr, &Fixture))
+			{
+				++Torches;
+			}
+		}
+	}
+	UE_LOG(LogDungeonOutput, Log, TEXT("ADungeonActor %s: %d door(s) in %d doorway(s), %d torch(es) on %d fixture(s)."),
+		*GetName(), Doors, Doorways, Torches, CachedTileMap.Fixtures.Num());
+	return Interactables.Num();
+}
+
+void ADungeonActor::DestroyInteractables()
+{
+	for (AActor* Actor : Interactables)
+	{
+		if (IsValid(Actor))
+		{
+			Actor->Destroy();
+		}
+	}
+	Interactables.Reset();
+}
+
+TArray<AActor*> ADungeonActor::GetInteractables() const
+{
+	TArray<AActor*> Out;
+	Out.Reserve(Interactables.Num());
+	for (AActor* Actor : Interactables)
+	{
+		if (IsValid(Actor))
+		{
+			Out.Add(Actor);
+		}
+	}
+	return Out;
 }
 
 void ADungeonActor::ApplyInteriorPostProcess(bool bEnable)
@@ -296,6 +420,13 @@ void ADungeonActor::GenerateDungeon()
 
 	UE_LOG(LogDungeonOutput, Log, TEXT("Dungeon visualization complete: %d total instances, %d HISMC components"),
 		TileMap.GetTotalInstanceCount(), TileComponents.Num());
+
+	// The gameplay half (game worlds, authority; a no-op elsewhere, and before BeginPlay the
+	// actor picks it up there).
+	if (bSpawnInteractables && HasActorBegunPlay())
+	{
+		SpawnInteractables();
+	}
 }
 
 bool ADungeonActor::BuildDungeon(UDungeonConfiguration* Config, const UDungeonTileSet* TileSet, int64 InSeed,
@@ -324,6 +455,7 @@ bool ADungeonActor::BuildDungeon(UDungeonConfiguration* Config, const UDungeonTi
 
 void ADungeonActor::ClearDungeon()
 {
+	DestroyInteractables();
 	for (auto& Pair : TileComponents)
 	{
 		if (UHierarchicalInstancedStaticMeshComponent* HISMC = Pair.Value)
