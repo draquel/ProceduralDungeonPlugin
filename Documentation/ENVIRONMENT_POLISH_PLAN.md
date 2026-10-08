@@ -287,6 +287,24 @@ tile instances. The tile actor stays visual-only and spawns on every client; a n
   Lumen cached-lighting exposure warning); torch intensity / radius are actor defaults to tune
   with the project exposure fix. Hallways stay unlit by rule (no hallway fixtures yet).
 
+**Addendum (2026-10-08): the gameplay half lives in the plugin too.** As built above, only the
+POI path consumed `Openings` / `Fixtures`; a bare `ADungeonActor` (a hand-placed dungeon, the
+`DungeonTest` map) got frames but no doors or lights, and the records were C++-only. Now:
+
+- `ADungeonDoorActor` / `ADungeonTorchActor` (DungeonOutput) carry what used to be the POI
+  actors' bodies: leaf fit (`ComputeLeafScale`, unit-tested), swing, replicated state, the
+  create-on-lit point light. They keep no persistence and no prompt, because DungeonOutput depends
+  on nothing but DungeonCore; two virtual hooks (`RecordState`, `OnStateVisualsApplied` /
+  `OnLitVisualsApplied`) are where a game layer adds those. `APOIDungeonDoor` / `APOIDungeonTorch`
+  are now those subclasses (state record + `UInteractableComponent`), nothing else.
+- `IDungeonInteractable` (`SetupFromOpening` / `SetupFromFixture` / `GetDungeonInteractableId`,
+  Blueprint-implementable) is how the tile actor tells a spawned actor its record.
+- `ADungeonActor` spawns the gameplay half itself in game worlds on authority after every build
+  (`bSpawnInteractables`, `DoorActorClass` / `WallLightActorClass`, `SpawnInteractables()`,
+  `DestroyInteractables()` on clear / EndPlay, `OnInteractableSpawned` for a remembered state), and
+  exposes `GetOpenings()` / `GetFixtures()` to Blueprint. The POI tile actor is spawned with
+  `bSpawnInteractables = false`: that path keeps its own spawner and records (§11 of the POI plan).
+
 ### 3.7 Validation and tooling
 
 - `Dungeon.TileMapper.Coverage`: generate several seeds, map to tiles, and assert for every open

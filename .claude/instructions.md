@@ -57,6 +57,7 @@ DungeonVoxelIntegration → Optional VoxelWorlds bridge (disabled by default)
 - `FDungeonWallProfileConformance` — measures wall-family modules (variants and overrides included) against the tileset profile; `UDungeonTileSetValidator` (DungeonEditor) surfaces it as asset validation
 - `FDungeonCoverage` — light-tightness report of a tile map (needed boundaries vs placed pieces); `ADungeonActor::DescribeCoverage`
 - `ADungeonActor::BuildDungeon` — the single generate + map entry point every consumer (the actor, POI gameplay) goes through
+- `IDungeonInteractable`, `ADungeonDoorActor`, `ADungeonTorchActor` — the gameplay half of a tiled dungeon: the tile actor spawns one `DoorActorClass` per Doorway opening (at `LeafHinge`) and one `WallLightActorClass` per WallLight fixture (at `Anchor`) in game worlds on authority (`bSpawnInteractables`, `SpawnInteractables()`, `GetOpenings()` / `GetFixtures()` for Blueprint), and tells each actor its record through the interface. The plugin actors replicate state and animate; they keep NO persistence and NO interaction prompt (no game-framework dependency) — game layers subclass them (VoxelWorldPOI's `APOIDungeonDoor` / `APOIDungeonTorch` add the state record and `UInteractableComponent`) and set `bSpawnInteractables = false` when they hang their own
 - See `Documentation/ENVIRONMENT_POLISH_PLAN.md` (E1–E6 as built) and `TILE_MODULE_SYSTEM_PLAN.md`
 
 ### VoxelWorlds Integration Classes

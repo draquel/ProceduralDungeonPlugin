@@ -5,6 +5,7 @@
 #include "DungeonTypes.h"
 #include "DungeonTileSet.h"
 #include "DungeonTileMapper.h"
+#include "DungeonDoorActor.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -218,6 +219,54 @@ bool FInteractableFixtures::RunTest(const FString& Parameters)
 		// Doorway lights come first, so the cap always keeps them.
 		TestTrue(TEXT("deterministic: doorway lights first"), A.Fixtures.Num() >= 2 && A.Fixtures[0].Cell == FIntVector(4, 2, 0) && A.Fixtures[1].Cell == FIntVector(4, 2, 0));
 	}
+
+	TS->RemoveFromRoot();
+	return true;
+}
+
+// The plugin's door actor fits a leaf mesh to an opening by scaling the mesh BOUNDS to the
+// profile's leaf size about the hinge origin: a leaf authored to the profile numbers fits 1:1,
+// a differently sized one is stretched (and, since the base is not at the origin, moved).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FInteractableLeafFit, "Dungeon.Interactables.LeafFit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+bool FInteractableLeafFit::RunTest(const FString& Parameters)
+{
+	UDungeonTileSet* TS = MakeInteractableTileSet();
+	TS->WallProfile.DoorLeafWidth = 236.0f;
+	TS->WallProfile.DoorLeafHeight = 232.0f;
+	const FDungeonTileMapResult Map = FDungeonTileMapper::MapToTiles(MakeDoorway(), *TS, FVector::ZeroVector);
+	TestEqual(TEXT("one doorway"), Map.Openings.Num(), 1);
+	if (Map.Openings.Num() != 1) { TS->RemoveFromRoot(); return false; }
+	const FDungeonOpening& O = Map.Openings[0];
+
+	// SM_DoorLeaf as authored: hinge at the origin, 236 along +Y, floor top 80 -> 312, 19 thick.
+	const FBox Authored(FVector(-8.0f, 0.0f, 80.0f), FVector(11.0f, 236.0f, 312.0f));
+	const FVector Fit = ADungeonDoorActor::ComputeLeafScale(O, Authored, FRotator::ZeroRotator);
+	TestTrue(TEXT("authored to the profile: scale 1"), Fit.Equals(FVector(1.0f), 0.001f));
+
+	// The pack's leaf (151 x 289) in the same opening is stretched to the profile size.
+	const FBox PackLeaf(FVector(-5.0f, 0.0f, 0.0f), FVector(5.0f, 151.0f, 289.0f));
+	const FVector Stretched = ADungeonDoorActor::ComputeLeafScale(O, PackLeaf, FRotator::ZeroRotator);
+	TestTrue(TEXT("pack leaf: width 236/151"), FMath::IsNearlyEqual(Stretched.Y, 236.0f / 151.0f, 0.001f));
+	TestTrue(TEXT("pack leaf: height 232/289"), FMath::IsNearlyEqual(Stretched.Z, 232.0f / 289.0f, 0.001f));
+	TestTrue(TEXT("pack leaf: thickness keeps the cell scale"), FMath::IsNearlyEqual(Stretched.X, 1.0f, 0.001f));
+
+	// A leaf authored along -Y with a yaw-180 offset (the pack convention) measures the same.
+	const FBox AlongMinusY(FVector(-5.0f, -151.0f, 0.0f), FVector(5.0f, 0.0f, 289.0f));
+	const FVector Offset = ADungeonDoorActor::ComputeLeafScale(O, AlongMinusY, FRotator(0.0f, 180.0f, 0.0f));
+	TestTrue(TEXT("yaw-180 leaf: same fit"), Offset.Equals(Stretched, 0.001f));
+
+	// Cell scale: at cell 800 the opening doubles, the authored leaf doubles with it.
+	FDungeonResult Big = MakeDoorway();
+	Big.CellWorldSize = 800.0f;
+	const FDungeonTileMapResult BigMap = FDungeonTileMapper::MapToTiles(Big, *TS, FVector::ZeroVector);
+	if (BigMap.Openings.Num() == 1)
+	{
+		const FVector BigFit = ADungeonDoorActor::ComputeLeafScale(BigMap.Openings[0], Authored, FRotator::ZeroRotator);
+		TestTrue(TEXT("cell 800: scale 2"), BigFit.Equals(FVector(2.0f), 0.001f));
+	}
+
+	// No mesh: the cell scale alone.
+	TestTrue(TEXT("no bounds: cell scale"), ADungeonDoorActor::ComputeLeafScale(O, FBox(ForceInit), FRotator::ZeroRotator).Equals(FVector(1.0f), 0.001f));
 
 	TS->RemoveFromRoot();
 	return true;
