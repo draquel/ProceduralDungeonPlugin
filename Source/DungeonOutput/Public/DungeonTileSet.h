@@ -45,6 +45,10 @@ struct DUNGEONOUTPUT_API FDungeonTileVariant
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Variant", meta = (ClampMin = "0.0"))
 	float Weight = 1.0f;
 
+	/** Gameplay role of this piece when placed as floor / hallway decor (see EDungeonPropRole). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Variant")
+	EDungeonPropRole Role = EDungeonPropRole::Decor;
+
 	bool IsActive() const { return !Mesh.IsNull() || !Module.IsNull(); }
 };
 
@@ -82,6 +86,10 @@ struct DUNGEONOUTPUT_API FDungeonTileSlot
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot|Variety")
 	TArray<FDungeonTileVariant> Variants;
+
+	/** Gameplay role of the slot's OWN piece when placed as floor / hallway decor (see EDungeonPropRole). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Slot")
+	EDungeonPropRole Role = EDungeonPropRole::Decor;
 
 	bool HasMesh() const { return !Mesh.IsNull(); }
 	bool HasModule() const { return !Module.IsNull(); }
