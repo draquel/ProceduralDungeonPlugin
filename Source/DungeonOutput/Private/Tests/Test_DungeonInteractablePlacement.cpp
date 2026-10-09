@@ -272,4 +272,57 @@ bool FInteractableLeafFit::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Props (feature 3): container-role decor pieces are recorded as FDungeonProp alongside their
+// instance; plain decor never is; ids are stable and unique per cell.
+// ---------------------------------------------------------------------------
+INTERACTABLE_TEST(FInteractableProps, "Dungeon.Interactables.ContainerPropsFromDecor")
+bool FInteractableProps::RunTest(const FString& Parameters)
+{
+	UDungeonTileSet* TS = MakeInteractableTileSet();
+	TS->FixtureRules.MaxWallLights = 0;
+	TS->DecorRules.WallDecorDensity = 0.0f;
+	TS->DecorRules.FloorDecorDensity = 1.0f;   // every room floor cell takes a piece
+	TS->DecorRules.HallwayDecorDensity = 1.0f;
+
+	FDungeonTileSlot Floor;
+	Floor.Mesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Engine/BasicShapes/Cube.Cube")));
+	Floor.Role = EDungeonPropRole::Container;
+	TS->Slots.Add(EDungeonTileType::FloorDecor, Floor);
+	FDungeonTileSlot Hall;
+	Hall.Mesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Engine/BasicShapes/Cube.Cube")));
+	Hall.Role = EDungeonPropRole::Decor;
+	TS->Slots.Add(EDungeonTileType::HallwayDecor, Hall);
+
+	// Doorway layout: 9 room cells (container role), 3 hallway cells (plain decor), 1 Door cell (no decor).
+	const FDungeonTileMapResult Map = FDungeonTileMapper::MapToTiles(MakeDoorway(), *TS, FVector::ZeroVector);
+	TestEqual(TEXT("one prop per room floor cell"), Map.Props.Num(), 9);
+	TestEqual(TEXT("room decor instanced too"), Map.Transforms[static_cast<int32>(EDungeonTileType::FloorDecor)].Num(), 9);
+	TestEqual(TEXT("hallway decor instanced"), Map.Transforms[static_cast<int32>(EDungeonTileType::HallwayDecor)].Num(), 3);
+
+	TSet<uint32> Ids;
+	for (const FDungeonProp& Prop : Map.Props)
+	{
+		TestEqual(TEXT("prop is a container"), Prop.Kind, EDungeonPropKind::Container);
+		TestEqual(TEXT("prop knows its room"), Prop.RoomIndex, 1);
+		TestTrue(TEXT("prop piece is container-role"), Map.Pieces.IsValidIndex(Prop.PieceId) && Map.Pieces[Prop.PieceId].Role == EDungeonPropRole::Container);
+		TestTrue(TEXT("prop stands at the cell centre"), Prop.Transform.GetLocation().Equals(FVector((Prop.Cell.X + 0.5f) * 400.0f, (Prop.Cell.Y + 0.5f) * 400.0f, 0.0f), 1.0f));
+		Ids.Add(FDungeonTileMapper::MakeInteractableId(Prop.Cell, 0, 0, FDungeonTileMapper::InteractableKindContainer));
+	}
+	TestEqual(TEXT("ids unique"), Ids.Num(), 9);
+
+	// The same id for a door on that cell would not collide: kind namespaces differ.
+	const FIntVector C(1, 1, 0);
+	TestNotEqual(TEXT("container and door ids differ"),
+		FDungeonTileMapper::MakeInteractableId(C, 0, 0, FDungeonTileMapper::InteractableKindContainer),
+		FDungeonTileMapper::MakeInteractableId(C, 0, 0, FDungeonTileMapper::InteractableKindDoor));
+
+	// Plain decor: no records.
+	TS->Slots[EDungeonTileType::FloorDecor].Role = EDungeonPropRole::Decor;
+	const FDungeonTileMapResult Plain = FDungeonTileMapper::MapToTiles(MakeDoorway(), *TS, FVector::ZeroVector);
+	TestEqual(TEXT("plain decor records nothing"), Plain.Props.Num(), 0);
+	TestEqual(TEXT("plain decor still instanced"), Plain.Transforms[static_cast<int32>(EDungeonTileType::FloorDecor)].Num(), 9);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

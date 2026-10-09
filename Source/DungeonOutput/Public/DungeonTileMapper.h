@@ -75,6 +75,20 @@ enum class EDungeonTileType : uint8
 };
 
 /**
+ * What a placed decor piece is to gameplay. Container pieces are still instanced like decor, but
+ * the mapper also emits an FDungeonProp record for each so a game layer can hang a searchable /
+ * breakable actor on it (the fixtures pattern). Only FloorDecor / HallwayDecor placements use it.
+ */
+UENUM(BlueprintType)
+enum class EDungeonPropRole : uint8
+{
+	/** Plain decoration: instanced, no record. */
+	Decor,
+	/** A crate / barrel / urn the player can interact with: instanced AND recorded as a prop. */
+	Container,
+};
+
+/**
  * One resolved render piece of a tile map (E4): what an instance carrying this id draws — a
  * single mesh (auto-fit / uniform per its type) or a module (expanded by ADungeonActor). Pieces
  * come from a slot's own geometry, its weighted Variants, and room-type overrides.
@@ -84,6 +98,8 @@ struct DUNGEONOUTPUT_API FDungeonTilePiece
 	EDungeonTileType Type = EDungeonTileType::RoomFloor;
 	TSoftObjectPtr<UStaticMesh> Mesh;
 	TSoftObjectPtr<UDungeonTileModule> Module;
+	/** Gameplay role when placed as decor (container pieces also produce FDungeonProp records). */
+	EDungeonPropRole Role = EDungeonPropRole::Decor;
 };
 
 /** What an opening in a wall plane is: decides whether a door leaf may hang in it (E3). */
@@ -187,6 +203,44 @@ struct DUNGEONOUTPUT_API FDungeonFixture
 	FTransform Anchor;
 };
 
+/** What a prop record is for (feature 3: dungeon loot). */
+UENUM(BlueprintType)
+enum class EDungeonPropKind : uint8
+{
+	/** A searchable container (crate, barrel, urn) placed as floor / hallway decor. */
+	Container,
+};
+
+/**
+ * A floor-standing prop the mapper placed as decor AND recorded for gameplay, because its tileset
+ * piece carries EDungeonPropRole::Container. The piece is instanced like any decor (every client
+ * sees it); a game layer spawns an interactable actor on the record (VoxelWorldPOI's container).
+ */
+USTRUCT(BlueprintType)
+struct DUNGEONOUTPUT_API FDungeonProp
+{
+	GENERATED_BODY()
+
+	/** The open cell the prop stands on. */
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon")
+	FIntVector Cell = FIntVector::ZeroValue;
+
+	/** FDungeonCell::RoomIndex of that cell (0 on hallway cells). */
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon")
+	int32 RoomIndex = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon")
+	EDungeonPropKind Kind = EDungeonPropKind::Container;
+
+	/** Index into FDungeonTileMapResult::Pieces (what the instance renders with). */
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon")
+	int32 PieceId = INDEX_NONE;
+
+	/** The instance's world transform (cell centre on the floor, seeded quarter-turn yaw, piece scale). */
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon")
+	FTransform Transform;
+};
+
 /**
  * Result of mapping a dungeon grid to tile instance transforms.
  * Indexed by EDungeonTileType — each slot holds transforms for one HISMC.
@@ -208,6 +262,9 @@ struct DUNGEONOUTPUT_API FDungeonTileMapResult
 
 	/** Wall-mounted fixtures (wall lights), placed per the tileset's FDungeonFixtureRules. */
 	TArray<FDungeonFixture> Fixtures;
+
+	/** Container-role decor pieces, recorded for gameplay (also instanced as decor). */
+	TArray<FDungeonProp> Props;
 
 	int32 GetTotalInstanceCount() const;
 	void Reset();
@@ -267,6 +324,8 @@ struct DUNGEONOUTPUT_API FDungeonTileMapper
 	/** Kind namespaces for MakeInteractableId. */
 	static constexpr uint8 InteractableKindDoor = 0x10;
 	static constexpr uint8 InteractableKindFixture = 0x20;
+	/** Props (containers) use the prop's cell with a zero face. */
+	static constexpr uint8 InteractableKindContainer = 0x30;
 
 private:
 	// Boundary decisions (wall / floor / ceiling between two cells) are NOT implemented here.

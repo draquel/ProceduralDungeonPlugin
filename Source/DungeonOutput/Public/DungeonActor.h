@@ -101,6 +101,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
 	TArray<FDungeonFixture> GetFixtures() const { return CachedTileMap.Fixtures; }
 
+	/** Container-role decor placements of the last build (see FDungeonProp), for gameplay to hang actors on. */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
+	TArray<FDungeonProp> GetProps() const { return CachedTileMap.Props; }
+
 	/**
 	 * Spawn the gameplay half in a game world on authority: one DoorActorClass per Doorway opening
 	 * (at its LeafHinge) and one WallLightActorClass per WallLight fixture (at its Anchor), each

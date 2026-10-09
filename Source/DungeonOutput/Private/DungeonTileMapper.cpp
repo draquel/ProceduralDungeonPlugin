@@ -30,6 +30,7 @@ void FDungeonTileMapResult::Reset()
 	Pieces.Reset();
 	Openings.Reset();
 	Fixtures.Reset();
+	Props.Reset();
 }
 
 uint32 FDungeonTileMapper::MakeInteractableId(const FIntVector& Cell, int32 FaceDX, int32 FaceDY, uint8 Kind)
@@ -134,6 +135,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 		bool bIsModule = false;
 		float ModuleScale = 1.0f;
 		float Weight = 1.0f;
+		EDungeonPropRole Role = EDungeonPropRole::Decor;
 	};
 	TArray<FPiece> Pieces;
 	struct FCandidates
@@ -145,7 +147,8 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	TMap<EDungeonRoomType, FCandidates> OverrideCandidates[FDungeonTileMapResult::TypeCount];
 
 	auto AddPiece = [&](FCandidates& Into, EDungeonTileType Type, const TSoftObjectPtr<UStaticMesh>& Mesh,
-		const TSoftObjectPtr<UDungeonTileModule>& ModulePtr, const FRotator& Rot, const FVector& Mul, float Weight)
+		const TSoftObjectPtr<UDungeonTileModule>& ModulePtr, const FRotator& Rot, const FVector& Mul, float Weight,
+		EDungeonPropRole Role)
 	{
 		if (Weight <= 0.0f)
 		{
@@ -158,6 +161,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 		P.RotationOffset = Rot;
 		P.ScaleMultiplier = Mul;
 		P.Weight = Weight;
+		P.Role = Role;
 		// A module is placed at one UNIFORM cell scale (ActualCellSize / ReferenceCellSize) with NO
 		// pivot correction / slab lift — the author owns the pieces' positions; the actor expands
 		// its elements. StaircaseMesh is a bespoke ramp — modules unsupported (actor mirrors this).
@@ -183,15 +187,16 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 		Into.TotalWeight += Weight;
 		FDungeonTilePiece OutPiece;
 		OutPiece.Type = Type;
+		OutPiece.Role = Role;
 		if (P.bIsModule) { OutPiece.Module = ModulePtr; } else { OutPiece.Mesh = Mesh; }
 		Out.Pieces.Add(OutPiece);
 	};
 	auto AddSlotPieces = [&](FCandidates& Into, EDungeonTileType Type, const FDungeonTileSlot& Slot)
 	{
-		AddPiece(Into, Type, Slot.Mesh, Slot.Module, Slot.RotationOffset, Slot.ScaleMultiplier, Slot.Weight);
+		AddPiece(Into, Type, Slot.Mesh, Slot.Module, Slot.RotationOffset, Slot.ScaleMultiplier, Slot.Weight, Slot.Role);
 		for (const FDungeonTileVariant& V : Slot.Variants)
 		{
-			AddPiece(Into, Type, V.Mesh, V.Module, V.RotationOffset, V.ScaleMultiplier, V.Weight);
+			AddPiece(Into, Type, V.Mesh, V.Module, V.RotationOffset, V.ScaleMultiplier, V.Weight, V.Role);
 		}
 	};
 	for (int32 i = 0; i < FDungeonTileMapResult::TypeCount; ++i)
@@ -1103,7 +1108,20 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					}
 					const float Yaw = 90.0f * FMath::FloorToFloat(Hash01(C, CellDecor, SaltDecorFloorYaw) * 4.0f);
 					const FRotator Rot = ApplyRot(P, FRotator(0.0f, Yaw, 0.0f));
-					Emit(CellDecor, P, FTransform(Rot, Base + FVector(HalfCS, HalfCS, 0.0f), DecorScale(P)));
+					const FTransform PropXf(Rot, Base + FVector(HalfCS, HalfCS, 0.0f), DecorScale(P));
+					Emit(CellDecor, P, PropXf);
+					// Container-role pieces are also a gameplay record (feature 3: a searchable actor
+					// hangs on it); the instance above stays the visual on every client.
+					if (Pieces[P].Role == EDungeonPropRole::Container)
+					{
+						FDungeonProp Prop;
+						Prop.Cell = C;
+						Prop.RoomIndex = Result.Grid.GetCell(C).RoomIndex;
+						Prop.Kind = EDungeonPropKind::Container;
+						Prop.PieceId = P;
+						Prop.Transform = PropXf;
+						Out.Props.Add(Prop);
+					}
 				}
 			}
 		}
