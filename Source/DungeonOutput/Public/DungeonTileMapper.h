@@ -86,6 +86,8 @@ enum class EDungeonPropRole : uint8
 	Decor,
 	/** A crate / barrel / urn the player can interact with: instanced AND recorded as a prop. */
 	Container,
+	/** A floor hazard (spike plate): instanced AND recorded as a prop for a trap actor (feature 5). */
+	Trap,
 };
 
 /**
@@ -209,6 +211,8 @@ enum class EDungeonPropKind : uint8
 {
 	/** A searchable container (crate, barrel, urn) placed as floor / hallway decor. */
 	Container,
+	/** A floor hazard (spike plate) placed as floor / hallway decor. */
+	Trap,
 };
 
 /**
@@ -239,6 +243,14 @@ struct DUNGEONOUTPUT_API FDungeonProp
 	/** The instance's world transform (cell centre on the floor, seeded quarter-turn yaw, piece scale). */
 	UPROPERTY(BlueprintReadOnly, Category = "Dungeon")
 	FTransform Transform;
+
+	/** The tile type whose instance list holds this prop's visual (FloorDecor / HallwayDecor). */
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon")
+	EDungeonTileType TileType = EDungeonTileType::FloorDecor;
+
+	/** Index into FDungeonTileMapResult::Transforms[TileType] of the prop's instance (ADungeonActor::SetTileInstanceHidden). */
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon")
+	int32 InstanceIndex = INDEX_NONE;
 };
 
 /**

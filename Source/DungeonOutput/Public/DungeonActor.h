@@ -101,9 +101,21 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
 	TArray<FDungeonFixture> GetFixtures() const { return CachedTileMap.Fixtures; }
 
-	/** Container-role decor placements of the last build (see FDungeonProp), for gameplay to hang actors on. */
+	/** Container- / trap-role decor placements of the last build (see FDungeonProp), for gameplay to hang actors on. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
 	TArray<FDungeonProp> GetProps() const { return CachedTileMap.Props; }
+
+	/**
+	 * Hide or show one tile instance (a broken crate, feature 5) without rebuilding: the instance
+	 * is collapsed to zero scale in every render batch it contributed to. Runs on every machine
+	 * (gameplay replicates the decision, this applies it).
+	 * @param Type          The tile type whose instance list holds it (FDungeonProp::TileType).
+	 * @param InstanceIndex Index into that list (FDungeonProp::InstanceIndex).
+	 * @param bHidden       Collapse (true) or restore (false).
+	 * @return False when no such instance was built.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Interactables")
+	bool SetTileInstanceHidden(EDungeonTileType Type, int32 InstanceIndex, bool bHidden);
 
 	/**
 	 * Spawn the gameplay half in a game world on authority: one DoorActorClass per Doorway opening
@@ -263,6 +275,16 @@ private:
 	/** Live tile HISMs, keyed by render batch (mesh+material identity), one per unique batch. */
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> TileComponents;
+
+	/** Where a (tile type, instance index) landed in the render batches (one entry per module element). */
+	struct FTileInstanceRef
+	{
+		FName BatchKey;
+		int32 BatchIndex = INDEX_NONE;
+		FTransform Original;
+	};
+	TMap<int64, TArray<FTileInstanceRef>> InstanceLookup;
+	static int64 InstanceLookupKey(int32 TypeIdx, int32 InstanceIndex) { return (static_cast<int64>(TypeIdx) << 32) | static_cast<uint32>(InstanceIndex); }
 
 	/** The grid box the interior post-process is bounded to (E5). */
 	UPROPERTY(VisibleAnywhere, Category = "Dungeon|Interior")
