@@ -1110,16 +1110,20 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					const FRotator Rot = ApplyRot(P, FRotator(0.0f, Yaw, 0.0f));
 					const FTransform PropXf(Rot, Base + FVector(HalfCS, HalfCS, 0.0f), DecorScale(P));
 					Emit(CellDecor, P, PropXf);
-					// Container-role pieces are also a gameplay record (feature 3: a searchable actor
-					// hangs on it); the instance above stays the visual on every client.
-					if (Pieces[P].Role == EDungeonPropRole::Container)
+					// Container- and trap-role pieces are also a gameplay record (feature 3: a
+					// searchable actor hangs on a container; feature 5: a trap actor on a spike
+					// plate); the instance above stays the visual on every client, addressable by
+					// (TileType, InstanceIndex) so gameplay can hide a broken crate.
+					if (Pieces[P].Role == EDungeonPropRole::Container || Pieces[P].Role == EDungeonPropRole::Trap)
 					{
 						FDungeonProp Prop;
 						Prop.Cell = C;
 						Prop.RoomIndex = Result.Grid.GetCell(C).RoomIndex;
-						Prop.Kind = EDungeonPropKind::Container;
+						Prop.Kind = Pieces[P].Role == EDungeonPropRole::Trap ? EDungeonPropKind::Trap : EDungeonPropKind::Container;
 						Prop.PieceId = P;
 						Prop.Transform = PropXf;
+						Prop.TileType = CellDecor;
+						Prop.InstanceIndex = Out.Transforms[static_cast<int32>(CellDecor)].Num() - 1;
 						Out.Props.Add(Prop);
 					}
 				}

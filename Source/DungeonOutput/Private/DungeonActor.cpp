@@ -275,6 +275,7 @@ void ADungeonActor::GenerateDungeon()
 	};
 
 	TMap<FName, FRenderBatch> Batches;
+	InstanceLookup.Empty();
 	TMap<int32, UDungeonTileModule*> ModuleByPiece;
 	TMap<int32, UStaticMesh*> MeshByPiece;
 	TMap<FSoftObjectPath, UStaticMesh*> ElementMeshes;
@@ -340,11 +341,13 @@ void ADungeonActor::GenerateDungeon()
 					}
 					UMaterialInterface* ElementMat = Element.MaterialOverride.IsNull()
 						? nullptr : Element.MaterialOverride.LoadSynchronous();
-					FRenderBatch& Batch = Batches.FindOrAdd(BatchKey(ElementMesh, ElementMat));
+					const FName ElementKey = BatchKey(ElementMesh, ElementMat);
+					FRenderBatch& Batch = Batches.FindOrAdd(ElementKey);
 					Batch.Mesh = ElementMesh;
 					Batch.Material = ElementMat;
 					// child-local * parent-world = world; the anchor carries the uniform cell scale.
 					Batch.Instances.Add(Element.RelativeTransform * Transforms[i]);
+					InstanceLookup.FindOrAdd(InstanceLookupKey(TypeIdx, i)).Add({ ElementKey, Batch.Instances.Num() - 1, Batch.Instances.Last() });
 				}
 			}
 			else
@@ -367,9 +370,11 @@ void ADungeonActor::GenerateDungeon()
 				{
 					continue;
 				}
-				FRenderBatch& Batch = Batches.FindOrAdd(BatchKey(LoadedMesh, nullptr));
+				const FName MeshKey = BatchKey(LoadedMesh, nullptr);
+				FRenderBatch& Batch = Batches.FindOrAdd(MeshKey);
 				Batch.Mesh = LoadedMesh;
 				Batch.Instances.Add(Transforms[i]);
+				InstanceLookup.FindOrAdd(InstanceLookupKey(TypeIdx, i)).Add({ MeshKey, Batch.Instances.Num() - 1, Transforms[i] });
 			}
 		}
 	}
@@ -453,6 +458,32 @@ bool ADungeonActor::BuildDungeon(UDungeonConfiguration* Config, const UDungeonTi
 	return true;
 }
 
+bool ADungeonActor::SetTileInstanceHidden(EDungeonTileType Type, int32 InstanceIndex, bool bHide)
+{
+	const TArray<FTileInstanceRef>* Refs = InstanceLookup.Find(InstanceLookupKey(static_cast<int32>(Type), InstanceIndex));
+	if (!Refs || Refs->Num() == 0)
+	{
+		return false;
+	}
+	bool bAny = false;
+	for (const FTileInstanceRef& Ref : *Refs)
+	{
+		const TObjectPtr<UHierarchicalInstancedStaticMeshComponent>* HISMC = TileComponents.Find(Ref.BatchKey);
+		if (!HISMC || !*HISMC)
+		{
+			continue;
+		}
+		// Zero scale keeps indices stable (RemoveInstance would shift every later instance).
+		FTransform Xf = Ref.Original;
+		if (bHide)
+		{
+			Xf.SetScale3D(FVector(KINDA_SMALL_NUMBER));
+		}
+		bAny |= (*HISMC)->UpdateInstanceTransform(Ref.BatchIndex, Xf, /*bWorldSpace=*/false, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
+	}
+	return bAny;
+}
+
 void ADungeonActor::ClearDungeon()
 {
 	DestroyInteractables();
@@ -465,6 +496,7 @@ void ADungeonActor::ClearDungeon()
 		}
 	}
 	TileComponents.Empty();
+	InstanceLookup.Empty();
 	bHasDungeon = false;
 	ApplyInteriorPostProcess(false);
 

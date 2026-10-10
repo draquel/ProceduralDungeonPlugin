@@ -306,6 +306,11 @@ bool FInteractableProps::RunTest(const FString& Parameters)
 		TestEqual(TEXT("prop is a container"), Prop.Kind, EDungeonPropKind::Container);
 		TestEqual(TEXT("prop knows its room"), Prop.RoomIndex, 1);
 		TestTrue(TEXT("prop piece is container-role"), Map.Pieces.IsValidIndex(Prop.PieceId) && Map.Pieces[Prop.PieceId].Role == EDungeonPropRole::Container);
+		TestEqual(TEXT("prop names its tile type"), Prop.TileType, EDungeonTileType::FloorDecor);
+		const TArray<FTransform>& Instances = Map.Transforms[static_cast<int32>(Prop.TileType)];
+		TestTrue(TEXT("prop instance index is valid"), Instances.IsValidIndex(Prop.InstanceIndex));
+		TestTrue(TEXT("prop instance is the prop's own transform"),
+			Instances.IsValidIndex(Prop.InstanceIndex) && Instances[Prop.InstanceIndex].Equals(Prop.Transform, 0.01f));
 		TestTrue(TEXT("prop stands at the cell centre"), Prop.Transform.GetLocation().Equals(FVector((Prop.Cell.X + 0.5f) * 400.0f, (Prop.Cell.Y + 0.5f) * 400.0f, 0.0f), 1.0f));
 		Ids.Add(FDungeonTileMapper::MakeInteractableId(Prop.Cell, 0, 0, FDungeonTileMapper::InteractableKindContainer));
 	}
