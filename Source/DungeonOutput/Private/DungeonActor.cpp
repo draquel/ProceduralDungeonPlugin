@@ -458,7 +458,7 @@ bool ADungeonActor::BuildDungeon(UDungeonConfiguration* Config, const UDungeonTi
 	return true;
 }
 
-bool ADungeonActor::SetTileInstanceHidden(EDungeonTileType Type, int32 InstanceIndex, bool bHidden)
+bool ADungeonActor::SetTileInstanceHidden(EDungeonTileType Type, int32 InstanceIndex, bool bHide)
 {
 	const TArray<FTileInstanceRef>* Refs = InstanceLookup.Find(InstanceLookupKey(static_cast<int32>(Type), InstanceIndex));
 	if (!Refs || Refs->Num() == 0)
@@ -475,7 +475,7 @@ bool ADungeonActor::SetTileInstanceHidden(EDungeonTileType Type, int32 InstanceI
 		}
 		// Zero scale keeps indices stable (RemoveInstance would shift every later instance).
 		FTransform Xf = Ref.Original;
-		if (bHidden)
+		if (bHide)
 		{
 			Xf.SetScale3D(FVector(KINDA_SMALL_NUMBER));
 		}

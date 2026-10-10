@@ -111,11 +111,11 @@ public:
 	 * (gameplay replicates the decision, this applies it).
 	 * @param Type          The tile type whose instance list holds it (FDungeonProp::TileType).
 	 * @param InstanceIndex Index into that list (FDungeonProp::InstanceIndex).
-	 * @param bHidden       Collapse (true) or restore (false).
+	 * @param bHide         Collapse (true) or restore (false).
 	 * @return False when no such instance was built.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|Interactables")
-	bool SetTileInstanceHidden(EDungeonTileType Type, int32 InstanceIndex, bool bHidden);
+	bool SetTileInstanceHidden(EDungeonTileType Type, int32 InstanceIndex, bool bHide);
 
 	/**
 	 * Spawn the gameplay half in a game world on authority: one DoorActorClass per Doorway opening
