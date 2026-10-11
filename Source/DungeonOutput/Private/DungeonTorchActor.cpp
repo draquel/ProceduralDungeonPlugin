@@ -3,6 +3,7 @@
 #include "DungeonTorchActor.h"
 #include "DungeonTileSet.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -28,6 +29,18 @@ ADungeonTorchActor::ADungeonTorchActor()
 	Mesh->SetCollisionResponseToAllChannels(ECR_Block);
 	Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	Mesh->SetCanEverAffectNavigation(false);
+
+	InteractionBounds = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionBounds"));
+	InteractionBounds->SetupAttachment(Root);
+	InteractionBounds->SetMobility(EComponentMobility::Movable);
+	InteractionBounds->SetBoxExtent(InteractionBoundsExtent);
+	InteractionBounds->SetRelativeLocation(InteractionBoundsOffset);
+	// Found by interaction overlaps on any channel; never blocks a pawn, the camera or a melee sweep.
+	InteractionBounds->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	InteractionBounds->SetCollisionResponseToAllChannels(ECR_Block);
+	InteractionBounds->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	InteractionBounds->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	InteractionBounds->SetCanEverAffectNavigation(false);
 }
 
 void ADungeonTorchActor::PostInitializeComponents()
@@ -105,6 +118,12 @@ void ADungeonTorchActor::ApplyMesh()
 	Mesh->SetStaticMesh(TorchMesh);
 	Mesh->SetRelativeRotation(MeshRotationOffset);
 	Mesh->SetRelativeScale3D(FVector(MeshScale));
+
+	if (InteractionBounds)
+	{
+		InteractionBounds->SetBoxExtent(InteractionBoundsExtent * MeshScale);
+		InteractionBounds->SetRelativeLocation(InteractionBoundsOffset * MeshScale);
+	}
 }
 
 void ADungeonTorchActor::ApplyLitVisuals()
