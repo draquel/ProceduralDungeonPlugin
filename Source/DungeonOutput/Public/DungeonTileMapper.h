@@ -338,6 +338,8 @@ struct DUNGEONOUTPUT_API FDungeonTileMapper
 	static constexpr uint8 InteractableKindFixture = 0x20;
 	/** Props (containers) use the prop's cell with a zero face. */
 	static constexpr uint8 InteractableKindContainer = 0x30;
+	/** The entrance elevator: one per dungeon, zero cell and face (state = landing it rests at). */
+	static constexpr uint8 InteractableKindElevator = 0x40;
 
 private:
 	// Boundary decisions (wall / floor / ceiling between two cells) are NOT implemented here.

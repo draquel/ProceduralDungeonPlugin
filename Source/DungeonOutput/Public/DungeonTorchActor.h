@@ -10,6 +10,7 @@
 
 class UStaticMesh;
 class UStaticMeshComponent;
+class UBoxComponent;
 class UPointLightComponent;
 class UDungeonTileSet;
 
@@ -93,6 +94,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Dungeon|Torch")
 	FVector LightOffset = FVector(35.0f, 0.0f, 50.0f);
 
+	/** Half extent of the query box around the sconce (fixture frame, at reference cell size). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Dungeon|Torch")
+	FVector InteractionBoundsExtent = FVector(22.0f, 20.0f, 35.0f);
+
+	/** Centre of the query box relative to the mount (fixture frame, at reference cell size). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Dungeon|Torch")
+	FVector InteractionBoundsOffset = FVector(20.0f, 0.0f, 20.0f);
+
 protected:
 	/** Persist bLit after an authority change. The plugin keeps nothing; game layers override. */
 	virtual void RecordState() {}
@@ -103,6 +112,14 @@ protected:
 	/** The sconce / torch mesh at the mount point. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Torch")
 	TObjectPtr<UStaticMeshComponent> Mesh;
+
+	/**
+	 * Query-only box around the sconce. Interaction detection (sphere overlaps) only sees simple collision shapes,
+	 * and sconce meshes may ship without any (the Blender sconce exports collision "none"), so the torch carries
+	 * its own findable shape -- also for a bare light with no mesh.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Torch")
+	TObjectPtr<UBoxComponent> InteractionBounds;
 
 	/** The light, present only while lit (see class comment). */
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Dungeon|Torch")
