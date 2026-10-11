@@ -123,11 +123,11 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		return Result;
 	}
 
-	UE_LOG(LogDungeonGenerator, Warning, TEXT("Step 3: Placed %d rooms"), Result.Rooms.Num());
+	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 3: Placed %d rooms"), Result.Rooms.Num());
 	for (int32 r = 0; r < Result.Rooms.Num(); ++r)
 	{
 		const FDungeonRoom& Rm = Result.Rooms[r];
-		UE_LOG(LogDungeonGenerator, Warning, TEXT("  Room %d: Center=(%d,%d,%d) Size=(%d,%d,%d)"),
+		UE_LOG(LogDungeonGenerator, Verbose, TEXT("  Room %d: Center=(%d,%d,%d) Size=(%d,%d,%d)"),
 			r, Rm.Center.X, Rm.Center.Y, Rm.Center.Z, Rm.Size.X, Rm.Size.Y, Rm.Size.Z);
 	}
 
@@ -206,11 +206,11 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 			static_cast<uint8>(Edge.Value)));
 	}
 
-	UE_LOG(LogDungeonGenerator, Warning, TEXT("Step 5: Delaunay produced %d edges (coplanar=%d)"),
+	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 5: Delaunay produced %d edges (coplanar=%d)"),
 		Result.DelaunayEdges.Num(), bAllCoplanar ? 1 : 0);
 	for (const auto& Edge : Result.DelaunayEdges)
 	{
-		UE_LOG(LogDungeonGenerator, Warning, TEXT("  Edge: %d <-> %d"), Edge.Key, Edge.Value);
+		UE_LOG(LogDungeonGenerator, Verbose, TEXT("  Edge: %d <-> %d"), Edge.Key, Edge.Value);
 	}
 
 	// =========================================================================
@@ -228,7 +228,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 			static_cast<uint8>(Edge.Value)));
 	}
 
-	UE_LOG(LogDungeonGenerator, Warning, TEXT("Step 6: MST has %d edges"), Result.MSTEdges.Num());
+	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 6: MST has %d edges"), Result.MSTEdges.Num());
 
 	// =========================================================================
 	// Step 7: Edge Re-addition (add some Delaunay edges back for loops)
@@ -256,7 +256,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		}
 	}
 
-	UE_LOG(LogDungeonGenerator, Warning, TEXT("Step 7: Final graph has %d edges (%d MST + %d re-added)"),
+	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 7: Final graph has %d edges (%d MST + %d re-added)"),
 		Result.FinalEdges.Num(), Result.MSTEdges.Num(),
 		Result.FinalEdges.Num() - Result.MSTEdges.Num());
 
@@ -297,7 +297,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 			Result.Grid, PathCells, HallwayIdx,
 			RoomA.RoomIndex, RoomB.RoomIndex, *Config, HallwayStaircases);
 
-		UE_LOG(LogDungeonGenerator, Warning, TEXT("    SUCCESS: path=%d cells, staircases=%d"),
+		UE_LOG(LogDungeonGenerator, Verbose, TEXT("    SUCCESS: path=%d cells, staircases=%d"),
 			PathCells.Num(), HallwayStaircases.Num());
 
 		FDungeonHallway Hallway;
@@ -348,7 +348,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 
 		const FDungeonRoom& LogRoomA = Result.Rooms[RoomAIdx];
 		const FDungeonRoom& LogRoomB = Result.Rooms[RoomBIdx];
-		UE_LOG(LogDungeonGenerator, Warning, TEXT("  Attempting hallway: room %d (%d,%d,%d) -> room %d (%d,%d,%d)"),
+		UE_LOG(LogDungeonGenerator, Verbose, TEXT("  Attempting hallway: room %d (%d,%d,%d) -> room %d (%d,%d,%d)"),
 			RoomAIdx,
 			LogRoomA.Position.X + LogRoomA.Size.X / 2, LogRoomA.Position.Y + LogRoomA.Size.Y / 2, LogRoomA.Position.Z,
 			RoomBIdx,
@@ -362,7 +362,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		}
 	}
 
-	UE_LOG(LogDungeonGenerator, Warning, TEXT("Step 9: Carved %d hallways, %d total staircases"),
+	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 9: Carved %d hallways, %d total staircases"),
 		Result.Hallways.Num(), Result.Staircases.Num());
 
 	// =========================================================================
@@ -455,7 +455,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 
 				for (const FRepairCandidate& Candidate : Candidates)
 				{
-					UE_LOG(LogDungeonGenerator, Warning,
+					UE_LOG(LogDungeonGenerator, Log,
 						TEXT("  Repair: retrying orphaned room %d -> room %d (tier %d)"),
 						RoomIdx, Candidate.Index, Candidate.Tier);
 
@@ -487,7 +487,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		}
 		else
 		{
-			UE_LOG(LogDungeonGenerator, Warning,
+			UE_LOG(LogDungeonGenerator, Verbose,
 				TEXT("Step 9b: all %d rooms reachable from the entrance"), Result.Rooms.Num());
 		}
 	}
