@@ -795,6 +795,11 @@ private:
 };
 ```
 
+**Tiles in the actor's frame.** By default the tile map is built at the actor's location in world space and the actor's
+rotation is ignored. With `bMapInActorFrame` the tile map is built at a zero origin and every instance, door, torch and the
+entrance position is relative to the actor, rotation included: a dungeon on a planet stands on local up this way (a POI
+dungeon's tile actor spawns in its pad's tangent frame, spherical Phase 5).
+
 ---
 
 ## 7. VoxelWorlds Integration Layer
@@ -906,6 +911,18 @@ The stitcher:
 2. Carves a connection from surface to entrance cell using the selected style
 3. For `CaveOpening`, applies noise-based displacement to the carved tunnel for organic feel
 4. Marks surrounding surface voxels with a distinct MaterialID (e.g., "dungeon stone") to signal the entrance visually
+
+### Dungeons in a frame (spherical Phase 5)
+
+`UDungeonVoxelStamper::StampDungeonInFrame` and `UDungeonEntranceStitcher::StitchEntranceInFrame` lay the dungeon out in a
+frame (an `FTransform`, frame space to world): `WorldOffset`, every cell, slab, seal and stair, and the passage plan are in
+frame space. The voxel lattice stays the world's: `FDungeonVoxelLattice::SetFrame` / `ForEachSampleInBox` enumerate a
+frame-space box over the samples of its world bounds and keep those whose frame position lies in it. The stitcher's surface
+is the frame-space height where the frame's vertical line meets the generated terrain (`DetectFrameSurfaceHeight`), so a
+shaft stops at the surface of a planet. A rotated tile-dressed (`CarveOnly`) stamp carves half a voxel more margin and seals
+one voxel thicker (an oblique plane steps by up to √3/2 voxel on the lattice); the voxel lining keeps its thickness. The
+identity frame is the plain `StampDungeon` / `StitchEntrance` exactly: the same samples in the same order
+(`Dungeon.Stamp.RotatedFrame`, `Dungeon.Stitch.PlanetSurface`).
 
 ### Mode B: Instanced (Separate Dungeon Level)
 
