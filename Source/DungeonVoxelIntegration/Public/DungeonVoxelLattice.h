@@ -89,6 +89,91 @@ struct FDungeonVoxelLattice
 		return Min.X <= Max.X && Min.Y <= Max.Y && Min.Z <= Max.Z;
 	}
 
+	// ==================== The dungeon's frame (spherical Phase 5, SP-G6) ====================
+	// A dungeon's cells, passages and boxes are laid out in its frame: the world on a heightmap world (identity), a planet
+	// POI's pad space (the tangent frame at its centre) on a planet. The lattice stays the world's (axis-aligned); with a
+	// rotated frame a box in frame space is enumerated by testing each sample of its world bounds in frame space.
+
+	/** Frame space to world. Identity (the default) is the heightmap case: frame space is the world. */
+	FTransform Frame = FTransform::Identity;
+
+	/** The frame is not the identity (set by SetFrame). */
+	bool bRotated = false;
+
+	/** Lay the dungeon out in a frame (identity: the world). */
+	void SetFrame(const FTransform& InFrame)
+	{
+		Frame = InFrame;
+		Frame.SetScale3D(FVector::OneVector);
+		bRotated = !Frame.Equals(FTransform::Identity, 0.0);
+	}
+
+	/** A sample's position in frame space (SamplePosition with the identity frame). */
+	FVector FramePosition(const FIntVector& Index) const
+	{
+		return bRotated ? Frame.InverseTransformPositionNoScale(SamplePosition(Index)) : SamplePosition(Index);
+	}
+
+	/** A sample's edit position in frame space (EditPosition with the identity frame). */
+	FVector FrameEditPosition(const FIntVector& Index) const
+	{
+		return bRotated ? Frame.InverseTransformPositionNoScale(EditPosition(Index)) : EditPosition(Index);
+	}
+
+	/** A frame-space point in the world. */
+	FVector ToWorld(const FVector& FramePoint) const
+	{
+		return bRotated ? Frame.TransformPositionNoScale(FramePoint) : FramePoint;
+	}
+
+	/**
+	 * Every sample whose frame-space position lies in the frame-space box [BoxMin, BoxMax), in lattice order (Z, Y, X).
+	 * With the identity frame exactly RangeForBox's samples in its order; with a rotated frame the samples of the box's
+	 * world bounds whose FramePosition lies inside it.
+	 */
+	template <typename FFunc>
+	void ForEachSampleInBox(const FVector& BoxMin, const FVector& BoxMax, FFunc&& Func) const
+	{
+		FIntVector Min, Max;
+		if (!bRotated)
+		{
+			RangeForBox(BoxMin, BoxMax, Min, Max);
+		}
+		else
+		{
+			FBox World(ForceInit);
+			for (int32 Corner = 0; Corner < 8; ++Corner)
+			{
+				World += Frame.TransformPositionNoScale(FVector(
+					(Corner & 1) ? BoxMax.X : BoxMin.X, (Corner & 2) ? BoxMax.Y : BoxMin.Y, (Corner & 4) ? BoxMax.Z : BoxMin.Z));
+			}
+			RangeForBox(World.Min, World.Max + FVector(VoxelSize), Min, Max);
+		}
+		if (!IsRangeValid(Min, Max))
+		{
+			return;
+		}
+		for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
+		{
+			for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
+			{
+				for (int32 IX = Min.X; IX <= Max.X; ++IX)
+				{
+					const FIntVector Index(IX, IY, IZ);
+					if (bRotated)
+					{
+						const FVector P = FramePosition(Index);
+						if (P.X < BoxMin.X || P.Y < BoxMin.Y || P.Z < BoxMin.Z || P.X >= BoxMax.X || P.Y >= BoxMax.Y || P.Z >= BoxMax.Z)
+						{
+							continue;
+						}
+					}
+					Func(Index);
+				}
+			}
+		}
+	}
+
 private:
 	/** Lowest index on one axis whose sample position is >= Bound. */
 	int32 FirstSampleAtOrAfter(double Bound, double OriginAxis) const

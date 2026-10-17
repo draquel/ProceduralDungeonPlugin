@@ -16,5 +16,13 @@ public class DungeonVoxelIntegration : ModuleRules
 			"VoxelGeneration",
 			"VoxelStreaming",
 		});
+
+		// The automation tests stream a small voxel world (VoxelTesting::FTestChunkWorld: the distance-band LOD strategy and
+		// a recording mesh renderer).
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"VoxelLOD",
+			"VoxelRendering",
+		});
 	}
 }
