@@ -82,7 +82,11 @@ AActor* ADungeonActor::SpawnInteractable(TSubclassOf<AActor> Class, const FTrans
 	Params.Owner = this;
 	// Unscaled: the record's scale is carried by the actor's own leaf / mesh scale (see the
 	// Setup functions), so the swing and the light never run under a non-uniform transform.
-	const FTransform Unscaled(Transform.GetRotation(), Transform.GetLocation());
+	// The records are in the tile map's space: the actor's frame when bMapInActorFrame.
+	const FTransform Placed = bMapInActorFrame
+		? FTransform(Transform.GetRotation(), Transform.GetLocation()) * GetActorTransform()
+		: Transform;
+	const FTransform Unscaled(Placed.GetRotation(), Placed.GetLocation());
 	AActor* Actor = World->SpawnActor<AActor>(Class, Unscaled, Params);
 	if (!Actor)
 	{
@@ -211,7 +215,8 @@ FDungeonCoverageReport ADungeonActor::GetCoverageReport() const
 	{
 		return FDungeonCoverageReport();
 	}
-	return FDungeonCoverage::Analyse(CachedResult, CachedTileMap, GetActorLocation(), bOpenEntranceCeiling);
+	// The coverage report is in the tile map's own space (the actor's frame when bMapInActorFrame).
+	return FDungeonCoverage::Analyse(CachedResult, CachedTileMap, GetMapOrigin(), bOpenEntranceCeiling);
 }
 
 FString ADungeonActor::DescribeCoverage() const
@@ -247,7 +252,7 @@ void ADungeonActor::GenerateDungeon()
 
 	// Generate dungeon data + map to tiles through the ONE shared build (see BuildDungeon).
 	if (!BuildDungeon(DungeonConfig, TileSet, Seed, bUseEntranceOverride, EntranceOverride, bOpenEntranceCeiling,
-		GetActorLocation(), CachedResult, CachedTileMap))
+		GetMapOrigin(), CachedResult, CachedTileMap))
 	{
 		return;
 	}
@@ -409,7 +414,8 @@ void ADungeonActor::GenerateDungeon()
 		HISMC->SetCollisionResponseToAllChannels(ECR_Block);
 		HISMC->AttachToComponent(Root, FAttachmentTransformRules::KeepRelativeTransform);
 		HISMC->RegisterComponent();
-		HISMC->AddInstances(Batch.Instances, false, true);
+		// World-space instances from the actor's location, or relative to the actor in its own frame.
+		HISMC->AddInstances(Batch.Instances, false, /*bWorldSpace=*/!bMapInActorFrame);
 
 		TileComponents.Add(Pair.Key, HISMC);
 
@@ -479,7 +485,8 @@ bool ADungeonActor::SetTileInstanceHidden(EDungeonTileType Type, int32 InstanceI
 		{
 			Xf.SetScale3D(FVector(KINDA_SMALL_NUMBER));
 		}
-		bAny |= (*HISMC)->UpdateInstanceTransform(Ref.BatchIndex, Xf, /*bWorldSpace=*/false, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
+		// The record is the transform the instance was added with: world space, or the actor's frame (bMapInActorFrame).
+		bAny |= (*HISMC)->UpdateInstanceTransform(Ref.BatchIndex, Xf, /*bWorldSpace=*/!bMapInActorFrame, /*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
 	}
 	return bAny;
 }
@@ -519,11 +526,17 @@ FVector ADungeonActor::GetEntranceWorldPosition() const
 {
 	if (CachedResult.EntranceRoomIndex >= 0)
 	{
-		return CachedResult.GridToWorld(CachedResult.EntranceCell)
-			+ GetActorLocation()
+		const FVector InMap = CachedResult.GridToWorld(CachedResult.EntranceCell)
+			+ GetMapOrigin()
 			+ FVector(CachedResult.CellWorldSize * 0.5f, CachedResult.CellWorldSize * 0.5f, 0.0f);
+		return bMapInActorFrame ? GetActorTransform().TransformPosition(InMap) : InMap;
 	}
 	return FVector::ZeroVector;
+}
+
+FVector ADungeonActor::GetMapOrigin() const
+{
+	return bMapInActorFrame ? FVector::ZeroVector : GetActorLocation();
 }
 
 void ADungeonActor::GoToEntrance()

@@ -59,6 +59,16 @@ public:
 	bool bOpenEntranceCeiling = false;
 
 	/**
+	 * Lay the tiles out in the actor's own frame (rotation included) instead of the world's: the tile map is built at a
+	 * zero origin and every instance, door, torch and the entrance position is relative to the actor. A dungeon on a
+	 * planet stands on local up this way (spherical Phase 5: a POI dungeon in its pad's tangent frame). Off (the default):
+	 * the tiles are in world space from the actor's location and the actor's rotation is ignored, as before. The debug
+	 * drawing assumes an unrotated actor.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon")
+	bool bMapInActorFrame = false;
+
+	/**
 	 * Generate with EntranceOverride instead of the config's Entrance spec. A tile actor dressing
 	 * a voxel-stamped dungeon MUST use the same spec the stamp was generated with, or it rebuilds
 	 * a different layout over the carved voids (the spec changes room placement).
@@ -266,6 +276,9 @@ public:
 #endif
 
 private:
+	/** The tile map's origin: zero in the actor's own frame (bMapInActorFrame), else the actor's world location. */
+	FVector GetMapOrigin() const;
+
 	UPROPERTY()
 	FDungeonResult CachedResult;
 
