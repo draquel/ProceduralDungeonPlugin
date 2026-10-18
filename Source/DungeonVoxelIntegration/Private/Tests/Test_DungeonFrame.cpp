@@ -6,8 +6,9 @@
 //
 // - Dungeon.Stamp.RotatedFrame: StampDungeonInFrame with the identity frame writes exactly StampDungeon's edits (both voxel
 //   modes, every edit's chunk, index, mode and data); in a tangent frame on a small planet the open cells are carved to
-//   air through their interiors, the stone lining stands inside every closed face (CarveUnderground) and the outer seal
-//   outside it (CarveOnly), and no edit lies outside the grid box and its shell.
+//   air through their interiors, the stone jacket stands across every closed face toward rock (CarveUnderground: the
+//   inner lining inside the cell plane and the rest outside it; CarveOnly: the outer seal), and no edit lies outside the
+//   grid box and its shell.
 // - Dungeon.Stitch.PlanetSurface: StitchEntranceInFrame with the identity frame is StitchEntrance exactly; in a tangent
 //   frame on the planet the vertical shaft runs along the frame's z from the entrance room's lid up to where that line
 //   meets the generated surface, and stops there.
@@ -261,16 +262,17 @@ bool FDungeonStampRotatedFrameTest::RunTest(const FString& Parameters)
 		}
 
 		// Rooms and hallways: air through the interior, the centre and the eight points 1.5 voxels inside the stone
-		// lining's corners (CarveUnderground: WallThickness voxels inside every lined face) or the cell's (CarveOnly). Stairs
+		// lining's corners (CarveUnderground: the inner lining inside every lined face) or the cell's (CarveOnly). Stairs
 		// and doors hold step and frame voxels.
-		const float Lining = Mode == EDungeonStampMode::CarveOnly ? 0.0f : VoxelConfig->WallThickness * Voxel;
+		const float Lining = Mode == EDungeonStampMode::CarveOnly ? 0.0f : VoxelConfig->GetInnerLiningThickness(Voxel);
 		const float Inset = CS * 0.5f - Lining - 1.5f * Voxel;
 		int32 OpenCells = 0, InteriorProbes = 0, NotAir = 0;
-		// Closed faces, at the face's centre: the middle of the lining inside the plane (CarveUnderground), or of the outer
-		// seal past the carve margin (CarveOnly: WallThickness + 1 voxels beyond a margin of 0.5 + 0.5 voxels) where the
-		// neighbour is not open (the seal never writes into another open cell).
+		// Closed faces toward rock (the jacket never writes into another open cell), at the face's centre: the cell plane,
+		// between the inner lining and the jacket's other layers (CarveUnderground: one voxel each side here, so the sample
+		// nearest the plane, under sqrt(3)/2 voxel away in a rotated frame, lies in it), or the middle of the outer seal past
+		// the carve margin (CarveOnly: WallThickness + 1 voxels beyond a margin of 0.5 + 0.5 voxels).
 		const float SealMiddle = CS * 0.5f + Voxel + (VoxelConfig->WallThickness + 1) * Voxel * 0.5f;
-		const float LiningMiddle = CS * 0.5f - VoxelConfig->WallThickness * Voxel * 0.5f;
+		const float JacketMiddle = CS * 0.5f;
 		int32 FaceProbes = 0, NotSolid = 0;
 		for (int32 Z = 0; Z < Result.GridSize.Z; ++Z)
 		{
@@ -302,13 +304,12 @@ bool FDungeonStampRotatedFrameTest::RunTest(const FString& Parameters)
 					}
 					for (int32 Face = 0; Face < 6; ++Face)
 					{
-						if (!NeedsBoundary(Result, C, Face)
-							|| (Mode == EDungeonStampMode::CarveOnly && IsOpen(Result, C + FaceDirections[Face])))
+						if (!NeedsBoundary(Result, C, Face) || IsOpen(Result, C + FaceDirections[Face]))
 						{
 							continue;
 						}
 						const FVector Normal(FaceDirections[Face]);
-						const FVector P = Centre + Normal * (Mode == EDungeonStampMode::CarveOnly ? SealMiddle : LiningMiddle);
+						const FVector P = Centre + Normal * (Mode == EDungeonStampMode::CarveOnly ? SealMiddle : JacketMiddle);
 						++FaceProbes;
 						const FVoxelEdit* Edit = EditAt(*Edits, *W.Config, Frame.TransformPosition(P));
 						NotSolid += (Edit && Edit->NewData.Density >= VOXEL_SURFACE_THRESHOLD) ? 0 : 1;

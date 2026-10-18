@@ -43,9 +43,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scale", meta = (ClampMin = "0", ClampMax = "32"))
 	int32 VoxelsPerCellOverride = 0;
 
-	/** Number of voxel layers for walls, floors, and ceilings. */
+	/**
+	 * Number of voxel layers for walls, floors, and ceilings: the stone jacket around every closed face.
+	 *
+	 * Voxel-lined modes (CarveUnderground, ReplaceRegion, MergeAsStructure): the first InnerLiningLayers line the face
+	 * from INSIDE the cell (their surface is the floor, wall or ceiling) and the rest wrap it from OUTSIDE, never into
+	 * another open cell, so a thick jacket keeps the room's interior. CarveOnly (tile-dressed): every layer is the outer
+	 * seal, past CarveMarginVoxels.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scale", meta = (ClampMin = "1", ClampMax = "8"))
 	int32 WallThickness = 1;
+
+	/**
+	 * Voxel layers of the jacket that line a closed face from inside an open cell in the voxel-lined modes. One layer is
+	 * the surface content stands on (a slab a voxel thick has a sample on every lattice line through it) and the most a
+	 * cell can spare: lining all of WallThickness from inside filled every one-storey cell once WallThickness * VoxelSize
+	 * reached half of CellWorldSize (the demo's 3 layers of 75 on 400 cells stamped its rooms solid, so nothing could
+	 * stand in them: review finding G24).
+	 */
+	static constexpr int32 InnerLiningLayers = 1;
 
 	/**
 	 * CarveOnly (tile-dressed) dungeons only: how far past every cell plane the void is carved, in
@@ -72,6 +88,22 @@ public:
 
 	/** Returns override value if set, otherwise auto-calculates from world sizes. */
 	int32 GetEffectiveVoxelsPerCell(float CellWorldSize, float VoxelSize) const;
+
+	/** Voxel-lined modes: the jacket's layers inside the cell (InnerLiningLayers, or fewer for a thinner jacket). */
+	int32 GetInnerLiningLayers() const;
+
+	/** Voxel-lined modes: the jacket's layers outside the cell (WallThickness less the inner lining, at least 0). */
+	int32 GetOuterJacketLayers() const;
+
+	/**
+	 * Voxel-lined modes: how far the inner lining reaches into the cell from each closed face, in world units. A
+	 * voxel-carved dungeon's floor lies this far above its cell's bottom plane, within half a voxel (the lattice's phase
+	 * against the grid), so content standing on a floor (chests, the boss, the elevator's stop) is placed by it.
+	 *
+	 * @param VoxelSize The voxel world's voxel size.
+	 * @return The inner lining's thickness.
+	 */
+	float GetInnerLiningThickness(float VoxelSize) const;
 
 	/**
 	 * Returns the appropriate voxel material ID for a given cell context.

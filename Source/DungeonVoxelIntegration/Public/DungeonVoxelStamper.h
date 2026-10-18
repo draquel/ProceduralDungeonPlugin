@@ -44,7 +44,9 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonStampResult
  * - MergeAsStructure: only carves where terrain is currently solid
  *
  * Uses a 2-pass algorithm: first carve all open cells to air, then place
- * boundary voxels (walls/floors/ceilings) on faces adjacent to solid/OOB.
+ * boundary voxels (walls/floors/ceilings) on faces adjacent to solid/OOB: the
+ * inner lining inside the cell and the rest of the WallThickness jacket outside
+ * it (UDungeonVoxelConfig::WallThickness; CarveOnly writes only the outside).
  */
 UCLASS(BlueprintType)
 class DUNGEONVOXELINTEGRATION_API UDungeonVoxelStamper : public UObject
@@ -106,7 +108,8 @@ private:
 
 	/**
 	 * Place boundary voxels on a cell face, INSIDE the open cell (the stone lining that makes a
-	 * VoxelCarved dungeon read as rock). Returns number of voxels placed.
+	 * VoxelCarved dungeon read as rock; UDungeonVoxelConfig::GetInnerLiningThickness deep, the rest
+	 * of the jacket goes outside through PlaceOuterSeal). Returns number of voxels placed.
 	 */
 	int32 PlaceBoundary(
 		class UVoxelEditManager* EditManager,
@@ -126,7 +129,7 @@ private:
 	 * are deliberately anchored at the cave layer, so procedural cave voids intersect the volume
 	 * and breach it: terrain reads straight through the thin tiles. This writes the shell just
 	 * outside each boundary face instead, sealing the volume without occupying the cell where the
-	 * tiles stand.
+	 * tiles stand. The voxel-lined modes write the jacket's layers past their inner lining here too.
 	 *
 	 * Which lattice samples the slab writes is decided by FDungeonVoxelStampPlan: every sample
 	 * that Pass 1 carved (any open cell) is excluded by index, so a seal can never plug a

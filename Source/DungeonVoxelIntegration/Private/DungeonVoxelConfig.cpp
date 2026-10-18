@@ -9,6 +9,21 @@ int32 UDungeonVoxelConfig::GetEffectiveVoxelsPerCell(float CellWorldSize, float 
 	return FMath::Max(1, FMath::RoundToInt32(CellWorldSize / VoxelSize));
 }
 
+int32 UDungeonVoxelConfig::GetInnerLiningLayers() const
+{
+	return FMath::Clamp(WallThickness, 0, InnerLiningLayers);
+}
+
+int32 UDungeonVoxelConfig::GetOuterJacketLayers() const
+{
+	return FMath::Max(WallThickness - GetInnerLiningLayers(), 0);
+}
+
+float UDungeonVoxelConfig::GetInnerLiningThickness(float VoxelSize) const
+{
+	return GetInnerLiningLayers() * VoxelSize;
+}
+
 uint8 UDungeonVoxelConfig::GetMaterialForCell(EDungeonCellType CellType, EDungeonRoomType RoomType, int32 BoundaryFace) const
 {
 	// Check room-type override first
