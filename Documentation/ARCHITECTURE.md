@@ -869,6 +869,13 @@ The stamper maps each dungeon grid cell to a region of voxels (determined by `Ce
 2. **Adjacent Empty cells** → Set voxel density to 255 (solid) with the dungeon wall MaterialID
 3. **Floor/ceiling boundaries** → Maintain solid voxels with appropriate material
 
+As built, every closed face (`FDungeonBoundaryRules`) gets a stone jacket `UDungeonVoxelConfig::WallThickness` layers
+thick. The voxel-lined modes (`CarveUnderground`, `ReplaceRegion`, `MergeAsStructure`) put its first layer
+(`InnerLiningLayers`) inside the cell, the floor, wall or ceiling surface, and the rest just outside the cell, never into
+another open cell (the outer seal's sample planning, `FDungeonVoxelStampPlan`); `CarveOnly` (tile-dressed) puts all of it
+outside, past `CarveMarginVoxels`. Lining the whole jacket from inside filled every one-storey cell once it reached half
+the cell (3 voxels of 75 on 400 uu cells; G24, VoxelWorlds `WORLD_MODES_REVIEW_PLAN.md` §19.8).
+
 These edits are written via VoxelWorlds' `UVoxelEditManager` as overlay edits, meaning the dungeon integrates with the existing edit layer system (undo/redo, serialization, persistence).
 
 ### Entrance Stitching (Embedded Mode)

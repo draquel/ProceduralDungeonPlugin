@@ -125,6 +125,12 @@ When working on `DungeonVoxelIntegration`:
 - Entrance stitching traces from terrain surface down to dungeon entrance cell
 - Instanced mode uses `FVoxelDungeonWorldMode` implementing `IVoxelWorldMode`
 - Scale bridging: `CellWorldSize / VoxelSize` = voxels per dungeon cell
+- The voxel jacket (`UDungeonVoxelConfig::WallThickness` layers around every closed face): the voxel-lined modes put
+  `InnerLiningLayers` (one) inside the cell, the surface a floor stands on, and the rest OUTSIDE it through the outer
+  seal (never into an open cell); `CarveOnly` puts all of it outside. Never line more than that inside a cell: a jacket
+  lined from inside filled one-storey rooms solid (G24, VoxelWorlds review plan §19.8). Content standing on a voxel-carved
+  floor goes `GetInnerLiningThickness` over the cell's bottom plane (`Dungeon.Stamp.VoxelLining`,
+  `Dungeon.Stamp.CarvedFloorCollision`)
 - Frames (spherical Phase 5): `StampDungeonInFrame` / `StitchEntranceInFrame` take a frame (frame space to world) and
   `ADungeonActor::bMapInActorFrame` lays the tiles out in the actor's frame; enumerate samples through
   `FDungeonVoxelLattice::ForEachSampleInBox` (never `RangeForBox` directly in new stamp code) so a rotated frame works,
