@@ -60,9 +60,33 @@ public:
 		bool bStopAtEntranceCellTop = false,
 		float SideTunnelFloorLift = 0.0f);
 
+	/**
+	 * StitchEntrance with the dungeon laid out in a frame (spherical Phase 5, SP-G6): WorldOffset and the passage plan are in
+	 * frame space, mapped to the world by Frame (a planet POI's pad space), and the terrain surface is the frame-space
+	 * height where the frame's vertical line meets the generated surface (DetectFrameSurfaceHeight). The identity frame is
+	 * StitchEntrance exactly.
+	 * @param Frame Frame space to world
+	 */
+	int32 StitchEntranceInFrame(
+		const FDungeonResult& Result,
+		UVoxelChunkManager* ChunkManager,
+		const FVector& WorldOffset,
+		EDungeonEntranceStyle Style,
+		UDungeonVoxelConfig* Config,
+		bool bStopAtEntranceCellTop,
+		float SideTunnelFloorLift,
+		const FTransform& Frame);
+
 private:
 	/** Detect terrain surface height at a world XY position using the world mode or vertical sweep. */
 	float DetectSurfaceHeight(UVoxelChunkManager* ChunkManager, float WorldX, float WorldY) const;
+
+	/**
+	 * The frame-space height of the generated terrain surface on the frame's vertical line through (FrameX, FrameY): where
+	 * the line's altitude equals the generated surface's along local up there (UVoxelChunkManager::GetGeneratedSurfacePoint,
+	 * conditioning included). Rotated frames only.
+	 */
+	float DetectFrameSurfaceHeight(UVoxelChunkManager* ChunkManager, const FTransform& Frame, float FrameX, float FrameY) const;
 
 	/** Pass 1: add every lattice sample inside the column to OutInterior. */
 	static void CollectColumnInterior(
@@ -101,5 +125,6 @@ private:
 		const FDungeonPassageSegment& Segment,
 		float SurfaceZ,
 		float VoxelSize,
-		UDungeonVoxelConfig* Config);
+		UDungeonVoxelConfig* Config,
+		const FTransform& Frame);
 };

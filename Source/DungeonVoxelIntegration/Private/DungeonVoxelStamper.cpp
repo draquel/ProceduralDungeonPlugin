@@ -41,37 +41,25 @@ int32 UDungeonVoxelStamper::CarveCell(
 	int32 Count = 0;
 	const FVoxelData AirVoxel = FVoxelData::Air();
 
-	FIntVector Min, Max;
-	Lattice.RangeForBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), Min, Max);
-	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+	// The cell box is in the dungeon's frame (the world for an unrotated dungeon).
+	Lattice.ForEachSampleInBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), [&](const FIntVector& Index)
 	{
-		return 0;
-	}
+		const FVector WorldPos = Lattice.EditPosition(Index);
 
-	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
-	{
-		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
+		if (bOnlyIfSolid)
 		{
-			for (int32 IX = Min.X; IX <= Max.X; ++IX)
+			const FVoxelData Existing = ChunkManager->GetVoxelAtWorldPosition(WorldPos);
+			if (!Existing.IsSolid())
 			{
-				const FVector WorldPos = Lattice.EditPosition(FIntVector(IX, IY, IZ));
-
-				if (bOnlyIfSolid)
-				{
-					const FVoxelData Existing = ChunkManager->GetVoxelAtWorldPosition(WorldPos);
-					if (!Existing.IsSolid())
-					{
-						continue;
-					}
-				}
-
-				if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
-				{
-					++Count;
-				}
+				return;
 			}
 		}
-	}
+
+		if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
+		{
+			++Count;
+		}
+	});
 	return Count;
 }
 
@@ -94,26 +82,13 @@ int32 UDungeonVoxelStamper::PlaceBoundary(
 	FVector BoxMin, BoxMax;
 	FDungeonVoxelStampPlan::FaceSlabBox(CellWorldMin, CellWorldSize, Face, Thickness, /*bOutward=*/false, BoxMin, BoxMax);
 
-	FIntVector Min, Max;
-	Lattice.RangeForBox(BoxMin, BoxMax, Min, Max);
-	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+	Lattice.ForEachSampleInBox(BoxMin, BoxMax, [&](const FIntVector& Index)
 	{
-		return 0;
-	}
-
-	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
-	{
-		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
+		if (EditManager->ApplyEdit(Lattice.EditPosition(Index), SolidVoxel, EEditMode::Set))
 		{
-			for (int32 IX = Min.X; IX <= Max.X; ++IX)
-			{
-				if (EditManager->ApplyEdit(Lattice.EditPosition(FIntVector(IX, IY, IZ)), SolidVoxel, EEditMode::Set))
-				{
-					++Count;
-				}
-			}
+			++Count;
 		}
-	}
+	});
 	return Count;
 }
 
@@ -192,52 +167,40 @@ static int32 PlaceStaircaseSteps(
 
 		const FVector CellWorldMin = WorldOffset + FVector(CellCoord) * CellWorldSize;
 
-		FIntVector Min, Max;
-		Lattice.RangeForBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), Min, Max);
-		if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+		Lattice.ForEachSampleInBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), [&](const FIntVector& Index)
 		{
-			continue;
-		}
+			// Measured in the dungeon's frame (the world for an unrotated dungeon).
+			const FVector FramePos = Lattice.FrameEditPosition(Index);
 
-		for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
-		{
-			for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
+			// Distance along the climb axis measured from the entry side of the cell.
+			const double AlongAxis = bClimbAlongX
+				? FramePos.X - CellWorldMin.X
+				: FramePos.Y - CellWorldMin.Y;
+			const double AlongFromEntry = bPositiveClimb
+				? AlongAxis
+				: CellWorldSize - AlongAxis;
+
+			const int32 RunWithinCell = FMath::Clamp(
+				FMath::FloorToInt32(AlongFromEntry / StepWorldSize), 0, StepsPerCell - 1);
+			const int32 GlobalRunIdx = ci * StepsPerCell + RunWithinCell;
+
+			// Step height: rises one tread every RiseToRun runs.
+			const int32 StepTop = GlobalRunIdx / RiseToRun;
+			const double StepTopZ = CellWorldMin.Z + (StepTop + 1) * StepWorldSize;
+
+			if (FramePos.Z >= StepTopZ)
 			{
-				for (int32 IX = Min.X; IX <= Max.X; ++IX)
-				{
-					const FVector WorldPos = Lattice.EditPosition(FIntVector(IX, IY, IZ));
-
-					// Distance along the climb axis measured from the entry side of the cell.
-					const double AlongAxis = bClimbAlongX
-						? WorldPos.X - CellWorldMin.X
-						: WorldPos.Y - CellWorldMin.Y;
-					const double AlongFromEntry = bPositiveClimb
-						? AlongAxis
-						: CellWorldSize - AlongAxis;
-
-					const int32 RunWithinCell = FMath::Clamp(
-						FMath::FloorToInt32(AlongFromEntry / StepWorldSize), 0, StepsPerCell - 1);
-					const int32 GlobalRunIdx = ci * StepsPerCell + RunWithinCell;
-
-					// Step height: rises one tread every RiseToRun runs.
-					const int32 StepTop = GlobalRunIdx / RiseToRun;
-					const double StepTopZ = CellWorldMin.Z + (StepTop + 1) * StepWorldSize;
-
-					if (WorldPos.Z >= StepTopZ)
-					{
-						continue;
-					}
-
-					if (EditManager->ApplyEdit(WorldPos, SolidVoxel, EEditMode::Set))
-					{
-						++Count;
-					}
-				}
+				return;
 			}
-		}
+
+			if (EditManager->ApplyEdit(Lattice.EditPosition(Index), SolidVoxel, EEditMode::Set))
+			{
+				++Count;
+			}
+		});
 
 		AffectedChunks.Add(ChunkManager->WorldToChunkCoord(
-			CellWorldMin + FVector(CellWorldSize * 0.5f)));
+			Lattice.ToWorld(CellWorldMin + FVector(CellWorldSize * 0.5f))));
 	}
 
 	return Count;
@@ -253,6 +216,17 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 	const FVector& WorldOffset,
 	EDungeonStampMode StampMode,
 	UDungeonVoxelConfig* Config)
+{
+	return StampDungeonInFrame(Result, ChunkManager, WorldOffset, StampMode, Config, FTransform::Identity);
+}
+
+FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
+	const FDungeonResult& Result,
+	UVoxelChunkManager* ChunkManager,
+	const FVector& WorldOffset,
+	EDungeonStampMode StampMode,
+	UDungeonVoxelConfig* Config,
+	const FTransform& Frame)
 {
 	FDungeonStampResult StampResult;
 	const double StartTime = FPlatformTime::Seconds();
@@ -302,26 +276,38 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 	const uint8 BiomeID = Config->DungeonBiomeID;
 	const bool bMergeMode = (StampMode == EDungeonStampMode::MergeAsStructure);
 
+	// Every voxel write below resolves through this lattice rather than stepping in cell space:
+	// the dungeon origin has an arbitrary phase against the voxel grid and CellWorldSize is not
+	// generally a multiple of VoxelSize, so cell-space stepping leaves an uncarved rind. Cells,
+	// slabs and stairs are laid out in the dungeon's frame (identity: the world; a planet POI's
+	// pad space, spherical Phase 5), which the lattice maps samples into.
+	FDungeonVoxelLattice Lattice(VoxelConfig->WorldOrigin, VoxelSize);
+	Lattice.SetFrame(Frame);
+
+	// A plane at an angle to the lattice aliases by up to half a voxel's diagonal (sqrt(3)/2 of a
+	// voxel) where the axis-aligned lattice resolves it to a plane within half a voxel: a rotated
+	// tile-dressed dungeon gets one more voxel of outer seal and half a voxel more carve margin, so
+	// the rock stays behind the tiles. The voxel lining keeps its thickness: its surface is the
+	// floor content stands on, and a slab a voxel thick has a sample on every lattice line through it.
+	const float RotatedExtra = Lattice.bRotated ? 1.0f : 0.0f;
+
 	// Wall/lining/seal depth in world units. WallThickness is authored in voxel layers.
-	const float WallWorldThickness = Config->WallThickness * VoxelSize;
+	const float WallWorldThickness = (Config->WallThickness
+		+ (StampMode == EDungeonStampMode::CarveOnly ? RotatedExtra : 0.0f)) * VoxelSize;
 
 	// CarveOnly only: the void is carved CarveMargin past every cell plane so the meshed rock
 	// surface (midway between the last carved sample and the first solid one) can never stand
 	// inside the cell behind the tiles. The voxel-lined modes keep the exact cell box — their
 	// stone lining IS the wall. The open-sample set and the seal slabs use the same expanded box.
 	const float CarveMargin = (StampMode == EDungeonStampMode::CarveOnly)
-		? FMath::Clamp(Config->CarveMarginVoxels, 0.0f, 3.0f) * VoxelSize
+		? (FMath::Clamp(Config->CarveMarginVoxels, 0.0f, 3.0f) + 0.5f * RotatedExtra) * VoxelSize
 		: 0.0f;
 
-	// Every voxel write below resolves through this lattice rather than stepping in cell space:
-	// the dungeon origin has an arbitrary phase against the voxel grid and CellWorldSize is not
-	// generally a multiple of VoxelSize, so cell-space stepping leaves an uncarved rind.
-	const FDungeonVoxelLattice Lattice(VoxelConfig->WorldOrigin, VoxelSize);
-
 	UE_LOG(LogDungeonVoxelIntegration, Log,
-		TEXT("StampDungeon: Grid=%dx%dx%d CellWorldSize=%.1f VoxelSize=%.1f VoxelsPerCell=%d Mode=%d"),
+		TEXT("StampDungeon: Grid=%dx%dx%d CellWorldSize=%.1f VoxelSize=%.1f VoxelsPerCell=%d Mode=%d%s"),
 		Grid.GridSize.X, Grid.GridSize.Y, Grid.GridSize.Z,
-		CellWorldSize, VoxelSize, VoxelsPerCell, static_cast<int32>(StampMode));
+		CellWorldSize, VoxelSize, VoxelsPerCell, static_cast<int32>(StampMode),
+		Lattice.bRotated ? TEXT(" (in a rotated frame)") : TEXT(""));
 
 	// Track affected chunks for dirty marking
 	TSet<FIntVector> AffectedChunks;
@@ -344,30 +330,17 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 				{
 					const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
 
-					FIntVector VMin, VMax;
-					Lattice.RangeForBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), VMin, VMax);
-					if (!FDungeonVoxelLattice::IsRangeValid(VMin, VMax))
+					Lattice.ForEachSampleInBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), [&](const FIntVector& Index)
 					{
-						continue;
-					}
+						const FVector WorldPos = Lattice.EditPosition(Index);
 
-					for (int32 IZ = VMin.Z; IZ <= VMax.Z; ++IZ)
-					{
-						for (int32 IY = VMin.Y; IY <= VMax.Y; ++IY)
+						if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
 						{
-							for (int32 IX = VMin.X; IX <= VMax.X; ++IX)
-							{
-								const FVector WorldPos = Lattice.EditPosition(FIntVector(IX, IY, IZ));
-
-								if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
-								{
-									++StampResult.VoxelsModified;
-								}
-
-								AffectedChunks.Add(ChunkManager->WorldToChunkCoord(WorldPos));
-							}
+							++StampResult.VoxelsModified;
 						}
-					}
+
+						AffectedChunks.Add(ChunkManager->WorldToChunkCoord(WorldPos));
+					});
 				}
 			}
 		}
@@ -397,7 +370,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 				// Track chunk for the cell center
 				AffectedChunks.Add(ChunkManager->WorldToChunkCoord(
-					CellWorldMin + FVector(CellWorldSize * 0.5f)));
+					Lattice.ToWorld(CellWorldMin + FVector(CellWorldSize * 0.5f))));
 			}
 		}
 	}
@@ -482,7 +455,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 					// Track chunk for boundary cell too
 					AffectedChunks.Add(ChunkManager->WorldToChunkCoord(
-						CellWorldMin + FVector(CellWorldSize * 0.5f)));
+						Lattice.ToWorld(CellWorldMin + FVector(CellWorldSize * 0.5f))));
 				}
 			}
 		}
@@ -553,28 +526,13 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
 
 					const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
 
-					FIntVector VMin, VMax;
-					Lattice.RangeForBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), VMin, VMax);
-					if (!FDungeonVoxelLattice::IsRangeValid(VMin, VMax))
+					Lattice.ForEachSampleInBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), [&](const FIntVector& Index)
 					{
-						continue;
-					}
-
-					for (int32 IZ = VMin.Z; IZ <= VMax.Z; ++IZ)
-					{
-						for (int32 IY = VMin.Y; IY <= VMax.Y; ++IY)
+						if (EditManager->ApplyEdit(Lattice.EditPosition(Index), WallVoxel, EEditMode::Set))
 						{
-							for (int32 IX = VMin.X; IX <= VMax.X; ++IX)
-							{
-								const FVector WorldPos = Lattice.EditPosition(FIntVector(IX, IY, IZ));
-
-								if (EditManager->ApplyEdit(WorldPos, WallVoxel, EEditMode::Set))
-								{
-									++StampResult.VoxelsModified;
-								}
-							}
+							++StampResult.VoxelsModified;
 						}
-					}
+					});
 				}
 			}
 		}

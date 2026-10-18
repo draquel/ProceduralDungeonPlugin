@@ -69,6 +69,24 @@ public:
 		EDungeonStampMode StampMode,
 		UDungeonVoxelConfig* Config);
 
+	/**
+	 * StampDungeon with the dungeon laid out in a frame (spherical Phase 5, SP-G6): WorldOffset and every cell, slab and
+	 * stair are in frame space, mapped to the world by Frame (scale ignored). On a planet a POI's pad space (the tangent
+	 * frame at its centre), so the dungeon's floors lie across local up. The voxel lattice stays the world's: each frame-space
+	 * box is enumerated by testing the samples of its world bounds in frame space, and a rotated tile-dressed (CarveOnly)
+	 * dungeon carves half a voxel more margin and seals one voxel thicker (an oblique plane aliases by up to half a voxel's
+	 * diagonal on the lattice).
+	 * The identity frame is StampDungeon exactly (the same samples, in the same order).
+	 * @param Frame Frame space to world
+	 */
+	FDungeonStampResult StampDungeonInFrame(
+		const FDungeonResult& Result,
+		UVoxelChunkManager* ChunkManager,
+		const FVector& WorldOffset,
+		EDungeonStampMode StampMode,
+		UDungeonVoxelConfig* Config,
+		const FTransform& Frame);
+
 private:
 	// Open-cell / wall / floor decisions come from FDungeonBoundaryRules (DungeonCore), shared
 	// with the tile mapper. Do not add local copies here: they drift, and a drifted rule means

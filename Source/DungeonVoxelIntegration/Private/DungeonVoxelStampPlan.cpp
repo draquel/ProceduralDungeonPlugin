@@ -72,23 +72,11 @@ void FDungeonVoxelStampPlan::CollectOpenCellSamples(
 				const FVector BoxMin = CellWorldMin - FVector(CarveMargin);
 				const FVector BoxMax = CellWorldMin + FVector(CellWorldSize + CarveMargin);
 
-				FIntVector Min, Max;
-				Lattice.RangeForBox(BoxMin, BoxMax, Min, Max);
-				if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+				// In the dungeon's frame (the world for an unrotated dungeon).
+				Lattice.ForEachSampleInBox(BoxMin, BoxMax, [&OutSamples](const FIntVector& Index)
 				{
-					continue;
-				}
-
-				for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
-				{
-					for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
-					{
-						for (int32 IX = Min.X; IX <= Max.X; ++IX)
-						{
-							OutSamples.Add(FIntVector(IX, IY, IZ));
-						}
-					}
-				}
+					OutSamples.Add(Index);
+				});
 			}
 		}
 	}
@@ -107,39 +95,24 @@ void FDungeonVoxelStampPlan::CollectOuterSealSamples(
 	FVector BoxMin, BoxMax;
 	FaceSlabBox(CellWorldMin, CellWorldSize, Face, Thickness, /*bOutward=*/true, BoxMin, BoxMax);
 
-	FIntVector Min, Max;
-	Lattice.RangeForBox(BoxMin, BoxMax, Min, Max);
-	if (!FDungeonVoxelLattice::IsRangeValid(Min, Max))
+	Lattice.ForEachSampleInBox(BoxMin, BoxMax, [&](const FIntVector& Index)
 	{
-		return;
-	}
-
-	for (int32 IZ = Min.Z; IZ <= Max.Z; ++IZ)
-	{
-		for (int32 IY = Min.Y; IY <= Max.Y; ++IY)
+		// Never plug a room, hallway or the cell this seal belongs to. Membership is by
+		// lattice index, the same enumeration that carved the sample, so no world-space
+		// rounding can attribute a sample to the wrong cell.
+		if (OpenCellSamples.Contains(Index))
 		{
-			for (int32 IX = Min.X; IX <= Max.X; ++IX)
-			{
-				const FIntVector Index(IX, IY, IZ);
-
-				// Never plug a room, hallway or the cell this seal belongs to. Membership is by
-				// lattice index, the same enumeration that carved the sample, so no world-space
-				// rounding can attribute a sample to the wrong cell.
-				if (OpenCellSamples.Contains(Index))
-				{
-					continue;
-				}
-
-				// Already sealed by an adjoining face or cell: same value, so skip the write.
-				bool bAlreadySealed = false;
-				SealedSamples.Add(Index, &bAlreadySealed);
-				if (bAlreadySealed)
-				{
-					continue;
-				}
-
-				OutToWrite.Add(Index);
-			}
+			return;
 		}
-	}
+
+		// Already sealed by an adjoining face or cell: same value, so skip the write.
+		bool bAlreadySealed = false;
+		SealedSamples.Add(Index, &bAlreadySealed);
+		if (bAlreadySealed)
+		{
+			return;
+		}
+
+		OutToWrite.Add(Index);
+	});
 }

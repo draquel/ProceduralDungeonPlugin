@@ -125,6 +125,10 @@ When working on `DungeonVoxelIntegration`:
 - Entrance stitching traces from terrain surface down to dungeon entrance cell
 - Instanced mode uses `FVoxelDungeonWorldMode` implementing `IVoxelWorldMode`
 - Scale bridging: `CellWorldSize / VoxelSize` = voxels per dungeon cell
+- Frames (spherical Phase 5): `StampDungeonInFrame` / `StitchEntranceInFrame` take a frame (frame space to world) and
+  `ADungeonActor::bMapInActorFrame` lays the tiles out in the actor's frame; enumerate samples through
+  `FDungeonVoxelLattice::ForEachSampleInBox` (never `RangeForBox` directly in new stamp code) so a rotated frame works,
+  and keep the identity frame bit for bit (`Dungeon.Stamp.RotatedFrame` compares the edits)
 
 ## Performance Constraints
 
