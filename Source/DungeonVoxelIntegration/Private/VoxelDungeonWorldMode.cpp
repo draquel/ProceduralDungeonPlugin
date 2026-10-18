@@ -19,6 +19,7 @@ void FVoxelDungeonWorldMode::Initialize(
 	CellWorldSize = InResult.CellWorldSize;
 	WorldOffset = InWorldOffset;
 	VoxelSize = InVoxelSize;
+	LiningThickness = InVoxelSize;
 
 	// Copy room data for material lookup
 	Rooms = InResult.Rooms;
@@ -27,7 +28,7 @@ void FVoxelDungeonWorldMode::Initialize(
 	if (InConfig)
 	{
 		VoxelsPerCell = InConfig->GetEffectiveVoxelsPerCell(CellWorldSize, InVoxelSize);
-		WallThickness = InConfig->WallThickness;
+		LiningThickness = InConfig->GetInnerLiningThickness(InVoxelSize);
 		WallMaterialID = InConfig->WallMaterialID;
 		FloorMaterialID = InConfig->FloorMaterialID;
 		CeilingMaterialID = InConfig->CeilingMaterialID;
@@ -198,17 +199,17 @@ float FVoxelDungeonWorldMode::GetDensityAt(
 	}
 
 	// Convert distance to SDF: negative = air (inside open space)
-	// At the boundary face, transition from solid (wall) to air
-	const float WallWorldThickness = WallThickness * VoxelSize;
-
-	if (MinDistToBoundary < WallWorldThickness)
+	// At the boundary face, transition from solid (wall) to air. Only the inner lining stands inside
+	// the cell, as in the stamp: the rest of a thick jacket would lie outside it, where everything is
+	// solid here already (a jacket lined from inside filled one-storey cells, G24).
+	if (MinDistToBoundary < LiningThickness)
 	{
-		// Within wall thickness — solid (positive)
-		return WallWorldThickness - MinDistToBoundary;
+		// Within the lining — solid (positive)
+		return LiningThickness - MinDistToBoundary;
 	}
 
-	// Beyond wall thickness — air (negative)
-	return -(MinDistToBoundary - WallWorldThickness);
+	// Beyond the lining — air (negative)
+	return -(MinDistToBoundary - LiningThickness);
 }
 
 float FVoxelDungeonWorldMode::GetTerrainHeightAt(

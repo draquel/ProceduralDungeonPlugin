@@ -79,7 +79,8 @@ private:
 	FVector WorldOffset = FVector::ZeroVector;
 	int32 VoxelsPerCell = 4;
 	float VoxelSize = 100.0f;
-	int32 WallThickness = 1;
+	/** The inner lining's depth into each closed face (UDungeonVoxelConfig::GetInnerLiningThickness); outside the open cells is solid. */
+	float LiningThickness = 100.0f;
 	bool bInitialized = false;
 
 	/** Copied room data for material lookup. */

@@ -291,9 +291,15 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 	// floor content stands on, and a slab a voxel thick has a sample on every lattice line through it.
 	const float RotatedExtra = Lattice.bRotated ? 1.0f : 0.0f;
 
-	// Wall/lining/seal depth in world units. WallThickness is authored in voxel layers.
-	const float WallWorldThickness = (Config->WallThickness
-		+ (StampMode == EDungeonStampMode::CarveOnly ? RotatedExtra : 0.0f)) * VoxelSize;
+	// The stone jacket around every closed face, WallThickness voxel layers (authored in layers). CarveOnly: all of it is
+	// the outer seal (the tiles are the lining). Voxel-lined modes: the inner lining stands inside the face (its surface is
+	// the floor, wall or ceiling) and the rest of the jacket wraps the face from outside, never into an open cell. Lining
+	// every layer from inside filled each one-storey cell once the jacket reached half the cell (G24).
+	const bool bCarveOnly = (StampMode == EDungeonStampMode::CarveOnly);
+	const float LiningWorldThickness = bCarveOnly ? 0.0f : Config->GetInnerLiningThickness(VoxelSize);
+	const float SealWorldThickness = bCarveOnly
+		? (Config->WallThickness + RotatedExtra) * VoxelSize
+		: Config->GetOuterJacketLayers() * VoxelSize;
 
 	// CarveOnly only: the void is carved CarveMargin past every cell plane so the meshed rock
 	// surface (midway between the last carved sample and the first solid one) can never stand
@@ -304,10 +310,18 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 		: 0.0f;
 
 	UE_LOG(LogDungeonVoxelIntegration, Log,
-		TEXT("StampDungeon: Grid=%dx%dx%d CellWorldSize=%.1f VoxelSize=%.1f VoxelsPerCell=%d Mode=%d%s"),
+		TEXT("StampDungeon: Grid=%dx%dx%d CellWorldSize=%.1f VoxelSize=%.1f VoxelsPerCell=%d Mode=%d lining=%.0f seal=%.0f%s"),
 		Grid.GridSize.X, Grid.GridSize.Y, Grid.GridSize.Z,
-		CellWorldSize, VoxelSize, VoxelsPerCell, static_cast<int32>(StampMode),
+		CellWorldSize, VoxelSize, VoxelsPerCell, static_cast<int32>(StampMode), LiningWorldThickness, SealWorldThickness,
 		Lattice.bRotated ? TEXT(" (in a rotated frame)") : TEXT(""));
+
+	// A one-storey cell keeps an air sample between its floor and ceiling linings only if it spans three voxels.
+	if (!bCarveOnly && CellWorldSize < 2.0f * LiningWorldThickness + VoxelSize)
+	{
+		UE_LOG(LogDungeonVoxelIntegration, Warning,
+			TEXT("StampDungeon: CellWorldSize %.1f is under two linings and a voxel (%.1f): one-storey rooms and hallways may stamp solid."),
+			CellWorldSize, 2.0f * LiningWorldThickness + VoxelSize);
+	}
 
 	// Track affected chunks for dirty marking
 	TSet<FIntVector> AffectedChunks;
@@ -376,9 +390,10 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 	}
 
 	// ------------------------------------------------------------------
-	// Pass 2: Place boundary voxels on faces adjacent to solid/OOB
-	// (skipped in CarveOnly — tile meshes provide the lining, and boundary
-	// voxels thicken INTO the open cell where those tiles stand)
+	// Pass 2: Place boundary voxels on faces adjacent to solid/OOB: the inner
+	// lining inside the cell (voxel-lined modes only — in CarveOnly tile meshes
+	// provide the lining, and boundary voxels inside the cell would bury them)
+	// and the rest of the jacket outside it
 	// ------------------------------------------------------------------
 	// Direction offsets: +X, -X, +Y, -Y, +Z, -Z
 	static const FIntVector Directions[6] = {
@@ -387,11 +402,12 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 		{0, 0, 1}, {0, 0, -1},
 	};
 
-	// CarveOnly is lined by tile meshes, so the lining must NOT go inside the cell (it would bury
-	// the tiles). It still needs a seal: dungeons anchor at the cave layer, and without solid
-	// voxels asserted around the volume, procedural cave voids breach it and terrain reads through
-	// the tiles. Same boundary predicates, shell written OUTSIDE the cell instead.
-	const bool bOuterSeal = (StampMode == EDungeonStampMode::CarveOnly);
+	// The jacket outside the cell. CarveOnly is lined by tile meshes, so its whole jacket goes outside
+	// (inside the cell it would bury the tiles); it still needs one: dungeons anchor at the cave layer,
+	// and without solid voxels asserted around the volume, procedural cave voids breach it and terrain
+	// reads through the tiles. The voxel-lined modes put every layer past the inner lining there too,
+	// sealing and armouring the dungeon without taking the room's interior.
+	const bool bOuterSeal = SealWorldThickness > 0.0f;
 
 	// Shared across every seal slab so each shell voxel is written exactly once.
 	TSet<FIntVector> SealedVoxels;
@@ -445,13 +461,17 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 
 					const uint8 MatID = Config->GetMaterialForCell(Cell.CellType, RoomType, Face);
 
-					const int32 Placed = bOuterSeal
-						? PlaceOuterSeal(EditManager, Lattice,
+					if (LiningWorldThickness > 0.0f)
+					{
+						StampResult.VoxelsModified += PlaceBoundary(EditManager, Lattice, CellWorldMin, CellWorldSize,
+							Face, LiningWorldThickness, MatID, BiomeID);
+					}
+					if (bOuterSeal)
+					{
+						StampResult.VoxelsModified += PlaceOuterSeal(EditManager, Lattice,
 							CellWorldMin - FVector(CarveMargin), CellWorldSize + 2.0f * CarveMargin,
-							Face, WallWorldThickness, MatID, BiomeID, OpenCellSamples, SealedVoxels)
-						: PlaceBoundary(EditManager, Lattice, CellWorldMin, CellWorldSize,
-							Face, WallWorldThickness, MatID, BiomeID);
-					StampResult.VoxelsModified += Placed;
+							Face, SealWorldThickness, MatID, BiomeID, OpenCellSamples, SealedVoxels);
+					}
 
 					// Track chunk for boundary cell too
 					AffectedChunks.Add(ChunkManager->WorldToChunkCoord(
