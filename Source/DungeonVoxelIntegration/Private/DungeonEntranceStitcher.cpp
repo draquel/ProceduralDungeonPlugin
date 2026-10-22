@@ -391,7 +391,8 @@ int32 UDungeonEntranceStitcher::StitchEntranceInFrame(
 	const int32 StyleIdx = FMath::Clamp(static_cast<int32>(Style), 0, 3);
 
 	UVoxelEditManager* EditManager = ChunkManager->GetEditManager();
-	EditManager->BeginEditOperation(OpNames[StyleIdx]);
+	// Outside the undo history, as the dungeon stamp (world modes review G68).
+	EditManager->BeginEditOperation(OpNames[StyleIdx], /*bAddToUndoHistory=*/false);
 	EditManager->SetEditSource(EEditSource::System);
 
 	int32 VoxelsModified = 0;
