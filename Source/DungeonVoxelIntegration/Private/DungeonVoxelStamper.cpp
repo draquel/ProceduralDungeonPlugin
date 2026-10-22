@@ -326,8 +326,10 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 	// Track affected chunks for dirty marking
 	TSet<FIntVector> AffectedChunks;
 
-	// Begin grouped edit operation
-	EditManager->BeginEditOperation(TEXT("Dungeon Stamp"));
+	// Begin grouped edit operation. The world's own generation, outside the undo history (world modes review G68): a
+	// player's undo takes back the player's last edit, never the dungeon, and the history does not hold the stamp's voxel
+	// changes (112 bytes each: hundreds of thousands per dungeon).
+	EditManager->BeginEditOperation(TEXT("Dungeon Stamp"), /*bAddToUndoHistory=*/false);
 	EditManager->SetEditSource(EEditSource::System);
 
 	// ------------------------------------------------------------------
