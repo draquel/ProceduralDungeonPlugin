@@ -64,7 +64,6 @@ DungeonVoxelIntegration → Optional VoxelWorlds bridge (disabled by default)
 ### VoxelWorlds Integration Classes
 - `UDungeonVoxelStamper` — Converts dungeon cells to voxel edit operations
 - `UDungeonEntranceStitcher` — Connects dungeon entrance to terrain surface
-- `FVoxelDungeonWorldMode` — IVoxelWorldMode for instanced dungeon levels
 - `UDungeonVoxelConfig` — Material mapping (dungeon cells → voxel MaterialIDs)
 
 ### Core Data Structures
@@ -121,9 +120,8 @@ These rules ensure identical seed + config → identical dungeon across platform
 
 When working on `DungeonVoxelIntegration`:
 - Dungeon stamping uses VoxelWorlds' `UVoxelEditManager` (edit layer overlay)
-- Material mapping: `FDungeonCell::MaterialHint` → `FVoxelData::MaterialID` via `UDungeonVoxelConfig`
+- Material mapping: dungeon cell type → `FVoxelData::MaterialID` via `UDungeonVoxelConfig` (`MaterialHint` was deleted in CR1, DNG-06)
 - Entrance stitching traces from terrain surface down to dungeon entrance cell
-- Instanced mode uses `FVoxelDungeonWorldMode` implementing `IVoxelWorldMode`
 - Scale bridging: `CellWorldSize / VoxelSize` = voxels per dungeon cell
 - The voxel jacket (`UDungeonVoxelConfig::WallThickness` layers around every closed face): the voxel-lined modes put
   `InnerLiningLayers` (one) inside the cell, the surface a floor stands on, and the rest OUTSIDE it through the outer

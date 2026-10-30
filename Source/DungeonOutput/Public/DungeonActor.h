@@ -25,7 +25,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnDungeonInteractableSpawned, AD
  * state, replicate and take interactions, none of which an instance can do. In a game world the
  * actor spawns them itself on authority after every build (bSpawnInteractables, DoorActorClass /
  * WallLightActorClass, see IDungeonInteractable); a game layer that keeps its own records (the
- * POI system) turns that off and hangs its own subclasses from GetOpenings() / GetFixtures().
+ * POI system) turns that off and hangs its own subclasses from GetTileMap().
  */
 UCLASS(BlueprintType, Blueprintable, meta = (DisplayName = "Dungeon Actor"))
 class DUNGEONOUTPUT_API ADungeonActor : public AActor
@@ -92,28 +92,12 @@ public:
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
 	void RandomizeSeed();
 
-	/** Move the editor viewport camera to the dungeon entrance cell. */
-	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
-	void GoToEntrance();
-
 	/** Get the cached generation result. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
 	const FDungeonResult& GetDungeonResult() const { return CachedResult; }
 
 	/** The tile map of the last GenerateDungeon (instances, openings, fixtures); empty before. */
 	const FDungeonTileMapResult& GetTileMap() const { return CachedTileMap; }
-
-	/** Framed openings of the last build (doorways, ramp entries, entrance openings), world space. */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
-	TArray<FDungeonOpening> GetOpenings() const { return CachedTileMap.Openings; }
-
-	/** Wall-mounted fixtures of the last build (wall lights per the tileset's rules), world space. */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
-	TArray<FDungeonFixture> GetFixtures() const { return CachedTileMap.Fixtures; }
-
-	/** Container- / trap-role decor placements of the last build (see FDungeonProp), for gameplay to hang actors on. */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
-	TArray<FDungeonProp> GetProps() const { return CachedTileMap.Props; }
 
 	/**
 	 * Hide or show one tile instance (a broken crate, feature 5) without rebuilding: the instance
@@ -141,10 +125,6 @@ public:
 	/** Destroy every interactable this actor spawned (ClearDungeon and EndPlay do this). */
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|Interactables")
 	void DestroyInteractables();
-
-	/** The interactables this actor spawned and still owns (doors first, then torches). */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Interactables")
-	TArray<AActor*> GetInteractables() const;
 
 	/** Hang doors and wall lights automatically after each build (game worlds, authority). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Interactables")
@@ -201,23 +181,6 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|Coverage")
 	FDungeonCoverageReport GetCoverageReport() const;
-
-	/** GetCoverageReport().Describe(): the summary line plus one line per problem. */
-	UFUNCTION(BlueprintCallable, Category = "Dungeon|Coverage")
-	FString DescribeCoverage() const;
-
-	/**
-	 * Debug dump of the grid cells in an inclusive grid-coordinate box, one line per cell:
-	 * "(x,y,z) Type room=R hall=H floor=F stair=S". The grid itself is C++ only (too large for
-	 * Blueprint), so this is the way to inspect cell neighbourhoods from Blueprint or Python when
-	 * diagnosing tile / voxel boundary decisions. Out-of-bounds coordinates are reported as OOB.
-	 *
-	 * @param MinCell Inclusive min grid coordinate.
-	 * @param MaxCell Inclusive max grid coordinate.
-	 * @return Multi-line description; empty when no dungeon has been generated.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Dungeon|Debug")
-	FString DescribeGridRegion(FIntVector MinCell, FIntVector MaxCell) const;
 
 #if WITH_EDITORONLY_DATA
 	/** Master toggle for debug visualization in the viewport. */

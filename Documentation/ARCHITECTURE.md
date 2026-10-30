@@ -91,7 +91,7 @@ ProceduralDungeon/
 │       │   ├── DungeonVoxelStamper.h       // Stamps dungeon data into voxel chunks
 │       │   ├── DungeonVoxelConfig.h        // Voxel-specific config (material mapping, stamp mode)
 │       │   ├── DungeonEntranceStitcher.h   // Connects dungeon entrance to terrain surface
-│       │   └── VoxelDungeonWorldMode.h     // IVoxelWorldMode for instanced dungeon levels
+│       │   └── VoxelDungeonWorldMode.h     // deleted in CR1 (DNG-01)
 │       └── Private/
 │           └── (implementations)
 │
@@ -202,9 +202,8 @@ struct FDungeonCell
     uint8 RoomIndex = 0;           // Which room this cell belongs to (0 = none)
     uint8 HallwayIndex = 0;        // Which hallway carved this cell (0 = none)
     uint8 FloorIndex = 0;          // Which floor/level (Y coordinate)
-    uint8 MaterialHint = 0;        // Material suggestion (maps to tile set variant or voxel MaterialID)
+    // MaterialHint, Flags: deleted in CR1 (DNG-06)
     uint8 StaircaseDirection = 0;  // Packed direction for staircase cells (NESW + Up/Down)
-    uint8 Flags = 0;               // Bitfield: bIsEntrance, bIsDoorway, bIsLit, etc.
     uint8 Reserved = 0;
 };
 
@@ -265,8 +264,7 @@ struct FDungeonRoom
     
     // Metadata
     int32 FloorLevel = 0;         // Primary floor this room is on
-    uint8 MaterialHint = 0;       // Suggested material theme
-    FString CustomTag;             // User-defined tag for gameplay hooks
+    // MaterialHint, CustomTag: deleted in CR1 (DNG-06)
 };
 ```
 
@@ -819,8 +817,7 @@ UENUM(BlueprintType)
 enum class EDungeonStampMode : uint8
 {
     CarveUnderground,   // Dungeon carved below terrain surface; entrance is a surface opening
-    ReplaceRegion,      // Dungeon replaces a terrain volume entirely (void + dungeon walls)
-    MergeAsStructure,   // Dungeon data merged into generation pass (respects terrain shape)
+    // ReplaceRegion, MergeAsStructure: deleted in CR1 (DNG-07)
 };
 ```
 
@@ -840,7 +837,7 @@ public:
      * @param ChunkManager Target voxel world's chunk manager.
      * @param WorldOffset  World-space origin for the dungeon grid.
      * @param StampMode    How to interact with existing terrain.
-     * @param MaterialMap  Maps DungeonCell::MaterialHint → VoxelData::MaterialID.
+     * @param MaterialMap  (DungeonCell::MaterialHint: deleted in CR1 (DNG-06))
      */
     void StampDungeon(
         const FDungeonResult& Result,
@@ -870,7 +867,7 @@ The stamper maps each dungeon grid cell to a region of voxels (determined by `Ce
 3. **Floor/ceiling boundaries** → Maintain solid voxels with appropriate material
 
 As built, every closed face (`FDungeonBoundaryRules`) gets a stone jacket `UDungeonVoxelConfig::WallThickness` layers
-thick. The voxel-lined modes (`CarveUnderground`, `ReplaceRegion`, `MergeAsStructure`) put its first layer
+thick. The voxel-lined mode (`CarveUnderground`; `ReplaceRegion` and `MergeAsStructure` deleted in CR1 (DNG-07)) puts its first layer
 (`InnerLiningLayers`) inside the cell, the floor, wall or ceiling surface, and the rest just outside the cell, never into
 another open cell (the outer seal's sample planning, `FDungeonVoxelStampPlan`); `CarveOnly` (tile-dressed) puts all of it
 outside, past `CarveMarginVoxels`. Lining the whole jacket from inside filled every one-storey cell once it reached half
@@ -933,37 +930,7 @@ identity frame is the plain `StampDungeon` / `StitchEntrance` exactly: the same 
 
 ### Mode B: Instanced (Separate Dungeon Level)
 
-The dungeon is a standalone voxel world in its own sublevel.
-
-```cpp
-/**
- * FVoxelDungeonWorldMode : public IVoxelWorldMode
- * Custom world mode for dungeon instances.
- * Generates a bounded box of solid voxels, then applies dungeon carving.
- */
-class FVoxelDungeonWorldMode : public IVoxelWorldMode
-{
-public:
-    void SetDungeonResult(const FDungeonResult& InResult);
-
-    // IVoxelWorldMode interface
-    virtual float GetDensityAt(const FVector& WorldPos,
-                               const FVoxelNoiseParams& NoiseParams) const override;
-    virtual bool ShouldGenerateChunk(const FIntVector& ChunkCoord) const override;
-    virtual FVector GetSpawnPosition() const override;
-
-private:
-    FDungeonResult DungeonResult;
-};
-```
-
-This world mode:
-
-- Returns solid density everywhere except inside dungeon rooms/hallways/staircases
-- Only generates chunks that overlap the dungeon bounding box
-- Uses the dungeon entrance cell as the spawn position
-- No LOD needed (bounded, small world)
-- Player transitions via level streaming or seamless travel
+`FVoxelDungeonWorldMode`: deleted in CR1 (DNG-01).
 
 ### Voxel Material Mapping
 
@@ -1108,7 +1075,7 @@ void UDungeonSubsystem::GenerateDungeonAsync(
 
 Generation runs on a background thread (the algorithm is CPU-bound but self-contained). The `FDungeonResult` is returned on the game thread via delegate.
 
-For VoxelWorlds instanced mode, this spawns a sublevel with its own `AVoxelWorld` configured with `FVoxelDungeonWorldMode`.
+`FVoxelDungeonWorldMode` (the instanced mode): deleted in CR1 (DNG-01).
 
 ### Editor Tool
 
@@ -1174,7 +1141,7 @@ This should be done async, queuing chunk remeshes as edits complete. The existin
 - [ ] `FDungeonGrid`, `FDungeonCell`, `FDungeonRoom` data structures
 - [ ] `FDungeonSeed` deterministic RNG
 - [ ] Room placement (random, non-overlapping, with buffer)
-- [ ] 2D Delaunay triangulation (Bowyer-Watson) — start in 2D for validation
+- 2D Delaunay triangulation (`FDelaunayTriangulation`): deleted in CR1 (DNG-02)
 - [ ] Prim's MST
 - [ ] Edge re-addition
 - [ ] 2D A\* hallway pathfinding (no staircases yet)
@@ -1221,9 +1188,9 @@ This should be done async, queuing chunk remeshes as edits complete. The existin
 
 - [ ] `DungeonVoxelIntegration` module setup
 - [ ] `UDungeonVoxelStamper` — grid-to-voxel edit conversion
-- [ ] `EDungeonStampMode` implementations (Carve, Replace, Merge)
+- [ ] `EDungeonStampMode` implementations (Carve; Replace and Merge deleted in CR1 (DNG-07))
 - [ ] `UDungeonEntranceStitcher` — surface connection
-- [ ] `FVoxelDungeonWorldMode` — instanced dungeon world mode
+- `FVoxelDungeonWorldMode`: deleted in CR1 (DNG-01)
 - [ ] `UDungeonVoxelConfig` material mapping
 - [ ] Integration testing with VoxelWorlds (all 3 world modes)
 - [ ] Pre-placed dungeon support in chunk streaming

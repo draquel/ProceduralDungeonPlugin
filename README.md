@@ -88,8 +88,7 @@ module placed at one uniform scale), each with weighted `Variants` picked per pl
 `RoomTypeOverrides` swap slots for typed rooms; `WallProfile` declares the face inset / partition
 thickness / door leaf every wall-family piece is authored to (`CheckWallProfile()` and the editor
 asset validator report anything off); `FixtureRules` and `DecorRules` place wall lights and decor by
-rule and density; `InteriorLighting` clamps exposure inside the dungeon. `DescribeCoverage()` on the
-actor reports any boundary without a piece. Interactable doors and torches are gameplay actors hung
+rule and density; `InteriorLighting` clamps exposure inside the dungeon. The editor asset validator reports any boundary without a piece. Interactable doors and torches are gameplay actors hung
 from the mapper's `Openings` / `Fixtures` by the game (see the environment polish doc).
 
 ### Basic Usage (C++)
@@ -194,15 +193,13 @@ Room types are configured via `TArray<FDungeonRoomTypeRule>` on the configuratio
 
 The dungeon is stamped into an existing VoxelWorlds world as edit layer data. Three stamp modes:
 
-- **CarveUnderground**: Dungeon exists below terrain surface with an entrance opening
-- **ReplaceRegion**: Dungeon replaces a volume of terrain entirely
-- **MergeAsStructure**: Dungeon data merged respecting terrain shape
+- **CarveUnderground**: Dungeon exists below terrain surface with an entrance opening (the `ReplaceRegion` and `MergeAsStructure` modes were never used and were deleted in CR1, DNG-07)
 
 Entrance stitching connects the dungeon to the surface via vertical shafts, sloped tunnels, cave openings, or trapdoors.
 
 ### Instanced (Separate Level)
 
-The dungeon is a standalone sublevel with its own `AVoxelWorld` using `FVoxelDungeonWorldMode`. The player transitions via level streaming or seamless travel. No LOD needed — bounded, small world.
+Not built: `FVoxelDungeonWorldMode`, the instanced world mode's stub, was never used and was deleted in CR1 (DNG-01).
 
 ## Key Data Structures
 

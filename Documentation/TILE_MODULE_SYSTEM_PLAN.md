@@ -234,8 +234,7 @@ discussion — out of scope here.
 Unchanged from today. `ADungeonActor::GenerateDungeon` re-runs on stream-in and rebuilds the HISMs
 deterministically (same config + seed → same modules → same instances). Modules add a
 `LoadSynchronous` per unique sub-mesh (soft refs) at bake — same pattern as the current per-slot
-load, just more refs; pre-warm via the tileset's `GetAllUniqueMeshes` equivalent extended to walk
-modules. Cleanup (`ClearDungeon`) clears the batch HISMs exactly as it clears per-type HISMs now.
+load, just more refs; `GetAllUniqueMeshes` deleted in CR1 (DNG-05). Cleanup (`ClearDungeon`) clears the batch HISMs exactly as it clears per-type HISMs now.
 
 The POI streaming lifecycle (stamp-once carve + streamed tile actor over it) is untouched — modules
 change only what the tile actor renders, not when it lives.

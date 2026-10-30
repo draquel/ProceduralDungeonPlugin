@@ -10,12 +10,6 @@ enum class EDungeonStampMode : uint8
 	/** Carved below terrain surface. Entrance stitched to surface above. */
 	CarveUnderground,
 
-	/** Replaces a terrain volume entirely — clears the bounding box first. */
-	ReplaceRegion,
-
-	/** Merged with existing terrain SDF — only carves where terrain is currently solid. */
-	MergeAsStructure,
-
 	/**
 	 * CarveUnderground WITHOUT the boundary-voxel pass: open cells become bare voids in the
 	 * surrounding terrain. For tile-dressed dungeons (ADungeonActor over the same grid) — the

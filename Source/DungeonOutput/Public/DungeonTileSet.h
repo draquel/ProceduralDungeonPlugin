@@ -287,10 +287,6 @@ struct DUNGEONOUTPUT_API FDungeonFixtureRules
 /**
  * Maps each dungeon tile type to its geometry (mesh or module) + orientation, via one
  * FDungeonTileSlot per type (Slots). Assign this to ADungeonActor to control dungeon appearance.
- *
- * Legacy tilesets authored with the old parallel fields (RoomFloor, WallSegmentRotationOffset,
- * TileModules, …) auto-migrate into Slots on load — the old fields are kept hidden purely for that
- * migration and should not be authored against.
  */
 UCLASS(BlueprintType)
 class DUNGEONOUTPUT_API UDungeonTileSet : public UDataAsset
@@ -376,88 +372,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "TileSet")
 	bool IsValid() const;
 
-	/** Collects all non-null slot meshes with their tile-type names (single-mesh slots only). */
-	void GetAllUniqueMeshes(TArray<TPair<FName, TSoftObjectPtr<UStaticMesh>>>& OutMeshes) const;
-
-	// UObject
-	virtual void PostInitProperties() override;
-	virtual void PostLoad() override;
-
 private:
 	/** Populate Slots with the base tile types pointing at the engine cube (fresh tilesets only). */
 	void PopulateDefaultSlots();
-
-	/** One-time upgrade of a legacy tileset: copy the deprecated parallel fields into Slots. */
-	void MigrateLegacyFieldsToSlots();
-
-	/** Null out every deprecated field so the next save persists Slots alone. */
-	void ClearLegacyFields();
-
-	/**
-	 * Set once the legacy fields have been folded into Slots. Guards the migration so it can
-	 * never run twice: an asset saved after the first migration carries this flag (and empty
-	 * legacy fields), so its Slots are authoritative from then on. Without the guard a tileset
-	 * saved with BOTH layouts re-migrated on every load and silently threw away every edit made
-	 * to Slots (module assignments included).
-	 */
-	UPROPERTY() bool bMigratedToSlots = false;
-
-	// ========================================================================
-	// DEPRECATED — legacy parallel fields, kept ONLY so pre-Slots tilesets migrate on load.
-	// Not editable; do not author against these. Removed once all assets are re-saved.
-	// ========================================================================
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> RoomFloor;
-	UPROPERTY() FRotator RoomFloorRotationOffset;
-	UPROPERTY() FVector RoomFloorScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayFloor;
-	UPROPERTY() FRotator HallwayFloorRotationOffset;
-	UPROPERTY() FVector HallwayFloorScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> RoomCeiling;
-	UPROPERTY() FRotator RoomCeilingRotationOffset;
-	UPROPERTY() FVector RoomCeilingScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayCeiling;
-	UPROPERTY() FRotator HallwayCeilingRotationOffset;
-	UPROPERTY() FVector HallwayCeilingScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> WallSegment;
-	UPROPERTY() FRotator WallSegmentRotationOffset;
-	UPROPERTY() FVector WallSegmentScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> DoorFrame;
-	UPROPERTY() FRotator DoorFrameRotationOffset;
-	UPROPERTY() FVector DoorFrameScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> EntranceFrame;
-	UPROPERTY() FRotator EntranceFrameRotationOffset;
-	UPROPERTY() FVector EntranceFrameScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayFloorStraight;
-	UPROPERTY() FRotator HallwayFloorStraightRotationOffset;
-	UPROPERTY() FVector HallwayFloorStraightScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayFloorCorner;
-	UPROPERTY() FRotator HallwayFloorCornerRotationOffset;
-	UPROPERTY() FVector HallwayFloorCornerScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayFloorTJunction;
-	UPROPERTY() FRotator HallwayFloorTJunctionRotationOffset;
-	UPROPERTY() FVector HallwayFloorTJunctionScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayFloorCrossroad;
-	UPROPERTY() FRotator HallwayFloorCrossroadRotationOffset;
-	UPROPERTY() FVector HallwayFloorCrossroadScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayFloorEndCap;
-	UPROPERTY() FRotator HallwayFloorEndCapRotationOffset;
-	UPROPERTY() FVector HallwayFloorEndCapScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayCeilingStraight;
-	UPROPERTY() FRotator HallwayCeilingStraightRotationOffset;
-	UPROPERTY() FVector HallwayCeilingStraightScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayCeilingCorner;
-	UPROPERTY() FRotator HallwayCeilingCornerRotationOffset;
-	UPROPERTY() FVector HallwayCeilingCornerScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayCeilingTJunction;
-	UPROPERTY() FRotator HallwayCeilingTJunctionRotationOffset;
-	UPROPERTY() FVector HallwayCeilingTJunctionScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayCeilingCrossroad;
-	UPROPERTY() FRotator HallwayCeilingCrossroadRotationOffset;
-	UPROPERTY() FVector HallwayCeilingCrossroadScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> HallwayCeilingEndCap;
-	UPROPERTY() FRotator HallwayCeilingEndCapRotationOffset;
-	UPROPERTY() FVector HallwayCeilingEndCapScaleMultiplier;
-	UPROPERTY() TSoftObjectPtr<UStaticMesh> StaircaseMesh;
-	UPROPERTY() FRotator StaircaseMeshRotationOffset;
-	UPROPERTY() TMap<EDungeonTileType, TSoftObjectPtr<UDungeonTileModule>> TileModules;
 };

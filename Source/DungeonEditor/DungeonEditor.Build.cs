@@ -11,16 +11,13 @@ public class DungeonEditor : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"Slate",
-			"SlateCore",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"Slate",
 			"UnrealEd",
 			"PropertyEditor",
-			"EditorStyle",
-			"InputCore",
 			"ToolMenus",
 			"AssetRegistry",
 			"ContentBrowser",

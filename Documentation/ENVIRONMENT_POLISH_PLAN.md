@@ -214,7 +214,7 @@ Colour, fixture style and density are tileset data so the demo and a future them
   matches every boundary the shared rules require (walled faces once post-ownership, floor under, lid over;
   the entrance opening excepted) against the mapped pieces, bucketed on the doubled cell lattice — walls by
   their cell (they anchor at mid-height), slabs by their plane. Generated dungeons (10 seeds x open/closed
-  entrance) are light-tight; `ADungeonActor::DescribeCoverage` prints the summary and the debug overlay
+  entrance) are light-tight; `ADungeonActor::DescribeCoverage` deleted in CR1 (DNG-10); the debug overlay
   draws problem sites red and fixtures yellow. The border seams of the original report were the E1 double
   dressing and the E2 profile, both gone.
 - Part 2 (emissive fixtures) and part 3 (budgeted real lights) were delivered by E3's torches; E5 adds the
@@ -301,8 +301,8 @@ POI path consumed `Openings` / `Fixtures`; a bare `ADungeonActor` (a hand-placed
   Blueprint-implementable) is how the tile actor tells a spawned actor its record.
 - `ADungeonActor` spawns the gameplay half itself in game worlds on authority after every build
   (`bSpawnInteractables`, `DoorActorClass` / `WallLightActorClass`, `SpawnInteractables()`,
-  `DestroyInteractables()` on clear / EndPlay, `OnInteractableSpawned` for a remembered state), and
-  exposes `GetOpenings()` / `GetFixtures()` to Blueprint. The POI tile actor is spawned with
+  `DestroyInteractables()` on clear / EndPlay, `OnInteractableSpawned` for a remembered state).
+  `GetOpenings()` / `GetFixtures()`: deleted in CR1 (DNG-10). The POI tile actor is spawned with
   `bSpawnInteractables = false`: that path keeps its own spawner and records (§11 of the POI plan).
 
 ### 3.7 Validation and tooling
@@ -401,7 +401,7 @@ interactables structure is on the tiled type alone) and was visited for regressi
 
 | Check | Result |
 |-------|--------|
-| Live coverage report (`ADungeonActor::DescribeCoverage`) | walls 223/223 (0 doubled), floors 241/241, ceilings 240/240 — light-tight (the entrance lid is the one open ceiling, by design) |
+| Live coverage report (`ADungeonActor::DescribeCoverage`, deleted in CR1 (DNG-10)) | walls 223/223 (0 doubled), floors 241/241, ceilings 240/240 — light-tight (the entrance lid is the one open ceiling, by design) |
 | Generated-dungeon coverage test | 10 seeds × open/closed entrance light-tight (137/137 suite) |
 | Wall profile conformance (`CheckWallProfile`) | 0 issues incl. variant / override modules |
 | Doors | 19 leaves in 19 doorways, seated in the smooth-doorway frames, swing 90° into the jamb passage; none clip a torch (0 torches within 120 of a hinge) |
