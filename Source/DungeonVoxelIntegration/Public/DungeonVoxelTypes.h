@@ -22,7 +22,7 @@ enum class EDungeonStampMode : uint8
 /**
  * Visual style for connecting the dungeon entrance to the terrain surface. Each style needs the
  * matching FDungeonEntranceSpec approach on the dungeon config (the stitcher refuses a mismatch);
- * a legacy result with approach None accepts any style best-effort.
+ * a result with approach None accepts any style best-effort.
  */
 UENUM(BlueprintType)
 enum class EDungeonEntranceStyle : uint8

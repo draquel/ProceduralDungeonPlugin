@@ -33,7 +33,7 @@ public:
 	 * dungeon config can serve several entrance styles without duplicating assets.
 	 * @param Config           Generation parameters.
 	 * @param Seed             As for Generate.
-	 * @param EntranceOverride The entrance approach to honour (Approach None = legacy selection).
+	 * @param EntranceOverride The entrance approach to honour (Approach None = selection after placement).
 	 * @return Complete dungeon result; EntranceApproach records the outcome.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Dungeon|Generation")

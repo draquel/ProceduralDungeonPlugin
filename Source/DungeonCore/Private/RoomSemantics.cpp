@@ -108,12 +108,6 @@ FDungeonEntranceApproachInfo FRoomSemantics::ComputeEntranceApproach(
 		Info.KeepOutMax = FIntVector(EntranceCell.X + C, EntranceCell.Y + C, GridSize.Z - 1);
 		break;
 
-	case EDungeonEntranceApproach::FromBelow:
-		Info.OpeningCell.Z = Room.Position.Z;
-		Info.KeepOutMin = FIntVector(EntranceCell.X - C, EntranceCell.Y - C, 0);
-		Info.KeepOutMax = FIntVector(EntranceCell.X + C, EntranceCell.Y + C, Room.Position.Z - 1);
-		break;
-
 	case EDungeonEntranceApproach::FromSide:
 	{
 		// The corridor runs on the entrance floor (plus Clearance floors of headroom) from the

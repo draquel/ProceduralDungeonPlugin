@@ -170,8 +170,7 @@ FDungeonCoverageReport FDungeonCoverage::Analyse(const FDungeonResult& Result, c
 			}
 
 			// Floor under this cell.
-			const bool bOpenFloor = bOpening && OpeningKind == EDungeonEntranceApproach::FromBelow;
-			if (!bOpenFloor && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z - 1))
+			if (FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, Cell, X, Y, Z - 1))
 			{
 				++Report.FloorsNeeded;
 				const FIntVector K(2 * X + 1, 2 * Y + 1, Z);

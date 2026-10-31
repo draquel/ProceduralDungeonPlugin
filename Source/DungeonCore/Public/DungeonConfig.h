@@ -93,7 +93,7 @@ public:
 	FDungeonEntranceSpec Entrance;
 
 	/**
-	 * Legacy: which already-placed room becomes the entrance when Entrance.Approach is None (or
+	 * Which already-placed room becomes the entrance when Entrance.Approach is None, the default (or
 	 * could not be satisfied). Nothing is reserved around it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Entrance")

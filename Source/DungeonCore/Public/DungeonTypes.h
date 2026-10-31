@@ -45,8 +45,8 @@ enum class EDungeonRoomType : uint8
 };
 
 /**
- * Legacy entrance selection: which of the ALREADY-PLACED rooms becomes the entrance. Used only
- * when FDungeonEntranceSpec::Approach is None; nothing is reserved around the chosen room.
+ * Which of the ALREADY-PLACED rooms becomes the entrance: the default, with FDungeonEntranceSpec::Approach
+ * None, where no room is placed for the entrance and nothing is reserved around the chosen one.
  */
 UENUM(BlueprintType)
 enum class EDungeonEntrancePlacement : uint8
@@ -68,12 +68,10 @@ enum class EDungeonEntrancePlacement : uint8
 UENUM(BlueprintType)
 enum class EDungeonEntranceApproach : uint8
 {
-	/** No external approach: legacy post-placement selection by EntrancePlacement, no reservation. */
+	/** No external approach (the default): the entrance chosen after placement by EntrancePlacement, nothing reserved. */
 	None,
 	/** A vertical passage (shaft, trapdoor, cave mouth) drops onto the entrance room's lid. */
 	FromAbove,
-	/** A vertical passage rises into the entrance room's floor. */
-	FromBelow,
 	/** A horizontal tunnel enters through a grid-boundary face of the entrance room. */
 	FromSide,
 };
@@ -85,7 +83,7 @@ enum class EDungeonEntranceFloor : uint8
 	Any,
 	/** Highest floor the room fits on. For FromAbove this leaves nothing to reserve. */
 	Top,
-	/** Floor 0. For FromBelow this leaves nothing to reserve. */
+	/** Floor 0. */
 	Bottom,
 	/** FDungeonEntranceSpec::ExplicitFloor. Unsatisfiable when the room cannot fit there. */
 	Explicit,
@@ -106,7 +104,7 @@ enum class EDungeonGridFace : uint8
  * FDungeonEntranceSpec
  * Declares BEFORE generation how the entrance will be approached, so the generator can place the
  * entrance room to suit it and keep the approach volume free of rooms, hallways and staircases.
- * Approach None = legacy behaviour (entrance selected after placement, nothing reserved).
+ * Approach None, the default, selects the entrance after placement and reserves nothing.
  */
 USTRUCT(BlueprintType)
 struct DUNGEONCORE_API FDungeonEntranceSpec
@@ -133,10 +131,10 @@ struct DUNGEONCORE_API FDungeonEntranceSpec
 	int32 Clearance = 0;
 
 	/**
-	 * FromAbove / FromBelow: force the entrance room to a single floor so the opening is the room's
-	 * own lid / floor and the passage does not have to cross the room's upper airspace.
+	 * FromAbove: force the entrance room to a single floor so the opening is the room's own lid and
+	 * the passage does not have to cross the room's upper airspace.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Entrance", meta=(EditCondition="Approach == EDungeonEntranceApproach::FromAbove || Approach == EDungeonEntranceApproach::FromBelow"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Entrance", meta=(EditCondition="Approach == EDungeonEntranceApproach::FromAbove"))
 	bool bSingleFloorEntranceRoom = true;
 };
 
@@ -158,7 +156,7 @@ struct DUNGEONCORE_API FDungeonEntranceApproachInfo
 	bool bSatisfied = false;
 
 	/**
-	 * The cell whose lid (FromAbove), floor (FromBelow) or boundary wall (FromSide) is the opening.
+	 * The cell whose lid (FromAbove) or boundary wall (FromSide) is the opening.
 	 * Same column as EntranceCell; equals it for single-floor rooms on vertical approaches.
 	 */
 	UPROPERTY(BlueprintReadOnly, Category="Dungeon")

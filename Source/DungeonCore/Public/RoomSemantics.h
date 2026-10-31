@@ -83,7 +83,6 @@ struct DUNGEONCORE_API FRoomSemantics
 	 * the same function reserves the volume during placement, records it on the result, and is
 	 * what the validator checks the final grid against.
 	 *   FromAbove: column over the room's top cell up to the grid top.
-	 *   FromBelow: column under the room's floor cell down to floor 0.
 	 *   FromSide:  the entrance floor's row/column from the room face to the grid edge.
 	 * Clearance widens the box; boxes are clamped to the grid and empty when nothing lies beyond
 	 * the room (e.g. FromAbove on the top floor). bSatisfied is NOT set here.

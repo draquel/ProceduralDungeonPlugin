@@ -476,20 +476,20 @@ Rooms are placed by sampling random positions and sizes within the grid bounds. 
    - If no overlap, place the room. Otherwise retry up to `MaxPlacementAttempts`
 2. Rooms that span multiple floors have `Size.Z > 1`
 
-With `Entrance.Approach == None` (legacy) no room is special during placement: every room is
+With `Entrance.Approach == None` (the default) no room is special during placement: every room is
 sampled uniformly and the entrance is **selected afterwards** (step 4) from the placed rooms by
 `EntrancePlacement`; nothing reserves the volume around it.
 
 With an approach declared (`FDungeonEntranceSpec`, step 3a) the **entrance room is placed first**
 (`FRoomPlacement::PlaceEntranceRoom`, seed fork 5): its floor follows `Floor`, a `FromSide` room
 sits on the buffer line of the chosen face, and the approach volume — the column above the lid
-(`FromAbove`), the column below the floor (`FromBelow`) or the corridor from the face to the grid
+(`FromAbove`) or the corridor from the face to the grid
 edge (`FromSide`), widened by `Clearance` — is stamped `EDungeonCellType::Reserved`. The remaining
 rooms reject any candidate touching a Reserved cell, the hallway pathfinder never enters one (it
 blocks every unrecognised type, and staircase body/headroom/exit checks require `Empty`), and step
 10 clears Reserved back to `Empty`. `FDungeonResult::EntranceApproach` records the opening cell and
 the keep-out box; `FDungeonValidator::ValidateEntranceApproach` checks the final grid against it.
-If the constraints cannot be met the generator falls back to the legacy path and records
+If the constraints cannot be met the generator falls back to the unconstrained path and records
 `bSatisfied = false` (a validation issue). See `ENTRANCE_PLACEMENT_PLAN.md`.
 
 #### Step 4: Room Type Assignment
@@ -614,14 +614,14 @@ Two cells describe the entrance:
 
 ### Entrance approach (`FDungeonEntranceSpec`)
 
-The legacy modes above only pick among already-placed rooms and reserve nothing, so a shaft can
+The placement modes above only pick among already-placed rooms and reserve nothing, so a shaft can
 still land on a hallway or staircase routed above the entrance. `UDungeonConfiguration::Entrance`
 declares the approach up front:
 
 ```cpp
 struct FDungeonEntranceSpec
 {
-    EDungeonEntranceApproach Approach;   // None (legacy) | FromAbove | FromBelow | FromSide
+    EDungeonEntranceApproach Approach;   // None (the default) | FromAbove | FromSide
     EDungeonEntranceFloor    Floor;      // Any | Top | Bottom | Explicit (+ ExplicitFloor)
     EDungeonGridFace         Face;       // FromSide: Any | MinX | MaxX | MinY | MaxY
     int32                    Clearance;  // extra clear cells around the column / corridor
@@ -637,7 +637,7 @@ struct FDungeonEntranceApproachInfo   // FDungeonResult::EntranceApproach
 {
     EDungeonEntranceApproach Approach;
     bool        bSatisfied;    // false = fell back to unconstrained placement
-    FIntVector  OpeningCell;   // lid (FromAbove) / floor (FromBelow) / face cell (FromSide)
+    FIntVector  OpeningCell;   // lid (FromAbove) / face cell (FromSide)
     EDungeonGridFace Face;     // FromSide, resolved
     FIntVector  KeepOutMin, KeepOutMax;  // inclusive box guaranteed Empty; empty box = nothing needed
 };
