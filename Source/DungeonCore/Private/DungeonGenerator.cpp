@@ -505,7 +505,6 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 			EntranceGridCell.CellType == EDungeonCellType::Door)
 		{
 			EntranceGridCell.CellType = EDungeonCellType::Entrance;
-			EntranceGridCell.Flags |= 0x01; // bIsEntrance flag
 		}
 	}
 

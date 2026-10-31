@@ -11,16 +11,14 @@ public class DungeonEditor : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"Slate",
-			"SlateCore",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"Slate",
+			"SlateCore", // linked, not included: STextBlock's arguments reach SlateCore symbols
 			"UnrealEd",
 			"PropertyEditor",
-			"EditorStyle",
-			"InputCore",
 			"ToolMenus",
 			"AssetRegistry",
 			"ContentBrowser",

@@ -1174,7 +1174,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 			const FRotator StairRot = (DirectionalRot.Quaternion() * StaircaseRotationOffset.Quaternion()).Rotator();
 
 			// Scale: target dimensions in standard convention are X=width(CS), Y=run(RunWorld), Z=rise(RiseWorld).
-			// When StaircaseMeshRotationOffset is set, the mesh axes are rotated relative to convention,
+			// When StaircaseRotationOffset is set, the mesh axes are rotated relative to convention,
 			// so we rotate the target dimensions into mesh-local space before dividing by extent.
 			const FVector& StairE = Pieces[StairPiece].Info.Extent;
 			const FQuat InvOffsetQuat = StaircaseRotationOffset.Quaternion().Inverse();

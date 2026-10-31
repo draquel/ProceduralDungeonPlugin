@@ -34,9 +34,7 @@ int32 UDungeonVoxelStamper::CarveCell(
 	UVoxelEditManager* EditManager,
 	const FDungeonVoxelLattice& Lattice,
 	const FVector& CellWorldMin,
-	float CellWorldSize,
-	bool bOnlyIfSolid,
-	UVoxelChunkManager* ChunkManager)
+	float CellWorldSize)
 {
 	int32 Count = 0;
 	const FVoxelData AirVoxel = FVoxelData::Air();
@@ -45,15 +43,6 @@ int32 UDungeonVoxelStamper::CarveCell(
 	Lattice.ForEachSampleInBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), [&](const FIntVector& Index)
 	{
 		const FVector WorldPos = Lattice.EditPosition(Index);
-
-		if (bOnlyIfSolid)
-		{
-			const FVoxelData Existing = ChunkManager->GetVoxelAtWorldPosition(WorldPos);
-			if (!Existing.IsSolid())
-			{
-				return;
-			}
-		}
 
 		if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
 		{
@@ -274,7 +263,6 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 	const float CellWorldSize = Result.CellWorldSize;
 	const int32 VoxelsPerCell = Config->GetEffectiveVoxelsPerCell(CellWorldSize, VoxelSize);
 	const uint8 BiomeID = Config->DungeonBiomeID;
-	const bool bMergeMode = (StampMode == EDungeonStampMode::MergeAsStructure);
 
 	// Every voxel write below resolves through this lattice rather than stepping in cell space:
 	// the dungeon origin has an arbitrary phase against the voxel grid and CellWorldSize is not
@@ -333,36 +321,6 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 	EditManager->SetEditSource(EEditSource::System);
 
 	// ------------------------------------------------------------------
-	// ReplaceRegion: clear entire bounding box first
-	// ------------------------------------------------------------------
-	if (StampMode == EDungeonStampMode::ReplaceRegion)
-	{
-		const FVoxelData AirVoxel = FVoxelData::Air();
-		for (int32 GZ = 0; GZ < Grid.GridSize.Z; ++GZ)
-		{
-			for (int32 GY = 0; GY < Grid.GridSize.Y; ++GY)
-			{
-				for (int32 GX = 0; GX < Grid.GridSize.X; ++GX)
-				{
-					const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
-
-					Lattice.ForEachSampleInBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), [&](const FIntVector& Index)
-					{
-						const FVector WorldPos = Lattice.EditPosition(Index);
-
-						if (EditManager->ApplyEdit(WorldPos, AirVoxel, EEditMode::Set))
-						{
-							++StampResult.VoxelsModified;
-						}
-
-						AffectedChunks.Add(ChunkManager->WorldToChunkCoord(WorldPos));
-					});
-				}
-			}
-		}
-	}
-
-	// ------------------------------------------------------------------
 	// Pass 1: Carve all open cells to air
 	// ------------------------------------------------------------------
 	for (int32 GZ = 0; GZ < Grid.GridSize.Z; ++GZ)
@@ -380,8 +338,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 				const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
 
 				const int32 Carved = CarveCell(EditManager, Lattice,
-					CellWorldMin - FVector(CarveMargin), CellWorldSize + 2.0f * CarveMargin,
-					bMergeMode, bMergeMode ? ChunkManager : nullptr);
+					CellWorldMin - FVector(CarveMargin), CellWorldSize + 2.0f * CarveMargin);
 				StampResult.VoxelsModified += Carved;
 
 				// Track chunk for the cell center
@@ -500,64 +457,6 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 			CellWorldSize, VoxelsPerCell,
 			Config->StaircaseMaterialID, BiomeID, AffectedChunks);
 		StampResult.VoxelsModified += StepVoxels;
-	}
-
-	// ------------------------------------------------------------------
-	// ReplaceRegion: fill RoomWall cells solid + build outer shell
-	// ------------------------------------------------------------------
-	if (StampMode == EDungeonStampMode::ReplaceRegion)
-	{
-		const FVoxelData WallVoxel = FVoxelData::Solid(Config->WallMaterialID, BiomeID);
-
-		for (int32 GZ = 0; GZ < Grid.GridSize.Z; ++GZ)
-		{
-			for (int32 GY = 0; GY < Grid.GridSize.Y; ++GY)
-			{
-				for (int32 GX = 0; GX < Grid.GridSize.X; ++GX)
-				{
-					const FDungeonCell& Cell = Grid.GetCell(GX, GY, GZ);
-					if (Cell.CellType != EDungeonCellType::RoomWall && Cell.CellType != EDungeonCellType::Empty)
-					{
-						continue;
-					}
-
-					// Check if this cell is on the grid perimeter or adjacent to an open cell
-					bool bIsShell = (GX == 0 || GX == Grid.GridSize.X - 1
-						|| GY == 0 || GY == Grid.GridSize.Y - 1
-						|| GZ == 0 || GZ == Grid.GridSize.Z - 1);
-
-					if (!bIsShell)
-					{
-						// Check if adjacent to any open cell
-						for (int32 D = 0; D < 6 && !bIsShell; ++D)
-						{
-							const int32 NX = GX + Directions[D].X;
-							const int32 NY = GY + Directions[D].Y;
-							const int32 NZ = GZ + Directions[D].Z;
-							if (Grid.IsInBounds(NX, NY, NZ) && FDungeonBoundaryRules::IsOpenCell(Grid.GetCell(NX, NY, NZ).CellType))
-							{
-								bIsShell = true;
-							}
-						}
-					}
-
-					if (!bIsShell)
-					{
-						continue;
-					}
-
-					const FVector CellWorldMin = WorldOffset + FVector(GX, GY, GZ) * CellWorldSize;
-
-					Lattice.ForEachSampleInBox(CellWorldMin, CellWorldMin + FVector(CellWorldSize), [&](const FIntVector& Index)
-					{
-						if (EditManager->ApplyEdit(Lattice.EditPosition(Index), WallVoxel, EEditMode::Set))
-						{
-							++StampResult.VoxelsModified;
-						}
-					});
-				}
-			}
-		}
 	}
 
 	// End edit operation

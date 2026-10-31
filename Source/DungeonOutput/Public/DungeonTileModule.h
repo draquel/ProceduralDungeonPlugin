@@ -38,7 +38,7 @@ struct DUNGEONOUTPUT_API FDungeonModuleElement
 /**
  * A composed dungeon tile built from several static meshes, authored at cell scale.
  *
- * Assign a module to a tile type via UDungeonTileSet::TileModules; it overrides that type's single
+ * Assign a module to a tile type via its slot (FDungeonTileSlot::Module); it overrides that type's single
  * mesh slot. Unlike a single mesh (which the mapper auto-fits per-axis to the cell, distorting any
  * mesh whose proportions don't match), a module is placed with ONE uniform scale
  * (ActualCellSize / ReferenceCellSize), preserving the authored proportions exactly. This is what

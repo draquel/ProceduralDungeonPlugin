@@ -192,10 +192,8 @@ struct DUNGEONCORE_API FDungeonCell
 	uint8 RoomIndex = 0;
 	uint8 HallwayIndex = 0;
 	uint8 FloorIndex = 0;
-	uint8 MaterialHint = 0;
 	uint8 StaircaseDirection = 0;
-	uint8 Flags = 0;
-	uint8 Reserved = 0;
+	uint8 Reserved[3] = {0, 0, 0};
 };
 
 static_assert(sizeof(FDungeonCell) == 8, "FDungeonCell must be exactly 8 bytes");
@@ -263,11 +261,6 @@ struct DUNGEONCORE_API FDungeonRoom
 
 	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
 	int32 FloorLevel = 0;
-
-	uint8 MaterialHint = 0;
-
-	UPROPERTY(BlueprintReadOnly, Category="Dungeon")
-	FString CustomTag;
 };
 
 /** A carved path between two rooms. */

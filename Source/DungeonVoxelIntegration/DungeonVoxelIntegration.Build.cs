@@ -12,15 +12,16 @@ public class DungeonVoxelIntegration : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"DungeonCore",
+		});
+
+		// VoxelWorlds is reached from Private/ only (no public header of this module includes a voxel header). The automation
+		// tests stream a small voxel world (VoxelTesting::FTestChunkWorld: the distance-band LOD strategy and a recording mesh
+		// renderer).
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
 			"VoxelCore",
 			"VoxelGeneration",
 			"VoxelStreaming",
-		});
-
-		// The automation tests stream a small voxel world (VoxelTesting::FTestChunkWorld: the distance-band LOD strategy and
-		// a recording mesh renderer).
-		PrivateDependencyModuleNames.AddRange(new string[]
-		{
 			"VoxelLOD",
 			"VoxelRendering",
 		});

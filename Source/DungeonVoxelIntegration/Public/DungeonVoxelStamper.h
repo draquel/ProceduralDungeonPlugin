@@ -38,11 +38,6 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonStampResult
 /**
  * Stamps dungeon geometry into a voxel world.
  *
- * Supports three modes:
- * - CarveUnderground: carves air pockets for rooms/hallways below terrain
- * - ReplaceRegion: clears a volume and builds dungeon walls from scratch
- * - MergeAsStructure: only carves where terrain is currently solid
- *
  * Uses a 2-pass algorithm: first carve all open cells to air, then place
  * boundary voxels (walls/floors/ceilings) on faces adjacent to solid/OOB: the
  * inner lining inside the cell and the rest of the WallThickness jacket outside
@@ -102,9 +97,7 @@ private:
 		class UVoxelEditManager* EditManager,
 		const FDungeonVoxelLattice& Lattice,
 		const FVector& CellWorldMin,
-		float CellWorldSize,
-		bool bOnlyIfSolid,
-		UVoxelChunkManager* ChunkManager);
+		float CellWorldSize);
 
 	/**
 	 * Place boundary voxels on a cell face, INSIDE the open cell (the stone lining that makes a

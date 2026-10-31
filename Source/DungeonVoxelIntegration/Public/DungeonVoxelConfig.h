@@ -46,7 +46,7 @@ public:
 	/**
 	 * Number of voxel layers for walls, floors, and ceilings: the stone jacket around every closed face.
 	 *
-	 * Voxel-lined modes (CarveUnderground, ReplaceRegion, MergeAsStructure): the first InnerLiningLayers line the face
+	 * The voxel-lined mode (CarveUnderground): the first InnerLiningLayers line the face
 	 * from INSIDE the cell (their surface is the floor, wall or ceiling) and the rest wrap it from OUTSIDE, never into
 	 * another open cell, so a thick jacket keeps the room's interior. CarveOnly (tile-dressed): every layer is the outer
 	 * seal, past CarveMarginVoxels.

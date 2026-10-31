@@ -4,8 +4,7 @@
 UDungeonTileSet::UDungeonTileSet()
 {
 	// A fresh tileset gets the base tile types pointing at the engine cube, so it renders something
-	// immediately. Legacy assets overwrite this in PostLoad via migration; assets saved with the
-	// Slots layout overwrite it on Serialize.
+	// immediately. Assets saved with the Slots layout overwrite it on Serialize.
 	PopulateDefaultSlots();
 }
 
@@ -30,106 +29,6 @@ void UDungeonTileSet::PopulateDefaultSlots()
 	}
 }
 
-void UDungeonTileSet::PostInitProperties()
-{
-	Super::PostInitProperties();
-	// (Default slots come from the constructor. Nothing extra here — kept as an override point.)
-}
-
-void UDungeonTileSet::PostLoad()
-{
-	Super::PostLoad();
-
-	// A legacy tileset (authored before Slots existed) carries its data in the deprecated parallel
-	// fields. Fold them into Slots exactly ONCE, then null them and raise bMigratedToSlots so the
-	// next save persists only the Slots layout. The flag is what makes this safe: the legacy
-	// fields stay serialized until the asset is re-saved, and re-running the migration on a
-	// tileset that already had Slots edits would wipe those edits (that is exactly what happened
-	// to the demo tileset's module assignments).
-	if (bMigratedToSlots)
-	{
-		return;
-	}
-
-	const bool bLegacyHasData =
-		!RoomFloor.IsNull() || !HallwayFloor.IsNull() || !RoomCeiling.IsNull() || !HallwayCeiling.IsNull()
-		|| !WallSegment.IsNull() || !DoorFrame.IsNull() || !EntranceFrame.IsNull() || !StaircaseMesh.IsNull()
-		|| TileModules.Num() > 0;
-	if (bLegacyHasData)
-	{
-		MigrateLegacyFieldsToSlots();
-		ClearLegacyFields();
-	}
-	bMigratedToSlots = true;
-}
-
-void UDungeonTileSet::ClearLegacyFields()
-{
-	TSoftObjectPtr<UStaticMesh>* MeshFields[] = {
-		&RoomFloor, &HallwayFloor, &RoomCeiling, &HallwayCeiling, &WallSegment, &DoorFrame, &EntranceFrame,
-		&HallwayFloorStraight, &HallwayFloorCorner, &HallwayFloorTJunction, &HallwayFloorCrossroad, &HallwayFloorEndCap,
-		&HallwayCeilingStraight, &HallwayCeilingCorner, &HallwayCeilingTJunction, &HallwayCeilingCrossroad, &HallwayCeilingEndCap,
-		&StaircaseMesh,
-	};
-	for (TSoftObjectPtr<UStaticMesh>* Field : MeshFields)
-	{
-		Field->Reset();
-	}
-	TileModules.Empty();
-}
-
-void UDungeonTileSet::MigrateLegacyFieldsToSlots()
-{
-	Slots.Empty();
-
-	auto Set = [this](EDungeonTileType Type, const TSoftObjectPtr<UStaticMesh>& Mesh,
-		const FRotator& Rotation, const FVector& Scale)
-	{
-		FDungeonTileSlot Slot;
-		Slot.Mesh = Mesh;
-		Slot.RotationOffset = Rotation;
-		// Old assets saved before the scale-multiplier feature load Scale as (0,0,0); treat that as 1.
-		Slot.ScaleMultiplier = Scale.IsNearlyZero() ? FVector::OneVector : Scale;
-		Slots.Add(Type, Slot);
-	};
-	auto SetVariant = [&Set](EDungeonTileType Type, const TSoftObjectPtr<UStaticMesh>& Mesh,
-		const FRotator& Rotation, const FVector& Scale)
-	{
-		if (!Mesh.IsNull())
-		{
-			Set(Type, Mesh, Rotation, Scale);
-		}
-	};
-
-	// Base types (always present).
-	Set(EDungeonTileType::RoomFloor,      RoomFloor,      RoomFloorRotationOffset,      RoomFloorScaleMultiplier);
-	Set(EDungeonTileType::HallwayFloor,   HallwayFloor,   HallwayFloorRotationOffset,   HallwayFloorScaleMultiplier);
-	Set(EDungeonTileType::RoomCeiling,    RoomCeiling,    RoomCeilingRotationOffset,    RoomCeilingScaleMultiplier);
-	Set(EDungeonTileType::HallwayCeiling, HallwayCeiling, HallwayCeilingRotationOffset, HallwayCeilingScaleMultiplier);
-	Set(EDungeonTileType::WallSegment,    WallSegment,    WallSegmentRotationOffset,    WallSegmentScaleMultiplier);
-	Set(EDungeonTileType::DoorFrame,      DoorFrame,      DoorFrameRotationOffset,      DoorFrameScaleMultiplier);
-	Set(EDungeonTileType::EntranceFrame,  EntranceFrame,  EntranceFrameRotationOffset,  EntranceFrameScaleMultiplier);
-	Set(EDungeonTileType::StaircaseMesh,  StaircaseMesh,  StaircaseMeshRotationOffset,  FVector::OneVector);
-
-	// Hallway variants (only migrate the ones that had a mesh).
-	SetVariant(EDungeonTileType::HallwayFloorStraight,  HallwayFloorStraight,  HallwayFloorStraightRotationOffset,  HallwayFloorStraightScaleMultiplier);
-	SetVariant(EDungeonTileType::HallwayFloorCorner,    HallwayFloorCorner,    HallwayFloorCornerRotationOffset,    HallwayFloorCornerScaleMultiplier);
-	SetVariant(EDungeonTileType::HallwayFloorTJunction, HallwayFloorTJunction, HallwayFloorTJunctionRotationOffset, HallwayFloorTJunctionScaleMultiplier);
-	SetVariant(EDungeonTileType::HallwayFloorCrossroad, HallwayFloorCrossroad, HallwayFloorCrossroadRotationOffset, HallwayFloorCrossroadScaleMultiplier);
-	SetVariant(EDungeonTileType::HallwayFloorEndCap,    HallwayFloorEndCap,    HallwayFloorEndCapRotationOffset,    HallwayFloorEndCapScaleMultiplier);
-	SetVariant(EDungeonTileType::HallwayCeilingStraight,  HallwayCeilingStraight,  HallwayCeilingStraightRotationOffset,  HallwayCeilingStraightScaleMultiplier);
-	SetVariant(EDungeonTileType::HallwayCeilingCorner,    HallwayCeilingCorner,    HallwayCeilingCornerRotationOffset,    HallwayCeilingCornerScaleMultiplier);
-	SetVariant(EDungeonTileType::HallwayCeilingTJunction, HallwayCeilingTJunction, HallwayCeilingTJunctionRotationOffset, HallwayCeilingTJunctionScaleMultiplier);
-	SetVariant(EDungeonTileType::HallwayCeilingCrossroad, HallwayCeilingCrossroad, HallwayCeilingCrossroadRotationOffset, HallwayCeilingCrossroadScaleMultiplier);
-	SetVariant(EDungeonTileType::HallwayCeilingEndCap,    HallwayCeilingEndCap,    HallwayCeilingEndCapRotationOffset,    HallwayCeilingEndCapScaleMultiplier);
-
-	// Modules override their type's slot geometry.
-	for (const TPair<EDungeonTileType, TSoftObjectPtr<UDungeonTileModule>>& MPair : TileModules)
-	{
-		Slots.FindOrAdd(MPair.Key).Module = MPair.Value;
-	}
-}
-
 const FDungeonTileSlot& UDungeonTileSet::GetSlot(EDungeonTileType Type) const
 {
 	static const FDungeonTileSlot Empty;
@@ -147,22 +46,6 @@ bool UDungeonTileSet::IsValid() const
 		}
 	}
 	return false;
-}
-
-void UDungeonTileSet::GetAllUniqueMeshes(TArray<TPair<FName, TSoftObjectPtr<UStaticMesh>>>& OutMeshes) const
-{
-	OutMeshes.Reset();
-	const UEnum* TypeEnum = StaticEnum<EDungeonTileType>();
-	for (const TPair<EDungeonTileType, FDungeonTileSlot>& Pair : Slots)
-	{
-		if (!Pair.Value.Mesh.IsNull())
-		{
-			const FName Name = TypeEnum
-				? FName(*TypeEnum->GetNameStringByValue(static_cast<int64>(Pair.Key)))
-				: NAME_None;
-			OutMeshes.Emplace(Name, Pair.Value.Mesh);
-		}
-	}
 }
 
 TArray<FString> UDungeonTileSet::CheckWallProfile() const

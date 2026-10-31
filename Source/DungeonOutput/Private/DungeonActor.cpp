@@ -17,8 +17,6 @@
 
 #if WITH_EDITOR
 #include "DrawDebugHelpers.h"
-#include "Editor.h"
-#include "LevelEditorViewport.h"
 #endif
 
 ADungeonActor::ADungeonActor()
@@ -159,20 +157,6 @@ void ADungeonActor::DestroyInteractables()
 	Interactables.Reset();
 }
 
-TArray<AActor*> ADungeonActor::GetInteractables() const
-{
-	TArray<AActor*> Out;
-	Out.Reserve(Interactables.Num());
-	for (AActor* Actor : Interactables)
-	{
-		if (IsValid(Actor))
-		{
-			Out.Add(Actor);
-		}
-	}
-	return Out;
-}
-
 void ADungeonActor::ApplyInteriorPostProcess(bool bEnable)
 {
 	if (!InteriorBounds || !InteriorPostProcess)
@@ -217,11 +201,6 @@ FDungeonCoverageReport ADungeonActor::GetCoverageReport() const
 	}
 	// The coverage report is in the tile map's own space (the actor's frame when bMapInActorFrame).
 	return FDungeonCoverage::Analyse(CachedResult, CachedTileMap, GetMapOrigin(), bOpenEntranceCeiling);
-}
-
-FString ADungeonActor::DescribeCoverage() const
-{
-	return bHasDungeon ? GetCoverageReport().Describe() : FString(TEXT("no dungeon generated"));
 }
 
 void ADungeonActor::GenerateDungeon()
@@ -539,37 +518,6 @@ FVector ADungeonActor::GetMapOrigin() const
 	return bMapInActorFrame ? FVector::ZeroVector : GetActorLocation();
 }
 
-void ADungeonActor::GoToEntrance()
-{
-#if WITH_EDITOR
-	if (!bHasDungeon)
-	{
-		UE_LOG(LogDungeonOutput, Warning, TEXT("GoToEntrance: No dungeon generated."));
-		return;
-	}
-
-	const FVector Pos = GetEntranceWorldPosition();
-	const float ViewDistance = CachedResult.CellWorldSize * 3.0f;
-
-	// Position camera slightly above and behind the entrance, looking down at it
-	const FVector CamPos = Pos + FVector(-ViewDistance, 0.0f, ViewDistance);
-	const FRotator CamRot = (Pos - CamPos).Rotation();
-
-	if (GEditor && GEditor->GetActiveViewport())
-	{
-		FEditorViewportClient* ViewportClient = static_cast<FEditorViewportClient*>(GEditor->GetActiveViewport()->GetClient());
-		if (ViewportClient)
-		{
-			ViewportClient->SetViewLocation(CamPos);
-			ViewportClient->SetViewRotation(CamRot);
-			ViewportClient->Invalidate();
-		}
-	}
-
-	UE_LOG(LogDungeonOutput, Log, TEXT("GoToEntrance: Camera moved to entrance at (%.0f, %.0f, %.0f)"), Pos.X, Pos.Y, Pos.Z);
-#endif
-}
-
 int32 ADungeonActor::GetTotalInstanceCount() const
 {
 	int32 Total = 0;
@@ -581,44 +529,6 @@ int32 ADungeonActor::GetTotalInstanceCount() const
 		}
 	}
 	return Total;
-}
-
-FString ADungeonActor::DescribeGridRegion(FIntVector MinCell, FIntVector MaxCell) const
-{
-	if (!bHasDungeon)
-	{
-		return FString();
-	}
-
-	static const TCHAR* TypeNames[] = {
-		TEXT("Empty"), TEXT("Room"), TEXT("RoomWall"), TEXT("Hallway"),
-		TEXT("Staircase"), TEXT("StaircaseHead"), TEXT("Door"), TEXT("Entrance"),
-	};
-
-	const FDungeonGrid& Grid = CachedResult.Grid;
-	FString Out;
-	for (int32 Z = MinCell.Z; Z <= MaxCell.Z; ++Z)
-	{
-		for (int32 Y = MinCell.Y; Y <= MaxCell.Y; ++Y)
-		{
-			for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
-			{
-				if (!Grid.IsInBounds(X, Y, Z))
-				{
-					Out += FString::Printf(TEXT("(%d,%d,%d) OOB\n"), X, Y, Z);
-					continue;
-				}
-
-				const FDungeonCell& Cell = Grid.GetCell(X, Y, Z);
-				const int32 TypeIndex = static_cast<int32>(Cell.CellType);
-				const TCHAR* TypeName = (TypeIndex >= 0 && TypeIndex < UE_ARRAY_COUNT(TypeNames))
-					? TypeNames[TypeIndex] : TEXT("?");
-				Out += FString::Printf(TEXT("(%d,%d,%d) %s room=%d hall=%d floor=%d stair=%d\n"),
-					X, Y, Z, TypeName, Cell.RoomIndex, Cell.HallwayIndex, Cell.FloorIndex, Cell.StaircaseDirection);
-			}
-		}
-	}
-	return Out;
 }
 
 void ADungeonActor::Tick(float DeltaSeconds)
