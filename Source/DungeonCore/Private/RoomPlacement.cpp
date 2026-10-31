@@ -58,8 +58,7 @@ bool FRoomPlacement::PlaceEntranceRoom(
 	FDungeonSeed EntranceSeed = Seed.Fork(5);
 
 	const int32 Buffer = FMath::Max(Config.RoomBuffer, 0);
-	const bool bVertical = Spec.Approach == EDungeonEntranceApproach::FromAbove
-		|| Spec.Approach == EDungeonEntranceApproach::FromBelow;
+	const bool bVertical = Spec.Approach == EDungeonEntranceApproach::FromAbove;
 
 	// Resolve the face once so every attempt targets the same side of the grid.
 	EDungeonGridFace Face = Spec.Face;
@@ -210,7 +209,7 @@ bool FRoomPlacement::PlaceRooms(
 			const FIntVector Size(SizeX, SizeY, SizeZ);
 
 			// Reserved cells are the entrance approach volume; a room in it would sit under
-			// the shaft (or across the tunnel). Never true on the legacy path (nothing reserved).
+			// the shaft (or across the tunnel). Never true with approach None (nothing reserved).
 			if (!DoesRoomOverlap(Position, Size, OutRooms, Config.RoomBuffer)
 				&& !OverlapsReserved(Grid, Position, Size))
 			{

@@ -86,7 +86,6 @@ bool FPassagePlanCompatibility::RunTest(const FString& Parameters)
 	for (S Style : AllStyles)
 	{
 		TestTrue(TEXT("None accepts every style"), FDungeonEntrancePassagePlan::IsStyleCompatible(Style, A::None));
-		TestFalse(TEXT("FromBelow refuses every style"), FDungeonEntrancePassagePlan::IsStyleCompatible(Style, A::FromBelow));
 	}
 	TestTrue(TEXT("shaft/FromAbove"), FDungeonEntrancePassagePlan::IsStyleCompatible(S::VerticalShaft, A::FromAbove));
 	TestTrue(TEXT("cave/FromAbove"), FDungeonEntrancePassagePlan::IsStyleCompatible(S::CaveOpening, A::FromAbove));
@@ -211,8 +210,8 @@ bool FPassagePlanSideTunnel::RunTest(const FString& Parameters)
 }
 
 // ---------------------------------------------------------------------------
-PLAN_TEST(FPassagePlanLegacy, "Dungeon.EntrancePassagePlan.LegacyAndUnsatisfiedAreBestEffort")
-bool FPassagePlanLegacy::RunTest(const FString& Parameters)
+PLAN_TEST(FPassagePlanNone, "Dungeon.EntrancePassagePlan.NoneAndUnsatisfiedAreBestEffort")
+bool FPassagePlanNone::RunTest(const FString& Parameters)
 {
 	using S = EDungeonEntranceStyle;
 
@@ -221,21 +220,21 @@ bool FPassagePlanLegacy::RunTest(const FString& Parameters)
 	for (S Style : { S::VerticalShaft, S::SlopedTunnel, S::CaveOpening, S::Trapdoor })
 	{
 		const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(R, PassageOffset, Style, PassageVS, false, 0.0f, FlatSurface);
-		TestTrue(FString::Printf(TEXT("legacy style %d builds"), static_cast<int32>(Style)), Plan.IsValid());
+		TestTrue(FString::Printf(TEXT("approach None: style %d builds"), static_cast<int32>(Style)), Plan.IsValid());
 		TestEqual(TEXT("approach None"), Plan.Approach, EDungeonEntranceApproach::None);
 		TestTrue(TEXT("has segments"), Plan.Segments.Num() > 0);
 		TestTrue(TEXT("no note"), Plan.Note.IsEmpty());
 	}
 
-	// Legacy sloped tunnel: the old in-grid diagonal from the entrance cell.
+	// Approach None's sloped tunnel: the in-grid diagonal from the entrance cell.
 	{
 		const FDungeonEntrancePassagePlan Plan = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::SlopedTunnel, PassageVS, false, 0.0f, FlatSurface);
-		TestEqual(TEXT("legacy tunnel starts at the entrance cell"), Plan.Segments[0].Cell, R.EntranceCell);
-		TestTrue(TEXT("legacy tunnel steps up one cell per column"),
+		TestEqual(TEXT("the tunnel starts at the entrance cell"), Plan.Segments[0].Cell, R.EntranceCell);
+		TestTrue(TEXT("the tunnel steps up one cell per column"),
 			Plan.Segments.Num() > 1 && FMath::IsNearlyEqual(Plan.Segments[1].BottomZ - Plan.Segments[0].BottomZ, PassageCS, 0.01f));
 	}
 
-	// Requested but unsatisfied: treated as legacy, with a note for the log.
+	// Requested but unsatisfied: treated as None, with a note for the log.
 	SetFromAbove(R);
 	R.EntranceApproach.bSatisfied = false;
 	const FDungeonEntrancePassagePlan Unsat = FDungeonEntrancePassagePlan::Build(R, PassageOffset, S::SlopedTunnel, PassageVS, false, 0.0f, FlatSurface);

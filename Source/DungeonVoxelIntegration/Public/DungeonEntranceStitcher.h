@@ -38,7 +38,7 @@ public:
 	 * @param WorldOffset World-space offset applied to dungeon grid coordinates.
 	 * @param Style Visual style for the entrance passage. Must agree with the dungeon's approach:
 	 *        VerticalShaft / CaveOpening / Trapdoor need FromAbove, SlopedTunnel needs FromSide;
-	 *        a legacy result (approach None) accepts any style best-effort.
+	 *        a result with approach None accepts any style best-effort.
 	 * @param Config Material and scale configuration.
 	 * @param bStopAtEntranceCellTop Stop a vertical carve at the entrance ROOM's lid (the top plane
 	 *        of FDungeonResult::GetEntranceOpeningCell) instead of the entrance cell's bottom, and

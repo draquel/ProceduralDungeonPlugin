@@ -308,8 +308,8 @@ struct DUNGEONOUTPUT_API FDungeonTileMapper
 	 * @param WorldOffset World-space offset applied to all transforms (typically actor location).
 	 * @param bOpenEntranceCeiling Leave the entrance OPENING unbuilt so a stitched passage can
 	 *        enter the entrance room. Which tile is skipped follows Result.EntranceApproach:
-	 *        the lid of the opening cell (FromAbove, and legacy results with no approach), its
-	 *        floor (FromBelow), or its wall on the approach face (FromSide). Off by default: a
+	 *        the lid of the opening cell (FromAbove, and results with no approach) or its wall on
+	 *        the approach face (FromSide). Off by default: a
 	 *        standalone dungeon stays sealed.
 	 * @return Per-tile-type arrays of instance transforms.
 	 */

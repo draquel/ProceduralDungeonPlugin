@@ -167,14 +167,6 @@ void FDungeonValidator::ValidateEntranceApproach(const FDungeonResult& Result, T
 				A.OpeningCell, Result.EntranceRoomIndex));
 		}
 		break;
-	case EDungeonEntranceApproach::FromBelow:
-		if (A.OpeningCell.Z != Room->Position.Z)
-		{
-			OutIssues.Add(FDungeonValidationIssue(Category,
-				FString::Printf(TEXT("FromBelow opening Z %d is not the room's floor %d"), A.OpeningCell.Z, Room->Position.Z),
-				A.OpeningCell, Result.EntranceRoomIndex));
-		}
-		break;
 	case EDungeonEntranceApproach::FromSide:
 	{
 		bool bOnFace = false;

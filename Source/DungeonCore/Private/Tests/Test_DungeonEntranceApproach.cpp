@@ -280,45 +280,8 @@ bool FApproachFromSide::RunTest(const FString& Parameters)
 }
 
 // ---------------------------------------------------------------------------
-// FromBelow with the entrance on the TOP floor: the column beneath stays Empty.
-// ---------------------------------------------------------------------------
-APPROACH_TEST(FApproachFromBelow, "Dungeon.Generation.EntranceApproach.FromBelowColumnClear")
-bool FApproachFromBelow::RunTest(const FString& Parameters)
-{
-	UDungeonConfiguration* Config = CreateConfig(FIntVector(20, 20, 5), 8, FIntVector(6, 6, 2));
-	Config->Entrance.Approach = EDungeonEntranceApproach::FromBelow;
-	Config->Entrance.Floor = EDungeonEntranceFloor::Top;
-	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
-	Generator->AddToRoot();
-
-	for (int64 Seed = 1; Seed <= 30; ++Seed)
-	{
-		const FDungeonResult R = Generator->Generate(Config, Seed);
-		const FString Tag = FString::Printf(TEXT("seed %lld: "), Seed);
-		if (!TestTrue(Tag + TEXT("generated"), R.Rooms.Num() >= 2)) { continue; }
-
-		const FDungeonEntranceApproachInfo& A = R.EntranceApproach;
-		TestTrue(Tag + TEXT("satisfied"), A.bSatisfied);
-		const FDungeonRoom& Room = R.Rooms[0];
-		TestEqual(Tag + TEXT("top floor (single-floor room)"), Room.Position.Z, 4);
-		TestEqual(Tag + TEXT("opening is the room's floor cell"), A.OpeningCell, R.EntranceCell);
-		TestTrue(Tag + TEXT("keep-out exists"), A.HasKeepOut());
-		TestEqual(Tag + TEXT("keep-out from floor 0"), A.KeepOutMin.Z, 0);
-		TestEqual(Tag + TEXT("keep-out to just under the room"), A.KeepOutMax.Z, 3);
-		FIntVector Blocked;
-		TestTrue(Tag + TEXT("column clear"), KeepOutIsClear(R, Blocked));
-
-		const FDungeonValidationResult V = FDungeonValidator::ValidateAll(R, *Config);
-		TestTrue(Tag + TEXT("validator: ") + V.GetSummary(), V.bPassed);
-	}
-
-	Cleanup(Config, Generator);
-	return true;
-}
-
-// ---------------------------------------------------------------------------
 // Unsatisfiable request (explicit floor outside the grid): generation still succeeds via the
-// legacy path, the result says so, and the validator reports exactly that.
+// unconstrained path, the result says so, and the validator reports exactly that.
 // ---------------------------------------------------------------------------
 APPROACH_TEST(FApproachFallback, "Dungeon.Generation.EntranceApproach.UnsatisfiableFallsBackAndReports")
 bool FApproachFallback::RunTest(const FString& Parameters)
@@ -349,9 +312,9 @@ bool FApproachFallback::RunTest(const FString& Parameters)
 }
 
 // ---------------------------------------------------------------------------
-// Approach None: the legacy path, untouched — nothing recorded, nothing reserved.
+// Approach None: the default path, untouched— nothing recorded, nothing reserved.
 // ---------------------------------------------------------------------------
-APPROACH_TEST(FApproachNone, "Dungeon.Generation.EntranceApproach.NoneIsLegacyPath")
+APPROACH_TEST(FApproachNone, "Dungeon.Generation.EntranceApproach.NoneIsDefaultPath")
 bool FApproachNone::RunTest(const FString& Parameters)
 {
 	UDungeonConfiguration* Config = CreateConfig(FIntVector(20, 20, 3), 6, FIntVector(6, 6, 2));
@@ -435,12 +398,12 @@ bool FApproachOverride::RunTest(const FString& Parameters)
 		TestTrue(Tag + TEXT("validator: ") + V.GetSummary(), V.bPassed);
 	}
 
-	// Config says FromAbove; an override of None runs the legacy path.
+	// Config says FromAbove; an override of None runs the default path.
 	Config->Entrance.Approach = EDungeonEntranceApproach::FromAbove;
 	const FDungeonEntranceSpec NoneSpec;
-	const FDungeonResult Legacy = Generator->GenerateWithEntrance(Config, 5, NoneSpec);
-	TestEqual(TEXT("override None -> legacy"), Legacy.EntranceApproach.Approach, EDungeonEntranceApproach::None);
-	TestEqual(TEXT("no Reserved leaked"), CountReserved(Legacy), 0);
+	const FDungeonResult Unconstrained = Generator->GenerateWithEntrance(Config, 5, NoneSpec);
+	TestEqual(TEXT("override None -> default"), Unconstrained.EntranceApproach.Approach, EDungeonEntranceApproach::None);
+	TestEqual(TEXT("no Reserved leaked"), CountReserved(Unconstrained), 0);
 
 	// And Generate() itself still reads the config.
 	const FDungeonResult FromConfig = Generator->Generate(Config, 5);

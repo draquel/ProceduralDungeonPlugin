@@ -73,10 +73,9 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	// The entrance opening (bOpenEntranceCeiling): which cell, and which of its faces, the
 	// stitched passage enters through. Decided from the dungeon's recorded approach so the tiles
 	// and the voxel carve agree:
-	//   FromAbove (and legacy None): the LID of the top cell of the entrance room's column over
+	//   FromAbove (and None): the LID of the top cell of the entrance room's column over
 	//     EntranceCell. For a two-floor entrance room the ground-floor cell has no ceiling of its
 	//     own (same room above), so skipping "its" ceiling would leave the lid closed.
-	//   FromBelow: the FLOOR of the opening cell.
 	//   FromSide:  the WALL on the resolved face of the opening cell.
 	const FDungeonEntranceApproachInfo& Approach = Result.EntranceApproach;
 	const bool bApproachKnown = Approach.Approach != EDungeonEntranceApproach::None && Approach.bSatisfied;
@@ -557,9 +556,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 
 				// Floor: place if cell below is a different space, solid, or OOB.
 				// Bottom face of the floor mesh is aligned flush with the cell's lower boundary.
-				// The opening cell's floor stays OPEN for a passage rising from below.
-				const bool bIsOpenEntranceFloor = bIsOpeningCell && OpeningKind == EDungeonEntranceApproach::FromBelow;
-				if (bHasFloorMesh && !bIsOpenEntranceFloor && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, FIntVector(X, Y, Z), X, Y, Z - 1))
+				if (bHasFloorMesh && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, FIntVector(X, Y, Z), X, Y, Z - 1))
 				{
 					if (bIsHallway)
 					{
@@ -1092,10 +1089,6 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					if (!FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, C, X, Y, Z - 1))
 					{
 						continue;
-					}
-					if (OpeningKind == EDungeonEntranceApproach::FromBelow && C == OpeningCell)
-					{
-						continue; // the entrance shaft rises through this cell's open floor
 					}
 					if (Hash01(C, CellDecor, SaltDecorFloorRoll) >= Density)
 					{

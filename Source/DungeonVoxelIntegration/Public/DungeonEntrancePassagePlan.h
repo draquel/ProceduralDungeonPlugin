@@ -39,8 +39,7 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonPassageSegment
  *   VerticalShaft, CaveOpening, Trapdoor  need FromAbove (column over the opening cell's lid)
  *   SlopedTunnel                          needs FromSide  (corridor through the reserved cells to
  *                                         the grid edge, then a ramp outside the footprint)
- *   FromBelow                             no style enters from below yet
- *   None (legacy, or a request the generator could not satisfy) accepts every style and carves
+ *   None (the default, or a request the generator could not satisfy) accepts every style and carves
  *   the pre-approach shapes best-effort: nothing guarantees the volume is clear.
  * A mismatch is an error (the stitcher refuses to carve) — a passage that the layout could have
  * blocked is exactly the failure this exists to prevent.
@@ -59,7 +58,7 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonEntrancePassagePlan
 
 	EDungeonEntranceStyle Style = EDungeonEntranceStyle::VerticalShaft;
 
-	/** The approach the plan was built for: None when legacy or unsatisfied (best effort). */
+	/** The approach the plan was built for: None when none was declared or it was unsatisfied (best effort). */
 	EDungeonEntranceApproach Approach = EDungeonEntranceApproach::None;
 
 	TArray<FDungeonPassageSegment> Segments;

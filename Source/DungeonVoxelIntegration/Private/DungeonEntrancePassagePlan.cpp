@@ -20,12 +20,7 @@ bool FDungeonEntrancePassagePlan::IsStyleCompatible(EDungeonEntranceStyle Style,
 {
 	if (Approach == EDungeonEntranceApproach::None)
 	{
-		return true; // legacy: every style, best effort
-	}
-	if (Approach == EDungeonEntranceApproach::FromBelow)
-	{
-		if (OutWhy) { *OutWhy = TEXT("no entrance style enters from below"); }
-		return false;
+		return true; // approach None: every style, best effort
 	}
 	const EDungeonEntranceApproach Required = RequiredApproach(Style);
 	if (Required != Approach)
@@ -82,7 +77,7 @@ FDungeonEntrancePassagePlan FDungeonEntrancePassagePlan::Build(
 	const FDungeonEntranceApproachInfo& A = Result.EntranceApproach;
 	if (A.Approach != EDungeonEntranceApproach::None && !A.bSatisfied)
 	{
-		Plan.Note = FString::Printf(TEXT("approach %d was requested but the generator could not satisfy it; carving the legacy shape best-effort (the layout may block it)"),
+		Plan.Note = FString::Printf(TEXT("approach %d was requested but the generator could not satisfy it; carving the shape of approach None best-effort (the layout may block it)"),
 			static_cast<int32>(A.Approach));
 	}
 	Plan.Approach = (A.Approach != EDungeonEntranceApproach::None && A.bSatisfied) ? A.Approach : EDungeonEntranceApproach::None;
@@ -185,7 +180,7 @@ FDungeonEntrancePassagePlan FDungeonEntrancePassagePlan::Build(
 	}
 
 	// ------------------------------------------------------------------
-	// Vertical styles (FromAbove, or legacy None): one column over the opening cell.
+	// Vertical styles (FromAbove, or None): one column over the opening cell.
 	// ------------------------------------------------------------------
 	const FIntVector Opening = Result.GetEntranceOpeningCell();
 	const FVector Center = CellCenterXY(Opening);
@@ -198,9 +193,9 @@ FDungeonEntrancePassagePlan FDungeonEntrancePassagePlan::Build(
 
 	if (Style == EDungeonEntranceStyle::SlopedTunnel)
 	{
-		// Legacy (None only, by the compatibility table): a 45° stair of cell-high columns from
+		// Approach None only (by the compatibility table): a 45° stair of cell-high columns from
 		// the entrance cell toward the nearest grid edge, INSIDE the grid volume. Nothing keeps
-		// the layout out of it — kept for pre-approach configs.
+		// the layout out of it.
 		const FIntVector& EC = Result.EntranceCell;
 		int32 DX = -1, DY = 0, BestDist = EC.X;
 		if (GS.X - 1 - EC.X < BestDist) { DX = +1; DY = 0; BestDist = GS.X - 1 - EC.X; }
