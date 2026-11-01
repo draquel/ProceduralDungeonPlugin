@@ -46,54 +46,31 @@ namespace
 // Surface Detection
 // ============================================================================
 
-float UDungeonEntranceStitcher::DetectSurfaceHeight(UVoxelChunkManager* ChunkManager, float WorldX, float WorldY) const
+float UDungeonEntranceStitcher::DetectSurfaceHeight(UVoxelChunkManager* ChunkManager, const FDungeonVoxelLattice& Lattice, float X, float Y) const
 {
-	// Try heightmap-based detection first. GetGeneratedSurfaceHeight is the canonical analytic
-	// surface: continentalness AND terrain-conditioning zones included, so the shaft top lands on
-	// the REAL generated surface. (The raw IVoxelWorldMode::GetTerrainHeightAt misses conditioning
-	// — on a flattened POI pad it either capped the shaft below the pad crust or collared it above.)
-	const IVoxelWorldMode* WorldMode = ChunkManager->GetWorldMode();
-	if (WorldMode && WorldMode->IsHeightmapBased())
-	{
-		return ChunkManager->GetGeneratedSurfaceHeight(WorldX, WorldY);
-	}
-
-	// Fallback: vertical sweep from high to low, find first solid voxel
-	const float SweepStart = 10000.0f;
-	const float SweepEnd = -10000.0f;
-	const float StepSize = 50.0f; // coarse sweep
-
-	for (float Z = SweepStart; Z > SweepEnd; Z -= StepSize)
-	{
-		const FVoxelData Voxel = ChunkManager->GetVoxelAtWorldPosition(FVector(WorldX, WorldY, Z));
-		if (Voxel.IsSolid())
-		{
-			return Z + StepSize; // return the Z just above the first solid
-		}
-	}
-
-	UE_LOG(LogDungeonVoxelIntegration, Warning,
-		TEXT("DetectSurfaceHeight: No solid voxel found at (%.0f, %.0f), defaulting to 0"),
-		WorldX, WorldY);
-	return 0.0f;
-}
-
-float UDungeonEntranceStitcher::DetectFrameSurfaceHeight(UVoxelChunkManager* ChunkManager, const FTransform& Frame, float FrameX, float FrameY) const
-{
-	// The frame-space height where the frame's vertical line through (X, Y) meets the generated surface (conditioning
-	// included, as GetGeneratedSurfaceHeight on a heightmap): the root of f(z) = altitude(P(z)) - the generated surface's
-	// altitude along P(z)'s up line. df/dz is the cosine between the frame's z and local up, within a few degrees of 1
-	// across a dungeon, so a few corrected steps converge to a hundredth of a unit.
 	const IVoxelWorldMode* WorldMode = ChunkManager->GetWorldMode();
 	if (!WorldMode)
 	{
 		return 0.0f;
 	}
-	const FVector FrameUp = Frame.GetUnitAxis(EAxis::Z);
+	// The world frame on a heightmap world: GetGeneratedSurfaceHeight is the canonical analytic surface, continentalness
+	// AND terrain-conditioning zones included, so the shaft top lands on the REAL generated surface. (The raw
+	// IVoxelWorldMode::GetTerrainHeightAt misses conditioning: on a flattened POI pad it either capped the shaft below the
+	// pad crust or collared it above.)
+	if (!Lattice.bRotated && WorldMode->IsHeightmapBased())
+	{
+		return ChunkManager->GetGeneratedSurfaceHeight(X, Y);
+	}
+	// Any other frame (a planet POI's pad space, or the world frame off a heightmap): the frame-space height where the
+	// frame's vertical line through (X, Y) meets the generated surface (conditioning included, as GetGeneratedSurfaceHeight
+	// on a heightmap): the root of f(z) = altitude(P(z)) - the generated surface's altitude along P(z)'s up line. df/dz is the
+	// cosine between the frame's z and local up, within a few degrees of 1 across a dungeon, so a few corrected steps
+	// converge to a hundredth of a unit.
+	const FVector FrameUp = Lattice.Frame.GetUnitAxis(EAxis::Z);
 	double Z = 0.0;
 	for (int32 Step = 0; Step < 8; ++Step)
 	{
-		const FVector P = Frame.TransformPositionNoScale(FVector(FrameX, FrameY, Z));
+		const FVector P = Lattice.Frame.TransformPositionNoScale(FVector(X, Y, Z));
 		const double F = WorldMode->GetAltitude(P) - WorldMode->GetAltitude(ChunkManager->GetGeneratedSurfacePoint(P));
 		if (FMath::Abs(F) < 0.01)
 		{
@@ -308,19 +285,6 @@ int32 UDungeonEntranceStitcher::CarveCaveOpening(
 // Main Entry Point
 // ============================================================================
 
-int32 UDungeonEntranceStitcher::StitchEntrance(
-	const FDungeonResult& Result,
-	UVoxelChunkManager* ChunkManager,
-	const FVector& WorldOffset,
-	EDungeonEntranceStyle Style,
-	UDungeonVoxelConfig* Config,
-	bool bStopAtEntranceCellTop,
-	float SideTunnelFloorLift)
-{
-	return StitchEntranceInFrame(Result, ChunkManager, WorldOffset, Style, Config, bStopAtEntranceCellTop, SideTunnelFloorLift,
-		FTransform::Identity);
-}
-
 int32 UDungeonEntranceStitcher::StitchEntranceInFrame(
 	const FDungeonResult& Result,
 	UVoxelChunkManager* ChunkManager,
@@ -363,7 +327,7 @@ int32 UDungeonEntranceStitcher::StitchEntranceInFrame(
 	Lattice.SetFrame(Frame);
 	auto SampleSurface = [this, ChunkManager, &Lattice](float X, float Y)
 	{
-		return Lattice.bRotated ? DetectFrameSurfaceHeight(ChunkManager, Lattice.Frame, X, Y) : DetectSurfaceHeight(ChunkManager, X, Y);
+		return DetectSurfaceHeight(ChunkManager, Lattice, X, Y);
 	};
 
 	// The geometry is decided from the dungeon's recorded approach, so the carve stays inside the

@@ -91,7 +91,6 @@ namespace DungeonLiningTest
 		return FVector(-1613.37, 786.63, -1500.0 - Result.GridSize.Z * CellSize);
 	}
 
-	static const FIntVector FaceDirections[6] = { {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1} };
 
 	bool IsOpen(const FDungeonResult& Result, const FIntVector& C)
 	{
@@ -100,7 +99,7 @@ namespace DungeonLiningTest
 
 	bool NeedsBoundary(const FDungeonResult& Result, const FIntVector& C, int32 Face)
 	{
-		const FIntVector N = C + FaceDirections[Face];
+		const FIntVector N = C + FDungeonGrid::FaceDirections[Face];
 		return Face < 4
 			? FDungeonBoundaryRules::NeedsWall(Result.Grid, C, N.X, N.Y, N.Z)
 			: FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, C, N.X, N.Y, N.Z);
@@ -197,7 +196,7 @@ bool FDungeonStampVoxelLiningTest::RunTest(const FString& Parameters)
 		ConfigureDemoPlane(W);
 		W.StartManager();
 		UDungeonVoxelStamper* Stamper = NewObject<UDungeonVoxelStamper>();
-		const FDungeonStampResult Stamp = Stamper->StampDungeon(Result, W.Manager, Offset, EDungeonStampMode::CarveUnderground, VoxelConfig);
+		const FDungeonStampResult Stamp = Stamper->StampDungeonInFrame(Result, W.Manager, Offset, EDungeonStampMode::CarveUnderground, VoxelConfig, FTransform::Identity);
 		const UVoxelEditManager* Edits = W.Manager->GetEditManager();
 		if (!TestTrue(FString::Printf(TEXT("WallThickness %d: the stamp succeeds"), WallThickness), Stamp.bSuccess && Edits != nullptr))
 		{
@@ -262,7 +261,7 @@ bool FDungeonStampVoxelLiningTest::RunTest(const FString& Parameters)
 					// Outside every face toward rock (or out of the grid): the rest of the jacket, solid.
 					for (int32 Face = 0; Face < 6; ++Face)
 					{
-						if (!bClosed[Face] || IsOpen(Result, C + FaceDirections[Face]) || Jacket <= 0.0f)
+						if (!bClosed[Face] || IsOpen(Result, C + FDungeonGrid::FaceDirections[Face]) || Jacket <= 0.0f)
 						{
 							continue;
 						}
@@ -369,7 +368,7 @@ bool FDungeonStampCarvedFloorCollisionTest::RunTest(const FString& Parameters)
 		W.Config->LODBands = { FLODBand(0.0f, W.Config->ViewDistance, 0, 1) };
 		W.StartManager();
 		UDungeonVoxelStamper* Stamper = NewObject<UDungeonVoxelStamper>();
-		const FDungeonStampResult Stamp = Stamper->StampDungeon(Result, W.Manager, Offset, EDungeonStampMode::CarveUnderground, VoxelConfig);
+		const FDungeonStampResult Stamp = Stamper->StampDungeonInFrame(Result, W.Manager, Offset, EDungeonStampMode::CarveUnderground, VoxelConfig, FTransform::Identity);
 		TestTrue(FString::Printf(TEXT("%s: the stamp succeeds"), Case.Name), Stamp.bSuccess);
 
 		const float Voxel = W.Config->VoxelSize;

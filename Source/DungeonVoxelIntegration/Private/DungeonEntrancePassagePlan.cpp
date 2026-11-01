@@ -1,19 +1,30 @@
 // DungeonEntrancePassagePlan.cpp — Pure passage geometry for the entrance stitcher.
 #include "DungeonEntrancePassagePlan.h"
 
-EDungeonEntranceApproach FDungeonEntrancePassagePlan::RequiredApproach(EDungeonEntranceStyle Style)
+FDungeonEntranceSpec FDungeonEntrancePassagePlan::MakeSpecForStyle(EDungeonEntranceStyle Style)
 {
+	FDungeonEntranceSpec Spec;
+	Spec.Floor = EDungeonEntranceFloor::Top;
 	switch (Style)
 	{
-	case EDungeonEntranceStyle::VerticalShaft:
-	case EDungeonEntranceStyle::CaveOpening:
-	case EDungeonEntranceStyle::Trapdoor:
-		return EDungeonEntranceApproach::FromAbove;
 	case EDungeonEntranceStyle::SlopedTunnel:
-		return EDungeonEntranceApproach::FromSide;
+		Spec.Approach = EDungeonEntranceApproach::FromSide;
+		Spec.Face = EDungeonGridFace::Any;
+		break;
+	case EDungeonEntranceStyle::CaveOpening:
+		Spec.Approach = EDungeonEntranceApproach::FromAbove;
+		Spec.Clearance = 1; // the displaced mouth exceeds the cell footprint
+		break;
 	default:
-		return EDungeonEntranceApproach::None;
+		Spec.Approach = EDungeonEntranceApproach::FromAbove;
+		break;
 	}
+	return Spec;
+}
+
+EDungeonEntranceApproach FDungeonEntrancePassagePlan::RequiredApproach(EDungeonEntranceStyle Style)
+{
+	return MakeSpecForStyle(Style).Approach;
 }
 
 bool FDungeonEntrancePassagePlan::IsStyleCompatible(EDungeonEntranceStyle Style, EDungeonEntranceApproach Approach, FString* OutWhy)

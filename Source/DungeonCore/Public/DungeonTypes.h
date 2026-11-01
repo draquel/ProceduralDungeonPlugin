@@ -202,6 +202,12 @@ struct DUNGEONCORE_API FDungeonGrid
 	FIntVector GridSize = FIntVector::ZeroValue;
 	TArray<FDungeonCell> Cells;
 
+	/**
+	 * The six face neighbours' steps: +X, -X, +Y, -Y, +Z, -Z (the boundary rules take (NX, NY, NZ) steps in this order; the
+	 * one table for the stamper, the validator and the tests, code review CR2, DNG-14).
+	 */
+	static const FIntVector FaceDirections[6];
+
 	void Initialize(const FIntVector& InGridSize);
 
 	FORCEINLINE int32 CellIndex(int32 X, int32 Y, int32 Z) const

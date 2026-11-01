@@ -32,12 +32,6 @@ namespace
 	const FIntVector RoomD(1, 1, 2);      // Room 2: stacked directly on A (A's ceiling / D's floor)
 	const FIntVector HallwayC(2, 1, 2);   // Hallway 2: diagonal above A, its floor seal dips into A
 
-	static const FIntVector PlanDirections[6] = {
-		{1, 0, 0}, {-1, 0, 0},
-		{0, 1, 0}, {0, -1, 0},
-		{0, 0, 1}, {0, 0, -1},
-	};
-
 	/** Two rooms and two hallways of different indices, every pair a different logical space. */
 	void BuildGrid(FDungeonGrid& Grid)
 	{
@@ -63,7 +57,7 @@ namespace
 	bool FaceNeedsBoundary(const FDungeonGrid& Grid, const FIntVector& Coord, int32 Face)
 	{
 		const FDungeonCell& Cell = Grid.GetCell(Coord);
-		const FIntVector N = Coord + PlanDirections[Face];
+		const FIntVector N = Coord + FDungeonGrid::FaceDirections[Face];
 		return Face < 4
 			? FDungeonBoundaryRules::NeedsWall(Grid, Coord, N.X, N.Y, N.Z)
 			: FDungeonBoundaryRules::NeedsVerticalBoundary(Grid, Coord, N.X, N.Y, N.Z);

@@ -283,6 +283,15 @@ void FRoomPlacement::FillEmptyBox(FDungeonGrid& Grid, const FIntVector& Min, con
 	}
 }
 
+bool FRoomPlacement::RoomsOverlap(const FIntVector& PosA, const FIntVector& SizeA, const FIntVector& PosB, const FIntVector& SizeB, int32 Buffer)
+{
+	// AABB overlap test: buffer on XY axes (hallway space), no buffer on Z (floors)
+	const bool bOverlapX = PosA.X < (PosB.X + SizeB.X + Buffer) && (PosA.X + SizeA.X + Buffer) > PosB.X;
+	const bool bOverlapY = PosA.Y < (PosB.Y + SizeB.Y + Buffer) && (PosA.Y + SizeA.Y + Buffer) > PosB.Y;
+	const bool bOverlapZ = PosA.Z < (PosB.Z + SizeB.Z) && (PosA.Z + SizeA.Z) > PosB.Z;
+	return bOverlapX && bOverlapY && bOverlapZ;
+}
+
 bool FRoomPlacement::DoesRoomOverlap(
 	const FIntVector& Position,
 	const FIntVector& Size,
@@ -291,20 +300,7 @@ bool FRoomPlacement::DoesRoomOverlap(
 {
 	for (const FDungeonRoom& Other : ExistingRooms)
 	{
-		// AABB overlap test: buffer on XY axes (hallway space), no buffer on Z (floors)
-		const bool bOverlapX =
-			Position.X < (Other.Position.X + Other.Size.X + Buffer) &&
-			(Position.X + Size.X + Buffer) > Other.Position.X;
-
-		const bool bOverlapY =
-			Position.Y < (Other.Position.Y + Other.Size.Y + Buffer) &&
-			(Position.Y + Size.Y + Buffer) > Other.Position.Y;
-
-		const bool bOverlapZ =
-			Position.Z < (Other.Position.Z + Other.Size.Z) &&
-			(Position.Z + Size.Z) > Other.Position.Z;
-
-		if (bOverlapX && bOverlapY && bOverlapZ)
+		if (RoomsOverlap(Position, Size, Other.Position, Other.Size, Buffer))
 		{
 			return true;
 		}
