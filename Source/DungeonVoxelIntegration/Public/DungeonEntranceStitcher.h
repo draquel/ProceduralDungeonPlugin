@@ -69,7 +69,7 @@ public:
 private:
 	/**
 	 * The frame-space height of the generated terrain surface on the lattice frame's vertical line through (X, Y): on a
-	 * heightmap world in the world frame UVoxelChunkManager::GetGeneratedSurfaceHeight (the analytic surface, continentalness
+	 * heightmap world in the world frame UVoxelChunkManager::GetGeneratedSurfacePoint (the analytic surface, continentalness
 	 * and conditioning included); in any other frame where the line's altitude equals the generated surface's along local up
 	 * there (GetGeneratedSurfacePoint, conditioning included). One sampler for every world (code review CR2, DNG-12).
 	 */
