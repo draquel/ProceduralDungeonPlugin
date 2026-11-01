@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "DungeonTypes.h"
 #include "DungeonRoomSemantics.h"
-#include "DungeonConfig.generated.h"
+#include "DungeonConfiguration.generated.h"
 
 /**
  * UDungeonConfiguration

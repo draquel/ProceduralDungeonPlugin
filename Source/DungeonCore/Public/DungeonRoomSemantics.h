@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "DungeonTypes.h"
-#include "RoomSemantics.generated.h"
+#include "DungeonRoomSemantics.generated.h"
 
 class UDungeonConfiguration;
 struct FDungeonSeed;
