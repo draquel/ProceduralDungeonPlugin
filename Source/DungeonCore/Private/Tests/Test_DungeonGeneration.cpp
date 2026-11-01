@@ -1,5 +1,6 @@
 // Test_DungeonGeneration.cpp — Integration tests running the full dungeon pipeline
 #include "Misc/AutomationTest.h"
+#include "DungeonCoreTestFixtures.h"
 #include "DungeonTypes.h"
 #include "DungeonConfig.h"
 #include "DungeonGenerator.h"
@@ -11,6 +12,8 @@
 
 namespace DungeonGenerationTestHelpers
 {
+	using DungeonCoreTesting::CleanupConfig;
+
 	UDungeonConfiguration* CreateDefaultConfig()
 	{
 		UDungeonConfiguration* Config = NewObject<UDungeonConfiguration>();
@@ -96,13 +99,6 @@ namespace DungeonGenerationTestHelpers
 		return true;
 	}
 
-	void CleanupConfig(UDungeonConfiguration* Config)
-	{
-		if (Config)
-		{
-			Config->RemoveFromRoot();
-		}
-	}
 }
 
 // ============================================================================

@@ -14,6 +14,7 @@
 //   meets the generated surface, and stops there.
 
 #include "Misc/AutomationTest.h"
+#include "DungeonVoxelTestFixtures.h"
 #include "DungeonBoundaryRules.h"
 #include "DungeonConfig.h"
 #include "DungeonGenerator.h"
@@ -31,36 +32,12 @@
 
 namespace DungeonFrameTest
 {
-	/** A small two-floor dungeon whose entrance room is on the top floor, reached from above. */
-	UDungeonConfiguration* MakeConfig()
-	{
-		UDungeonConfiguration* Config = NewObject<UDungeonConfiguration>();
-		Config->AddToRoot();
-		Config->GridSize = FIntVector(8, 8, 2);
-		Config->CellWorldSize = 400.0f;
-		Config->RoomCount = 3;
-		Config->MinRoomSize = FIntVector(2, 2, 1);
-		Config->MaxRoomSize = FIntVector(3, 3, 1);
-		Config->RoomBuffer = 1;
-		Config->bUseFixedSeed = true;
-		Config->FixedSeed = 4242;
-		return Config;
-	}
+	using namespace DungeonVoxelTesting;
 
-	FDungeonResult Generate(UDungeonConfiguration* Config)
-	{
-		FDungeonEntranceSpec Spec;
-		Spec.Floor = EDungeonEntranceFloor::Top;
-		Spec.Approach = EDungeonEntranceApproach::FromAbove;
-		UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
-		return Generator->GenerateWithEntrance(Config, 4242, Spec);
-	}
-
+	/** Walls two voxels thick with half a voxel of carve margin (the frame tests' lattice). */
 	UDungeonVoxelConfig* MakeVoxelConfig()
 	{
-		UDungeonVoxelConfig* VoxelConfig = NewObject<UDungeonVoxelConfig>();
-		VoxelConfig->AddToRoot();
-		VoxelConfig->WallThickness = 2;
+		UDungeonVoxelConfig* VoxelConfig = DungeonVoxelTesting::MakeVoxelConfig(2);
 		VoxelConfig->CarveMarginVoxels = 0.5f;
 		return VoxelConfig;
 	}
@@ -173,18 +150,6 @@ namespace DungeonFrameTest
 	}
 
 
-	bool IsOpen(const FDungeonResult& Result, const FIntVector& C)
-	{
-		return Result.Grid.IsInBounds(C) && FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(C).CellType);
-	}
-
-	bool NeedsBoundary(const FDungeonResult& Result, const FIntVector& C, int32 Face)
-	{
-		const FIntVector N = C + FDungeonGrid::FaceDirections[Face];
-		return Face < 4
-			? FDungeonBoundaryRules::NeedsWall(Result.Grid, C, N.X, N.Y, N.Z)
-			: FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, C, N.X, N.Y, N.Z);
-	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDungeonStampRotatedFrameTest, "Dungeon.Stamp.RotatedFrame",

@@ -1,5 +1,6 @@
 // Test_RoomSemantics.cpp — Unit + integration tests for entrance selection, graph metrics, and room type assignment
 #include "Misc/AutomationTest.h"
+#include "DungeonCoreTestFixtures.h"
 #include "DungeonTypes.h"
 #include "DungeonConfig.h"
 #include "DungeonSeed.h"
@@ -13,6 +14,8 @@
 
 namespace RoomSemanticsTestHelpers
 {
+	using DungeonCoreTesting::CleanupConfig;
+
 	UDungeonConfiguration* CreateConfig()
 	{
 		UDungeonConfiguration* Config = NewObject<UDungeonConfiguration>();
@@ -27,14 +30,6 @@ namespace RoomSemanticsTestHelpers
 		Config->RoomTypeRules.Empty();
 		Config->bGuaranteeBossRoom = false;
 		return Config;
-	}
-
-	void CleanupConfig(UDungeonConfiguration* Config)
-	{
-		if (Config)
-		{
-			Config->RemoveFromRoot();
-		}
 	}
 
 	/** N rooms in a line: room 0 at (0,0,0), room 1 at (6,0,0), etc. FinalEdges: 0-1, 1-2, ... */
