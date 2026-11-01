@@ -1,14 +1,14 @@
 #include "DungeonGenerator.h"
-#include "DungeonConfig.h"
+#include "DungeonCoreModule.h"
+#include "DungeonConfiguration.h"
 #include "DungeonSeed.h"
-#include "RoomPlacement.h"
-#include "DelaunayTetrahedralization.h"
-#include "MinimumSpanningTree.h"
-#include "HallwayPathfinder.h"
-#include "RoomSemantics.h"
+#include "DungeonRoomPlacement.h"
+#include "DungeonDelaunay3D.h"
+#include "DungeonMST.h"
+#include "DungeonPathfinder.h"
+#include "DungeonRoomSemantics.h"
 #include "DungeonValidator.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogDungeonGenerator, Log, All);
 
 TArray<FVector> UDungeonGenerator::GetCellWorldPositionsByType(const FDungeonResult& Result, EDungeonCellType CellType)
 {
@@ -36,7 +36,7 @@ FDungeonResult UDungeonGenerator::Generate(UDungeonConfiguration* Config, int64 
 {
 	if (!Config)
 	{
-		UE_LOG(LogDungeonGenerator, Error, TEXT("Generate called with null Config"));
+		UE_LOG(LogDungeonCore, Error, TEXT("Generate called with null Config"));
 		return FDungeonResult();
 	}
 	return GenerateInternal(Config, Seed, Config->Entrance);
@@ -46,7 +46,7 @@ FDungeonResult UDungeonGenerator::GenerateWithEntrance(UDungeonConfiguration* Co
 {
 	if (!Config)
 	{
-		UE_LOG(LogDungeonGenerator, Error, TEXT("GenerateWithEntrance called with null Config"));
+		UE_LOG(LogDungeonCore, Error, TEXT("GenerateWithEntrance called with null Config"));
 		return FDungeonResult();
 	}
 	return GenerateInternal(Config, Seed, EntranceOverride);
@@ -58,7 +58,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 
 	if (!Config)
 	{
-		UE_LOG(LogDungeonGenerator, Error, TEXT("Generate called with null Config"));
+		UE_LOG(LogDungeonCore, Error, TEXT("Generate called with null Config"));
 		return Result;
 	}
 
@@ -71,14 +71,14 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 	{
 		if (Config->bUseFixedSeed)
 		{
-			UE_LOG(LogDungeonGenerator, Warning,
+			UE_LOG(LogDungeonCore, Warning,
 				TEXT("bUseFixedSeed is set but FixedSeed is 0 and no seed was supplied; using a clock-derived seed (non-deterministic)"));
 		}
 		Seed = static_cast<int64>(FPlatformTime::Cycles64());
 	}
 	else if (RequestedSeed == 0)
 	{
-		UE_LOG(LogDungeonGenerator, Log, TEXT("No seed supplied; using the configuration's FixedSeed %lld"), Seed);
+		UE_LOG(LogDungeonCore, Log, TEXT("No seed supplied; using the configuration's FixedSeed %lld"), Seed);
 	}
 
 	Result.Seed = Seed;
@@ -103,31 +103,31 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 	// pathfinder keep out of it. Reserved is cleared back to Empty in Step 10.
 	if (EntranceSpec.Approach != EDungeonEntranceApproach::None)
 	{
-		if (FRoomPlacement::PlaceEntranceRoom(Result.Grid, *Config, EntranceSpec, MainSeed, Result.Rooms, Result.EntranceApproach))
+		if (FDungeonRoomPlacement::PlaceEntranceRoom(Result.Grid, *Config, EntranceSpec, MainSeed, Result.Rooms, Result.EntranceApproach))
 		{
-			UE_LOG(LogDungeonGenerator, Log, TEXT("Step 3a: entrance room placed first (approach=%d, floor=%d)"),
+			UE_LOG(LogDungeonCore, Log, TEXT("Step 3a: entrance room placed first (approach=%d, floor=%d)"),
 				static_cast<int32>(EntranceSpec.Approach), Result.Rooms[0].Position.Z);
 		}
 		else
 		{
-			UE_LOG(LogDungeonGenerator, Warning,
+			UE_LOG(LogDungeonCore, Warning,
 				TEXT("Step 3a: entrance approach %d could not be satisfied; falling back to unconstrained placement (nothing reserved)"),
 				static_cast<int32>(EntranceSpec.Approach));
 		}
 	}
 
-	if (!FRoomPlacement::PlaceRooms(Result.Grid, *Config, MainSeed, Result.Rooms))
+	if (!FDungeonRoomPlacement::PlaceRooms(Result.Grid, *Config, MainSeed, Result.Rooms))
 	{
-		UE_LOG(LogDungeonGenerator, Error,
+		UE_LOG(LogDungeonCore, Error,
 			TEXT("Failed to place enough rooms (need >= 2, got %d)"), Result.Rooms.Num());
 		return Result;
 	}
 
-	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 3: Placed %d rooms"), Result.Rooms.Num());
+	UE_LOG(LogDungeonCore, Verbose, TEXT("Step 3: Placed %d rooms"), Result.Rooms.Num());
 	for (int32 r = 0; r < Result.Rooms.Num(); ++r)
 	{
 		const FDungeonRoom& Rm = Result.Rooms[r];
-		UE_LOG(LogDungeonGenerator, Verbose, TEXT("  Room %d: Center=(%d,%d,%d) Size=(%d,%d,%d)"),
+		UE_LOG(LogDungeonCore, Verbose, TEXT("  Room %d: Center=(%d,%d,%d) Size=(%d,%d,%d)"),
 			r, Rm.Center.X, Rm.Center.Y, Rm.Center.Z, Rm.Size.X, Rm.Size.Y, Rm.Size.Z);
 	}
 
@@ -143,7 +143,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 	}
 	else
 	{
-		Result.EntranceRoomIndex = FRoomSemantics::SelectEntranceRoom(Result, *Config, EntranceSeed);
+		Result.EntranceRoomIndex = FDungeonRoomSemantics::SelectEntranceRoom(Result, *Config, EntranceSeed);
 	}
 	if (Result.EntranceRoomIndex >= 0)
 	{
@@ -153,7 +153,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		Result.EntranceCell = EntRoom.Position + FIntVector(EntRoom.Size.X / 2, EntRoom.Size.Y / 2, 0);
 	}
 
-	UE_LOG(LogDungeonGenerator, Log, TEXT("Step 4: Selected entrance room %d (%s)"),
+	UE_LOG(LogDungeonCore, Log, TEXT("Step 4: Selected entrance room %d (%s)"),
 		Result.EntranceRoomIndex,
 		Result.EntranceApproach.bSatisfied
 			? *FString::Printf(TEXT("approach=%d, pre-placed"), static_cast<int32>(Result.EntranceApproach.Approach))
@@ -195,7 +195,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 	}
 
 	TArray<TPair<int32, int32>> DelaunayEdgesInt;
-	FDelaunayTetrahedralization::Tetrahedralize(RoomCenters3D, DelaunayEdgesInt);
+	FDungeonDelaunay3D::Tetrahedralize(RoomCenters3D, DelaunayEdgesInt);
 
 	// Convert int32 edges to uint8 for storage
 	Result.DelaunayEdges.Reserve(DelaunayEdgesInt.Num());
@@ -206,18 +206,18 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 			static_cast<uint8>(Edge.Value)));
 	}
 
-	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 5: Delaunay produced %d edges (coplanar=%d)"),
+	UE_LOG(LogDungeonCore, Verbose, TEXT("Step 5: Delaunay produced %d edges (coplanar=%d)"),
 		Result.DelaunayEdges.Num(), bAllCoplanar ? 1 : 0);
 	for (const auto& Edge : Result.DelaunayEdges)
 	{
-		UE_LOG(LogDungeonGenerator, Verbose, TEXT("  Edge: %d <-> %d"), Edge.Key, Edge.Value);
+		UE_LOG(LogDungeonCore, Verbose, TEXT("  Edge: %d <-> %d"), Edge.Key, Edge.Value);
 	}
 
 	// =========================================================================
 	// Step 6: Minimum Spanning Tree (Prim's)
 	// =========================================================================
 	TArray<TPair<int32, int32>> MSTEdgesInt;
-	FMinimumSpanningTree::Compute(RoomCenters3D, DelaunayEdgesInt,
+	FDungeonMST::Compute(RoomCenters3D, DelaunayEdgesInt,
 		Result.EntranceRoomIndex, MSTEdgesInt);
 
 	Result.MSTEdges.Reserve(MSTEdgesInt.Num());
@@ -228,7 +228,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 			static_cast<uint8>(Edge.Value)));
 	}
 
-	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 6: MST has %d edges"), Result.MSTEdges.Num());
+	UE_LOG(LogDungeonCore, Verbose, TEXT("Step 6: MST has %d edges"), Result.MSTEdges.Num());
 
 	// =========================================================================
 	// Step 7: Edge Re-addition (add some Delaunay edges back for loops)
@@ -256,16 +256,16 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		}
 	}
 
-	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 7: Final graph has %d edges (%d MST + %d re-added)"),
+	UE_LOG(LogDungeonCore, Verbose, TEXT("Step 7: Final graph has %d edges (%d MST + %d re-added)"),
 		Result.FinalEdges.Num(), Result.MSTEdges.Num(),
 		Result.FinalEdges.Num() - Result.MSTEdges.Num());
 
 	// =========================================================================
 	// Step 8: Graph Metrics + Room Type Assignment
 	// =========================================================================
-	TArray<FRoomSemanticContext> SemanticContexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	TArray<FDungeonRoomSemanticContext> SemanticContexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 	FDungeonSeed TypeSeed = MainSeed.Fork(4);
-	FRoomSemantics::AssignRoomTypes(Result, *Config, SemanticContexts, TypeSeed);
+	FDungeonRoomSemantics::AssignRoomTypes(Result, *Config, SemanticContexts, TypeSeed);
 
 	// =========================================================================
 	// Step 9: A* Hallway Carving
@@ -285,7 +285,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		const FIntVector EndPoint = RoomB.Position + FIntVector(RoomB.Size.X / 2, RoomB.Size.Y / 2, 0);
 
 		TArray<FIntVector> PathCells;
-		if (!FHallwayPathfinder::FindPath(
+		if (!FDungeonPathfinder::FindPath(
 				Result.Grid, StartPoint, EndPoint, *Config,
 				RoomA.RoomIndex, RoomB.RoomIndex, PathCells))
 		{
@@ -293,11 +293,11 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		}
 
 		TArray<FDungeonStaircase> HallwayStaircases;
-		FHallwayPathfinder::CarveHallway(
+		FDungeonPathfinder::CarveHallway(
 			Result.Grid, PathCells, HallwayIdx,
 			RoomA.RoomIndex, RoomB.RoomIndex, *Config, HallwayStaircases);
 
-		UE_LOG(LogDungeonGenerator, Verbose, TEXT("    SUCCESS: path=%d cells, staircases=%d"),
+		UE_LOG(LogDungeonCore, Verbose, TEXT("    SUCCESS: path=%d cells, staircases=%d"),
 			PathCells.Num(), HallwayStaircases.Num());
 
 		FDungeonHallway Hallway;
@@ -348,7 +348,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 
 		const FDungeonRoom& LogRoomA = Result.Rooms[RoomAIdx];
 		const FDungeonRoom& LogRoomB = Result.Rooms[RoomBIdx];
-		UE_LOG(LogDungeonGenerator, Verbose, TEXT("  Attempting hallway: room %d (%d,%d,%d) -> room %d (%d,%d,%d)"),
+		UE_LOG(LogDungeonCore, Verbose, TEXT("  Attempting hallway: room %d (%d,%d,%d) -> room %d (%d,%d,%d)"),
 			RoomAIdx,
 			LogRoomA.Position.X + LogRoomA.Size.X / 2, LogRoomA.Position.Y + LogRoomA.Size.Y / 2, LogRoomA.Position.Z,
 			RoomBIdx,
@@ -356,13 +356,13 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 
 		if (!TryConnectRooms(RoomAIdx, RoomBIdx, bIsMST))
 		{
-			UE_LOG(LogDungeonGenerator, Warning,
+			UE_LOG(LogDungeonCore, Warning,
 				TEXT("A* failed to find path between room %d and room %d"),
 				RoomAIdx, RoomBIdx);
 		}
 	}
 
-	UE_LOG(LogDungeonGenerator, Verbose, TEXT("Step 9: Carved %d hallways, %d total staircases"),
+	UE_LOG(LogDungeonCore, Verbose, TEXT("Step 9: Carved %d hallways, %d total staircases"),
 		Result.Hallways.Num(), Result.Staircases.Num());
 
 	// =========================================================================
@@ -455,7 +455,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 
 				for (const FRepairCandidate& Candidate : Candidates)
 				{
-					UE_LOG(LogDungeonGenerator, Log,
+					UE_LOG(LogDungeonCore, Log,
 						TEXT("  Repair: retrying orphaned room %d -> room %d (tier %d)"),
 						RoomIdx, Candidate.Index, Candidate.Tier);
 
@@ -481,13 +481,13 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 					Orphans += FString::Printf(TEXT(" %d"), RoomIdx);
 				}
 			}
-			UE_LOG(LogDungeonGenerator, Error,
+			UE_LOG(LogDungeonCore, Error,
 				TEXT("Step 9b: %d/%d rooms unreachable after repair — no route exists for room(s):%s"),
 				Result.Rooms.Num() - FinalReachable.Num(), Result.Rooms.Num(), *Orphans);
 		}
 		else
 		{
-			UE_LOG(LogDungeonGenerator, Verbose,
+			UE_LOG(LogDungeonCore, Verbose,
 				TEXT("Step 9b: all %d rooms reachable from the entrance"), Result.Rooms.Num());
 		}
 	}
@@ -522,7 +522,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		}
 		if (Cleared > 0)
 		{
-			UE_LOG(LogDungeonGenerator, Log, TEXT("Step 10: released %d reserved approach cell(s)"), Cleared);
+			UE_LOG(LogDungeonCore, Log, TEXT("Step 10: released %d reserved approach cell(s)"), Cleared);
 		}
 	}
 
@@ -562,7 +562,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 		FDungeonValidationResult Validation = FDungeonValidator::ValidateAll(Result, *Config);
 		if (!Validation.bPassed)
 		{
-			UE_LOG(LogDungeonGenerator, Warning, TEXT("Validation: %s"), *Validation.GetSummary());
+			UE_LOG(LogDungeonCore, Warning, TEXT("Validation: %s"), *Validation.GetSummary());
 		}
 	}
 #endif
@@ -570,7 +570,7 @@ FDungeonResult UDungeonGenerator::GenerateInternal(UDungeonConfiguration* Config
 	const double EndTime = FPlatformTime::Seconds();
 	Result.GenerationTimeMs = (EndTime - StartTime) * 1000.0;
 
-	UE_LOG(LogDungeonGenerator, Log,
+	UE_LOG(LogDungeonCore, Log,
 		TEXT("Generation complete: %d rooms, %d hallways, %d staircases, %d room cells, %d hallway cells, %d staircase cells in %.2fms (seed=%lld)"),
 		Result.Rooms.Num(), Result.Hallways.Num(), Result.Staircases.Num(),
 		Result.TotalRoomCells, Result.TotalHallwayCells, Result.TotalStaircaseCells,

@@ -2,8 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "DungeonTypes.h"
-#include "RoomSemantics.h"
-#include "DungeonConfig.generated.h"
+#include "DungeonRoomSemantics.h"
+#include "DungeonConfiguration.generated.h"
 
 /**
  * UDungeonConfiguration

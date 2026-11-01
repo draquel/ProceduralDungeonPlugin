@@ -297,32 +297,32 @@ public:
 	UDungeonTileSet();
 
 	/** Per-tile-type geometry + orientation. The single authoring surface. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet")
 	TMap<EDungeonTileType, FDungeonTileSlot> Slots;
 
 	/** When true, only adjacent Hallway cells count as connected for hallway-variant selection;
 	 *  doors, entrances, and staircases are treated as walls, producing end caps at transitions. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet")
 	bool bHallwayVariantsHallwayOnly = false;
 
 	/** The wall profile the wall-family slots are authored to (see FDungeonWallProfile). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet")
 	FDungeonWallProfile WallProfile;
 
 	/** Wall-fixture placement rules (see FDungeonFixtureRules); the mapper emits placements from these. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet")
 	FDungeonFixtureRules FixtureRules;
 
 	/** Decor placement rules (E4, see FDungeonDecorRules) for the WallDecor / FloorDecor / HallwayDecor slots. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet")
 	FDungeonDecorRules DecorRules;
 
 	/** Per-room-type slot replacements (E4, see FDungeonRoomTypeOverride). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet")
 	TMap<EDungeonRoomType, FDungeonRoomTypeOverride> RoomTypeOverrides;
 
 	/** Interior exposure / AO the tile actor applies over the grid (E5, see FDungeonInteriorLighting). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet")
 	FDungeonInteriorLighting InteriorLighting;
 
 	/**
@@ -330,11 +330,11 @@ public:
 	 * after DoorLeafRotationOffset: hinge line through the mesh origin along Z, the leaf extending
 	 * along local +Y with its base at Z=0. Unset = no door leaves.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Interactables")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet|Interactables")
 	TSoftObjectPtr<UStaticMesh> DoorLeafMesh;
 
 	/** Mesh-local rotation bringing DoorLeafMesh to the leaf convention (pack doors extend along -Y: yaw 180). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Interactables")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet|Interactables")
 	FRotator DoorLeafRotationOffset = FRotator(0.0f, 180.0f, 0.0f);
 
 	/**
@@ -342,11 +342,11 @@ public:
 	 * WallLightRotationOffset: mount point at the mesh origin, the fixture extending along local
 	 * +X off the wall. Unset = no wall lights.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Interactables")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet|Interactables")
 	TSoftObjectPtr<UStaticMesh> WallLightMesh;
 
 	/** Mesh-local rotation bringing WallLightMesh to the fixture convention (pack sconces extend along +Y: yaw -90). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TileSet|Interactables")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dungeon|TileSet|Interactables")
 	FRotator WallLightRotationOffset = FRotator(0.0f, -90.0f, 0.0f);
 
 	/**
@@ -355,7 +355,7 @@ public:
 	 * passable from the back). One line per problem; empty = conforms. Loads the meshes. Also run
 	 * by the editor asset validator on save.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "TileSet")
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|TileSet")
 	TArray<FString> CheckWallProfile() const;
 
 	// --- Accessors (read Slots; safe for missing types) ---
@@ -369,7 +369,7 @@ public:
 	FVector GetScaleMultiplier(EDungeonTileType Type) const { return GetSlot(Type).ScaleMultiplier; }
 
 	/** Returns true if at least one slot has a mesh or module. */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "TileSet")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|TileSet")
 	bool IsValid() const;
 
 private:

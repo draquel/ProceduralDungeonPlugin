@@ -16,7 +16,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "DungeonTypes.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonGenerator.h"
 #include "DungeonBoundaryRules.h"
 

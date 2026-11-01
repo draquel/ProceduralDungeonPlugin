@@ -1,10 +1,10 @@
-#include "RoomPlacement.h"
+#include "DungeonRoomPlacement.h"
+#include "DungeonCoreModule.h"
 #include "DungeonTypes.h"
 #include "DungeonSeed.h"
-#include "DungeonConfig.h"
-#include "RoomSemantics.h"
+#include "DungeonConfiguration.h"
+#include "DungeonRoomSemantics.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogDungeonRooms, Log, All);
 
 namespace
 {
@@ -32,7 +32,7 @@ namespace
 // PlaceEntranceRoom
 // ---------------------------------------------------------------------------
 
-bool FRoomPlacement::PlaceEntranceRoom(
+bool FDungeonRoomPlacement::PlaceEntranceRoom(
 	FDungeonGrid& Grid,
 	const UDungeonConfiguration& Config,
 	const FDungeonEntranceSpec& Spec,
@@ -50,7 +50,7 @@ bool FRoomPlacement::PlaceEntranceRoom(
 	}
 	if (OutRooms.Num() != 0)
 	{
-		UE_LOG(LogDungeonRooms, Warning, TEXT("PlaceEntranceRoom: rooms already placed; the entrance must be first"));
+		UE_LOG(LogDungeonCore, Warning, TEXT("PlaceEntranceRoom: rooms already placed; the entrance must be first"));
 		return false;
 	}
 
@@ -95,7 +95,7 @@ bool FRoomPlacement::PlaceEntranceRoom(
 			if (Spec.ExplicitFloor < 0 || Spec.ExplicitFloor > MaxPosZ)
 			{
 				// Not a retry case: no room of any allowed height can sit on that floor.
-				UE_LOG(LogDungeonRooms, Warning,
+				UE_LOG(LogDungeonCore, Warning,
 					TEXT("PlaceEntranceRoom: ExplicitFloor %d is outside [0, %d] for a %d-floor room in a %d-floor grid"),
 					Spec.ExplicitFloor, MaxPosZ, SizeZ, Config.GridSize.Z);
 				return false;
@@ -131,7 +131,7 @@ bool FRoomPlacement::PlaceEntranceRoom(
 
 		// Same formula as the generator's EntranceCell (ground-floor centre).
 		const FIntVector EntranceCell = Room.Position + FIntVector(SizeX / 2, SizeY / 2, 0);
-		FDungeonEntranceApproachInfo Info = FRoomSemantics::ComputeEntranceApproach(
+		FDungeonEntranceApproachInfo Info = FDungeonRoomSemantics::ComputeEntranceApproach(
 			Room, EntranceCell, Spec, Face, Config.GridSize);
 
 		if (DoesRoomOverlap(Room.Position, Room.Size, OutRooms, Buffer)
@@ -151,7 +151,7 @@ bool FRoomPlacement::PlaceEntranceRoom(
 		Info.bSatisfied = true;
 		OutApproach = Info;
 
-		UE_LOG(LogDungeonRooms, Log,
+		UE_LOG(LogDungeonCore, Log,
 			TEXT("PlaceEntranceRoom: approach %d at (%d,%d,%d) size (%d,%d,%d), opening (%d,%d,%d), keep-out (%d,%d,%d)-(%d,%d,%d)%s"),
 			static_cast<int32>(Spec.Approach), PosX, PosY, PosZ, SizeX, SizeY, SizeZ,
 			Info.OpeningCell.X, Info.OpeningCell.Y, Info.OpeningCell.Z,
@@ -161,7 +161,7 @@ bool FRoomPlacement::PlaceEntranceRoom(
 		return true;
 	}
 
-	UE_LOG(LogDungeonRooms, Warning,
+	UE_LOG(LogDungeonCore, Warning,
 		TEXT("PlaceEntranceRoom: approach %d could not be satisfied after %d attempts"),
 		static_cast<int32>(Spec.Approach), Config.MaxPlacementAttempts);
 	return false;
@@ -171,7 +171,7 @@ bool FRoomPlacement::PlaceEntranceRoom(
 // PlaceRooms
 // ---------------------------------------------------------------------------
 
-bool FRoomPlacement::PlaceRooms(
+bool FDungeonRoomPlacement::PlaceRooms(
 	FDungeonGrid& Grid,
 	const UDungeonConfiguration& Config,
 	FDungeonSeed& Seed,
@@ -230,13 +230,13 @@ bool FRoomPlacement::PlaceRooms(
 
 		if (!bPlaced)
 		{
-			UE_LOG(LogDungeonRooms, Warning,
+			UE_LOG(LogDungeonCore, Warning,
 				TEXT("Failed to place room %d/%d after %d attempts"),
 				i + 1, Config.RoomCount, Config.MaxPlacementAttempts);
 		}
 	}
 
-	UE_LOG(LogDungeonRooms, Log, TEXT("Placed %d/%d rooms"), OutRooms.Num(), Config.RoomCount);
+	UE_LOG(LogDungeonCore, Log, TEXT("Placed %d/%d rooms"), OutRooms.Num(), Config.RoomCount);
 	return OutRooms.Num() >= 2;
 }
 
@@ -244,7 +244,7 @@ bool FRoomPlacement::PlaceRooms(
 // Helpers
 // ---------------------------------------------------------------------------
 
-bool FRoomPlacement::OverlapsReserved(const FDungeonGrid& Grid, const FIntVector& Position, const FIntVector& Size)
+bool FDungeonRoomPlacement::OverlapsReserved(const FDungeonGrid& Grid, const FIntVector& Position, const FIntVector& Size)
 {
 	for (int32 Z = Position.Z; Z < Position.Z + Size.Z; ++Z)
 	{
@@ -262,7 +262,7 @@ bool FRoomPlacement::OverlapsReserved(const FDungeonGrid& Grid, const FIntVector
 	return false;
 }
 
-void FRoomPlacement::FillEmptyBox(FDungeonGrid& Grid, const FIntVector& Min, const FIntVector& Max, EDungeonCellType Type)
+void FDungeonRoomPlacement::FillEmptyBox(FDungeonGrid& Grid, const FIntVector& Min, const FIntVector& Max, EDungeonCellType Type)
 {
 	for (int32 Z = Min.Z; Z <= Max.Z; ++Z)
 	{
@@ -283,7 +283,7 @@ void FRoomPlacement::FillEmptyBox(FDungeonGrid& Grid, const FIntVector& Min, con
 	}
 }
 
-bool FRoomPlacement::RoomsOverlap(const FIntVector& PosA, const FIntVector& SizeA, const FIntVector& PosB, const FIntVector& SizeB, int32 Buffer)
+bool FDungeonRoomPlacement::RoomsOverlap(const FIntVector& PosA, const FIntVector& SizeA, const FIntVector& PosB, const FIntVector& SizeB, int32 Buffer)
 {
 	// AABB overlap test: buffer on XY axes (hallway space), no buffer on Z (floors)
 	const bool bOverlapX = PosA.X < (PosB.X + SizeB.X + Buffer) && (PosA.X + SizeA.X + Buffer) > PosB.X;
@@ -292,7 +292,7 @@ bool FRoomPlacement::RoomsOverlap(const FIntVector& PosA, const FIntVector& Size
 	return bOverlapX && bOverlapY && bOverlapZ;
 }
 
-bool FRoomPlacement::DoesRoomOverlap(
+bool FDungeonRoomPlacement::DoesRoomOverlap(
 	const FIntVector& Position,
 	const FIntVector& Size,
 	const TArray<FDungeonRoom>& ExistingRooms,
@@ -308,7 +308,7 @@ bool FRoomPlacement::DoesRoomOverlap(
 	return false;
 }
 
-void FRoomPlacement::StampRoomToGrid(FDungeonGrid& Grid, const FDungeonRoom& Room)
+void FDungeonRoomPlacement::StampRoomToGrid(FDungeonGrid& Grid, const FDungeonRoom& Room)
 {
 	for (int32 X = Room.Position.X; X < Room.Position.X + Room.Size.X; ++X)
 	{

@@ -7,7 +7,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "DungeonBoundaryRules.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonGenerator.h"
 #include "DungeonTypes.h"
 #include "DungeonVoxelConfig.h"

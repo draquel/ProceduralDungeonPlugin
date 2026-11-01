@@ -10,7 +10,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "DungeonActor.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonTileMapper.h"
 #include "DungeonTileSet.h"
 #include "DungeonTypes.h"

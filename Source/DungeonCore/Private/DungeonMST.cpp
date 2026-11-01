@@ -1,6 +1,6 @@
-#include "MinimumSpanningTree.h"
+#include "DungeonMST.h"
 
-void FMinimumSpanningTree::Compute(
+void FDungeonMST::Compute(
 	const TArray<FVector>& VertexPositions,
 	const TArray<TPair<int32, int32>>& Edges,
 	int32 RootVertex,

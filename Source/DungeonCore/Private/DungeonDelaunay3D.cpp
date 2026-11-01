@@ -1,10 +1,10 @@
-#include "DelaunayTetrahedralization.h"
+#include "DungeonDelaunay3D.h"
 
 // ============================================================================
 // Helper types
 // ============================================================================
 
-FDelaunayTetrahedralization::FFace::FFace(int32 A, int32 B, int32 C)
+FDungeonDelaunay3D::FFace::FFace(int32 A, int32 B, int32 C)
 {
 	V[0] = A; V[1] = B; V[2] = C;
 	// Bubble sort 3 elements for canonical order
@@ -13,23 +13,23 @@ FDelaunayTetrahedralization::FFace::FFace(int32 A, int32 B, int32 C)
 	if (V[0] > V[1]) Swap(V[0], V[1]);
 }
 
-bool FDelaunayTetrahedralization::FFace::operator==(const FFace& Other) const
+bool FDungeonDelaunay3D::FFace::operator==(const FFace& Other) const
 {
 	return V[0] == Other.V[0] && V[1] == Other.V[1] && V[2] == Other.V[2];
 }
 
-FDelaunayTetrahedralization::FEdge::FEdge(int32 InA, int32 InB)
+FDungeonDelaunay3D::FEdge::FEdge(int32 InA, int32 InB)
 	: A(FMath::Min(InA, InB))
 	, B(FMath::Max(InA, InB))
 {
 }
 
-bool FDelaunayTetrahedralization::FEdge::operator==(const FEdge& Other) const
+bool FDungeonDelaunay3D::FEdge::operator==(const FEdge& Other) const
 {
 	return A == Other.A && B == Other.B;
 }
 
-bool FDelaunayTetrahedralization::FTetrahedron::ContainsVertex(int32 Idx) const
+bool FDungeonDelaunay3D::FTetrahedron::ContainsVertex(int32 Idx) const
 {
 	return V[0] == Idx || V[1] == Idx || V[2] == Idx || V[3] == Idx;
 }
@@ -38,7 +38,7 @@ bool FDelaunayTetrahedralization::FTetrahedron::ContainsVertex(int32 Idx) const
 // Orientation test
 // ============================================================================
 
-double FDelaunayTetrahedralization::Orientation(
+double FDungeonDelaunay3D::Orientation(
 	const FVector& A, const FVector& B,
 	const FVector& C, const FVector& D)
 {
@@ -71,7 +71,7 @@ namespace
 	}
 }
 
-bool FDelaunayTetrahedralization::IsInCircumsphere(
+bool FDungeonDelaunay3D::IsInCircumsphere(
 	const TArray<FVector>& Points,
 	const FTetrahedron& Tet,
 	const FVector& P)
@@ -123,7 +123,7 @@ bool FDelaunayTetrahedralization::IsInCircumsphere(
 // Bowyer-Watson 3D
 // ============================================================================
 
-void FDelaunayTetrahedralization::Tetrahedralize(
+void FDungeonDelaunay3D::Tetrahedralize(
 	const TArray<FVector>& Points,
 	TArray<TPair<int32, int32>>& OutEdges)
 {

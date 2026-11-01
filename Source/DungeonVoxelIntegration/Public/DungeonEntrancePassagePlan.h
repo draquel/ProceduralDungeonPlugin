@@ -21,7 +21,7 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonPassageSegment
 	 * Also shell the column's floor and ceiling: a horizontal passage through the natural cave
 	 * layer needs a floor to walk on and a lid, where a vertical shaft is enclosed by its sides.
 	 */
-	bool bFloorCeilingShell = false;
+	bool bFloorCeilingJacket = false;
 
 	/** Grid cell the column stands in when bInsideGrid; otherwise the passage has left the grid footprint. */
 	FIntVector Cell = FIntVector::ZeroValue;

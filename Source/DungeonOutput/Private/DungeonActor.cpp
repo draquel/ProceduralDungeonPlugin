@@ -1,8 +1,8 @@
 #include "DungeonActor.h"
-#include "DungeonOutput.h"
+#include "DungeonOutputModule.h"
 #include "DungeonDoorActor.h"
 #include "DungeonGenerator.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonInteractable.h"
 #include "DungeonTileSet.h"
 #include "DungeonTileMapper.h"
@@ -200,7 +200,7 @@ FDungeonCoverageReport ADungeonActor::GetCoverageReport() const
 		return FDungeonCoverageReport();
 	}
 	// The coverage report is in the tile map's own space (the actor's frame when bMapInActorFrame).
-	return FDungeonCoverage::Analyse(CachedResult, CachedTileMap, GetMapOrigin(), bOpenEntranceCeiling);
+	return FDungeonCoverage::Analyse(CachedResult, CachedTileMap, GetMapOrigin(), bOpenEntranceOpening);
 }
 
 void ADungeonActor::GenerateDungeon()
@@ -230,7 +230,7 @@ void ADungeonActor::GenerateDungeon()
 	}
 
 	// Generate dungeon data + map to tiles through the ONE shared build (see BuildDungeon).
-	if (!BuildDungeon(DungeonConfig, TileSet, Seed, bUseEntranceOverride, EntranceOverride, bOpenEntranceCeiling,
+	if (!BuildDungeon(DungeonConfig, TileSet, Seed, bUseEntranceOverride, EntranceOverride, bOpenEntranceOpening,
 		GetMapOrigin(), CachedResult, CachedTileMap))
 	{
 		return;
@@ -420,7 +420,7 @@ void ADungeonActor::GenerateDungeon()
 }
 
 bool ADungeonActor::BuildDungeon(UDungeonConfiguration* Config, const UDungeonTileSet* TileSet, int64 InSeed,
-	bool bUseEntranceOverride, const FDungeonEntranceSpec& EntranceOverride, bool bOpenEntranceCeiling,
+	bool bUseEntranceOverride, const FDungeonEntranceSpec& EntranceOverride, bool bOpenEntranceOpening,
 	const FVector& WorldOffset, FDungeonResult& OutResult, FDungeonTileMapResult& OutTileMap)
 {
 	if (!Config || !TileSet)
@@ -439,7 +439,7 @@ bool ADungeonActor::BuildDungeon(UDungeonConfiguration* Config, const UDungeonTi
 		OutResult.Rooms.Num(), OutResult.Hallways.Num(),
 		OutResult.Staircases.Num(), OutResult.GenerationTimeMs);
 
-	OutTileMap = FDungeonTileMapper::MapToTiles(OutResult, *TileSet, WorldOffset, bOpenEntranceCeiling);
+	OutTileMap = FDungeonTileMapper::MapToTiles(OutResult, *TileSet, WorldOffset, bOpenEntranceOpening);
 	return true;
 }
 

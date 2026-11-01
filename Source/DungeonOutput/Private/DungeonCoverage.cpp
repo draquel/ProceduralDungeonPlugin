@@ -20,7 +20,7 @@ FString FDungeonCoverageReport::Describe() const
 }
 
 FDungeonCoverageReport FDungeonCoverage::Analyse(const FDungeonResult& Result, const FDungeonTileMapResult& TileMap,
-	const FVector& WorldOffset, bool bOpenEntranceCeiling)
+	const FVector& WorldOffset, bool bOpenEntranceOpening)
 {
 	FDungeonCoverageReport Report;
 	const float CS = Result.CellWorldSize;
@@ -98,7 +98,7 @@ FDungeonCoverageReport FDungeonCoverage::Analyse(const FDungeonResult& Result, c
 	const FDungeonEntranceApproachInfo& Approach = Result.EntranceApproach;
 	const bool bApproachKnown = Approach.Approach != EDungeonEntranceApproach::None && Approach.bSatisfied;
 	const EDungeonEntranceApproach OpeningKind = bApproachKnown ? Approach.Approach : EDungeonEntranceApproach::FromAbove;
-	const FIntVector OpeningCell = bOpenEntranceCeiling ? Result.GetEntranceOpeningCell() : FIntVector(-1, -1, -1);
+	const FIntVector OpeningCell = bOpenEntranceOpening ? Result.GetEntranceOpeningCell() : FIntVector(-1, -1, -1);
 	int32 OpeningFaceDX = 0, OpeningFaceDY = 0;
 	if (OpeningKind == EDungeonEntranceApproach::FromSide)
 	{
@@ -131,7 +131,7 @@ FDungeonCoverageReport FDungeonCoverage::Analyse(const FDungeonResult& Result, c
 		{
 			continue;
 		}
-		const bool bOpening = bOpenEntranceCeiling && Cell == OpeningCell;
+		const bool bOpening = bOpenEntranceOpening && Cell == OpeningCell;
 		// Stair cells are dressed by the ramp; their side walls are their neighbours' business and
 		// their floor / ceiling are the ramp's.
 		const bool bStair = Type == EDungeonCellType::Staircase || Type == EDungeonCellType::StaircaseHead;

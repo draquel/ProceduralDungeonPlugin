@@ -95,7 +95,7 @@ from the mapper's `Openings` / `Fixtures` by the game (see the environment polis
 
 ```cpp
 #include "DungeonGenerator.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 
 // Generate a dungeon
 UDungeonConfiguration* Config = LoadObject<UDungeonConfiguration>(...);

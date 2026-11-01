@@ -3,11 +3,11 @@
 // hallways and staircases through the whole pipeline.
 #include "Misc/AutomationTest.h"
 #include "DungeonTypes.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonGenerator.h"
 #include "DungeonSeed.h"
 #include "DungeonValidator.h"
-#include "RoomPlacement.h"
+#include "DungeonRoomPlacement.h"
 
 namespace DungeonEntranceApproachTestHelpers
 {
@@ -350,11 +350,11 @@ bool FPlacementAvoidsReserved::RunTest(const FString& Parameters)
 	FDungeonGrid Grid;
 	Grid.Initialize(Config->GridSize);
 	const FIntVector Min(5, 5, 0), Max(14, 14, 2);
-	FRoomPlacement::FillEmptyBox(Grid, Min, Max, EDungeonCellType::Reserved);
+	FDungeonRoomPlacement::FillEmptyBox(Grid, Min, Max, EDungeonCellType::Reserved);
 
 	TArray<FDungeonRoom> Rooms;
 	FDungeonSeed Seed(7);
-	TestTrue(TEXT("placed >= 2 rooms around the box"), FRoomPlacement::PlaceRooms(Grid, *Config, Seed, Rooms));
+	TestTrue(TEXT("placed >= 2 rooms around the box"), FDungeonRoomPlacement::PlaceRooms(Grid, *Config, Seed, Rooms));
 	for (const FDungeonRoom& Room : Rooms)
 	{
 		const bool bIntersects =

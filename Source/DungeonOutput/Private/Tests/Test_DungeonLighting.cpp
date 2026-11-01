@@ -2,7 +2,7 @@
 // report (every needed wall / floor / ceiling has exactly one piece on generated dungeons).
 #include "Misc/AutomationTest.h"
 #include "DungeonTypes.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonGenerator.h"
 #include "DungeonTileSet.h"
 #include "DungeonTileMapper.h"

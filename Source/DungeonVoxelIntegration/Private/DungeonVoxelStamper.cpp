@@ -1,7 +1,7 @@
 #include "DungeonVoxelStamper.h"
 #include "DungeonVoxelStampPlan.h"
 #include "DungeonVoxelConfig.h"
-#include "DungeonVoxelIntegration.h"
+#include "DungeonVoxelIntegrationModule.h"
 #include "DungeonTypes.h"
 #include "DungeonBoundaryRules.h"
 #include "VoxelData.h"

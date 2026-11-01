@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "DungeonTypes.h"
-#include "RoomSemantics.generated.h"
+#include "DungeonRoomSemantics.generated.h"
 
 class UDungeonConfiguration;
 struct FDungeonSeed;
@@ -56,7 +56,7 @@ struct DUNGEONCORE_API FDungeonRoomTypeRule
  * Per-room computed metrics used during type assignment scoring.
  * Not a USTRUCT — internal algorithm data only.
  */
-struct DUNGEONCORE_API FRoomSemanticContext
+struct DUNGEONCORE_API FDungeonRoomSemanticContext
 {
 	int32 RoomArrayIndex = -1;
 	int32 GraphDistance = -1;
@@ -67,10 +67,10 @@ struct DUNGEONCORE_API FRoomSemanticContext
 };
 
 /**
- * FRoomSemantics
+ * FDungeonRoomSemantics
  * Static utility functions for entrance selection, graph analysis, and room type assignment.
  */
-struct DUNGEONCORE_API FRoomSemantics
+struct DUNGEONCORE_API FDungeonRoomSemantics
 {
 	/** Pick entrance room index based on Config.EntrancePlacement. Uses RNG for tie-breaking. */
 	static int32 SelectEntranceRoom(
@@ -96,13 +96,13 @@ struct DUNGEONCORE_API FRoomSemantics
 		const FIntVector& GridSize);
 
 	/** BFS from entrance; populates Room.GraphDistanceFromEntrance, Room.bOnMainPath, returns contexts. */
-	static TArray<FRoomSemanticContext> ComputeGraphMetrics(
+	static TArray<FDungeonRoomSemanticContext> ComputeGraphMetrics(
 		FDungeonResult& Result);
 
 	/** Assign room types from Config.RoomTypeRules using priority + scoring. Modifies Result.Rooms[].RoomType. */
 	static void AssignRoomTypes(
 		FDungeonResult& Result,
 		const UDungeonConfiguration& Config,
-		const TArray<FRoomSemanticContext>& Contexts,
+		const TArray<FDungeonRoomSemanticContext>& Contexts,
 		FDungeonSeed& Seed);
 };

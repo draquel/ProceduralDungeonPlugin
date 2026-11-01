@@ -289,12 +289,12 @@ bool FPassagePlanShellFlags::RunTest(const FString& Parameters)
 		if (Seg.bInsideGrid && Seg.Cell == Side.EntranceApproach.OpeningCell)
 		{
 			TestFalse(TEXT("opening cell: no side shell"), Seg.bWalls);
-			TestFalse(TEXT("opening cell: no cap shell"), Seg.bFloorCeilingShell);
+			TestFalse(TEXT("opening cell: no cap shell"), Seg.bFloorCeilingJacket);
 		}
 		else
 		{
 			TestTrue(TEXT("tunnel column: side shell"), Seg.bWalls);
-			TestTrue(TEXT("tunnel column: floor + ceiling shell"), Seg.bFloorCeilingShell);
+			TestTrue(TEXT("tunnel column: floor + ceiling shell"), Seg.bFloorCeilingJacket);
 		}
 	}
 
@@ -303,6 +303,6 @@ bool FPassagePlanShellFlags::RunTest(const FString& Parameters)
 	const FDungeonEntrancePassagePlan Shaft = FDungeonEntrancePassagePlan::Build(
 		Above, PassageOffset, EDungeonEntranceStyle::VerticalShaft, PassageVS, true, 0.0f, FlatSurface);
 	TestTrue(TEXT("shaft: side shell"), Shaft.Segments[0].bWalls);
-	TestFalse(TEXT("shaft: no cap shell"), Shaft.Segments[0].bFloorCeilingShell);
+	TestFalse(TEXT("shaft: no cap shell"), Shaft.Segments[0].bFloorCeilingJacket);
 	return true;
 }

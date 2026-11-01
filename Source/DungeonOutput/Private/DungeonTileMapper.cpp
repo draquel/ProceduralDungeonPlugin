@@ -3,7 +3,7 @@
 #include "DungeonTileModule.h"
 #include "DungeonTypes.h"
 #include "DungeonBoundaryRules.h"
-#include "DungeonOutput.h"
+#include "DungeonOutputModule.h"
 #include "Engine/StaticMesh.h"
 
 // ============================================================================
@@ -61,7 +61,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	const FDungeonResult& Result,
 	const UDungeonTileSet& TileSet,
 	const FVector& WorldOffset,
-	bool bOpenEntranceCeiling)
+	bool bOpenEntranceOpening)
 {
 	FDungeonTileMapResult Out;
 
@@ -70,7 +70,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 	const float HalfCS = CS * 0.5f;
 	const float Thin = TileThickness(CS);
 
-	// The entrance opening (bOpenEntranceCeiling): which cell, and which of its faces, the
+	// The entrance opening (bOpenEntranceOpening): which cell, and which of its faces, the
 	// stitched passage enters through. Decided from the dungeon's recorded approach so the tiles
 	// and the voxel carve agree:
 	//   FromAbove (and None): the LID of the top cell of the entrance room's column over
@@ -551,7 +551,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 					return {BaseType, 0.0f};
 				};
 
-				const bool bIsOpeningCell = bOpenEntranceCeiling
+				const bool bIsOpeningCell = bOpenEntranceOpening
 					&& X == OpeningCell.X && Y == OpeningCell.Y && Z == OpeningCell.Z;
 
 				// Floor: place if cell below is a different space, solid, or OOB.
@@ -587,7 +587,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 				// Ceiling: place if cell above is a different space, solid, or OOB.
 				// Top face of the ceiling mesh is aligned flush with the cell's upper boundary.
 				// The entrance room's lid (ceiling of the opening cell) stays OPEN when a vertical
-				// passage enters from above (bOpenEntranceCeiling).
+				// passage enters from above (bOpenEntranceOpening).
 				const bool bIsOpenEntranceCeiling = bIsOpeningCell && OpeningKind == EDungeonEntranceApproach::FromAbove;
 				if (bHasCeilingMesh && !bIsOpenEntranceCeiling && FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, FIntVector(X, Y, Z), X, Y, Z + 1))
 				{
@@ -1079,7 +1079,7 @@ FDungeonTileMapResult FDungeonTileMapper::MapToTiles(
 				const float Density = bRoom ? Decor.FloorDecorDensity : Decor.HallwayDecorDensity;
 				if ((bRoom && bFloorDecor) || (bHall && bHallwayDecor))
 				{
-					if (bOpenEntranceCeiling && C == OpeningCell)
+					if (bOpenEntranceOpening && C == OpeningCell)
 					{
 						continue; // the passage lands here
 					}
