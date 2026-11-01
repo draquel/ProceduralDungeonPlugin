@@ -1,5 +1,6 @@
 // Test_DungeonGridValidation.cpp — Unit tests for FDungeonValidator with hand-built grids
 #include "Misc/AutomationTest.h"
+#include "DungeonCoreTestFixtures.h"
 #include "DungeonTypes.h"
 #include "DungeonConfig.h"
 #include "DungeonValidator.h"
@@ -10,6 +11,8 @@
 
 namespace DungeonValidationTestHelpers
 {
+	using DungeonCoreTesting::CleanupConfig;
+
 	UDungeonConfiguration* CreateTestConfig()
 	{
 		UDungeonConfiguration* Config = NewObject<UDungeonConfiguration>();
@@ -127,13 +130,6 @@ namespace DungeonValidationTestHelpers
 		return Result;
 	}
 
-	void CleanupConfig(UDungeonConfiguration* Config)
-	{
-		if (Config)
-		{
-			Config->RemoveFromRoot();
-		}
-	}
 }
 
 // ============================================================================

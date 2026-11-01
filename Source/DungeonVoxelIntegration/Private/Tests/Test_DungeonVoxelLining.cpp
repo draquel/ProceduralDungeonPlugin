@@ -15,6 +15,7 @@
 //   above the cell's bottom plane.
 
 #include "Misc/AutomationTest.h"
+#include "DungeonVoxelTestFixtures.h"
 #include "Async/TaskGraphInterfaces.h"
 #include "DungeonBoundaryRules.h"
 #include "DungeonConfig.h"
@@ -35,43 +36,12 @@
 
 namespace DungeonLiningTest
 {
+	using namespace DungeonVoxelTesting;
+
 	/** The demo's numbers (DA_DungeonVoxelConfig_POIDemo on VoxelDemo): 400 cm cells, 75 cm voxels, a 3-layer jacket. */
 	constexpr float CellSize = 400.0f;
 	constexpr float DemoVoxelSize = 75.0f;
 	constexpr int32 DemoWallThickness = 3;
-
-	/** One-storey rooms and hallways on two floors (the case the old lining filled). */
-	UDungeonConfiguration* MakeConfig()
-	{
-		UDungeonConfiguration* Config = NewObject<UDungeonConfiguration>();
-		Config->AddToRoot();
-		Config->GridSize = FIntVector(8, 8, 2);
-		Config->CellWorldSize = CellSize;
-		Config->RoomCount = 3;
-		Config->MinRoomSize = FIntVector(2, 2, 1);
-		Config->MaxRoomSize = FIntVector(3, 3, 1);
-		Config->RoomBuffer = 1;
-		Config->bUseFixedSeed = true;
-		Config->FixedSeed = 4242;
-		return Config;
-	}
-
-	FDungeonResult Generate(UDungeonConfiguration* Config)
-	{
-		FDungeonEntranceSpec Spec;
-		Spec.Floor = EDungeonEntranceFloor::Top;
-		Spec.Approach = EDungeonEntranceApproach::FromAbove;
-		UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
-		return Generator->GenerateWithEntrance(Config, 4242, Spec);
-	}
-
-	UDungeonVoxelConfig* MakeVoxelConfig(int32 WallThickness)
-	{
-		UDungeonVoxelConfig* VoxelConfig = NewObject<UDungeonVoxelConfig>();
-		VoxelConfig->AddToRoot();
-		VoxelConfig->WallThickness = WallThickness;
-		return VoxelConfig;
-	}
 
 	/** A small plane with the demo's voxel size. */
 	void ConfigureDemoPlane(VoxelTesting::FTestChunkWorld& W)
@@ -91,19 +61,6 @@ namespace DungeonLiningTest
 		return FVector(-1613.37, 786.63, -1500.0 - Result.GridSize.Z * CellSize);
 	}
 
-
-	bool IsOpen(const FDungeonResult& Result, const FIntVector& C)
-	{
-		return Result.Grid.IsInBounds(C) && FDungeonBoundaryRules::IsOpenCell(Result.Grid.GetCell(C).CellType);
-	}
-
-	bool NeedsBoundary(const FDungeonResult& Result, const FIntVector& C, int32 Face)
-	{
-		const FIntVector N = C + FDungeonGrid::FaceDirections[Face];
-		return Face < 4
-			? FDungeonBoundaryRules::NeedsWall(Result.Grid, C, N.X, N.Y, N.Z)
-			: FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, C, N.X, N.Y, N.Z);
-	}
 
 	/** Rooms and hallways: their interiors hold nothing but air (stairs hold steps, doors and the entrance frames). */
 	bool IsPlainSpace(const FDungeonResult& Result, const FIntVector& C)
@@ -179,7 +136,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDungeonStampVoxelLiningTest, "Dungeon.Stamp.Vo
 bool FDungeonStampVoxelLiningTest::RunTest(const FString& Parameters)
 {
 	using namespace DungeonLiningTest;
-	UDungeonConfiguration* Config = MakeConfig();
+	UDungeonConfiguration* Config = MakeConfig(CellSize);
 	const FDungeonResult Result = Generate(Config);
 	if (!TestTrue(TEXT("The dungeon generates (non-vacuous)"), Result.Rooms.Num() > 0))
 	{
@@ -328,7 +285,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDungeonStampCarvedFloorCollisionTest, "Dungeon
 bool FDungeonStampCarvedFloorCollisionTest::RunTest(const FString& Parameters)
 {
 	using namespace DungeonLiningTest;
-	UDungeonConfiguration* Config = MakeConfig();
+	UDungeonConfiguration* Config = MakeConfig(CellSize);
 	UDungeonVoxelConfig* VoxelConfig = MakeVoxelConfig(DemoWallThickness);
 	const FDungeonResult Result = Generate(Config);
 	if (!TestTrue(TEXT("The dungeon generates (non-vacuous)"), Result.Rooms.Num() > 0))
