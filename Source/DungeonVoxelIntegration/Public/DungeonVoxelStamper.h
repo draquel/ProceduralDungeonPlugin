@@ -49,33 +49,24 @@ class DUNGEONVOXELINTEGRATION_API UDungeonVoxelStamper : public UObject
 	GENERATED_BODY()
 
 public:
+
 	/**
-	 * Stamp a dungeon result into a voxel chunk manager.
+	 * Stamp a dungeon result into a voxel chunk manager, the dungeon laid out in a frame (spherical Phase 5, SP-G6):
+	 * WorldOffset and every cell, slab and stair are in frame space, mapped to the world by Frame (scale ignored). The
+	 * identity frame is the world (a heightmap world's dungeons); on a planet a POI's pad space (the tangent frame at its
+	 * centre), so the dungeon's floors lie across local up. The voxel lattice stays the world's: each frame-space box is
+	 * enumerated by testing the samples of its world bounds in frame space, and a rotated tile-dressed (CarveOnly) dungeon
+	 * carves half a voxel more margin and seals one voxel thicker (an oblique plane aliases by up to half a voxel's diagonal
+	 * on the lattice). The one entry point (code review CR2, DNG-11).
 	 * @param Result The generated dungeon data.
 	 * @param ChunkManager The voxel chunk manager to edit.
-	 * @param WorldOffset World-space offset applied to all grid coordinates.
+	 * @param WorldOffset Offset applied to all grid coordinates (frame space).
 	 * @param StampMode How to apply the dungeon to existing terrain.
 	 * @param Config Material and scale configuration.
+	 * @param Frame Frame space to world (FTransform::Identity: the world).
 	 * @return Stamp result with success flag and statistics.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "DungeonVoxelIntegration|Stamper")
-	FDungeonStampResult StampDungeon(
-		const FDungeonResult& Result,
-		UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset,
-		EDungeonStampMode StampMode,
-		UDungeonVoxelConfig* Config);
-
-	/**
-	 * StampDungeon with the dungeon laid out in a frame (spherical Phase 5, SP-G6): WorldOffset and every cell, slab and
-	 * stair are in frame space, mapped to the world by Frame (scale ignored). On a planet a POI's pad space (the tangent
-	 * frame at its centre), so the dungeon's floors lie across local up. The voxel lattice stays the world's: each frame-space
-	 * box is enumerated by testing the samples of its world bounds in frame space, and a rotated tile-dressed (CarveOnly)
-	 * dungeon carves half a voxel more margin and seals one voxel thicker (an oblique plane aliases by up to half a voxel's
-	 * diagonal on the lattice).
-	 * The identity frame is StampDungeon exactly (the same samples, in the same order).
-	 * @param Frame Frame space to world
-	 */
 	FDungeonStampResult StampDungeonInFrame(
 		const FDungeonResult& Result,
 		UVoxelChunkManager* ChunkManager,

@@ -4,6 +4,12 @@
 // FDungeonGrid
 // ============================================================================
 
+const FIntVector FDungeonGrid::FaceDirections[6] = {
+	FIntVector(1, 0, 0), FIntVector(-1, 0, 0),
+	FIntVector(0, 1, 0), FIntVector(0, -1, 0),
+	FIntVector(0, 0, 1), FIntVector(0, 0, -1),
+};
+
 void FDungeonGrid::Initialize(const FIntVector& InGridSize)
 {
 	GridSize = InGridSize;

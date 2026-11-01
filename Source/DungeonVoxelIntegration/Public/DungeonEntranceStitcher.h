@@ -31,11 +31,15 @@ class DUNGEONVOXELINTEGRATION_API UDungeonEntranceStitcher : public UObject
 	GENERATED_BODY()
 
 public:
+
 	/**
-	 * Stitch a passage from the terrain surface to the dungeon entrance.
+	 * Stitch a passage from the terrain surface to the dungeon entrance, the dungeon laid out in a frame (spherical Phase 5,
+	 * SP-G6): WorldOffset and the passage plan are in frame space, mapped to the world by Frame (the identity on a heightmap
+	 * world; a planet POI's pad space), and the terrain surface is the frame-space height where the frame's vertical line
+	 * meets the generated surface (DetectSurfaceHeight). The one entry point (code review CR2, DNG-11).
 	 * @param Result The generated dungeon data (EntranceCell, EntranceApproach, CellWorldSize).
 	 * @param ChunkManager The voxel chunk manager to edit.
-	 * @param WorldOffset World-space offset applied to dungeon grid coordinates.
+	 * @param WorldOffset Offset applied to dungeon grid coordinates (frame space).
 	 * @param Style Visual style for the entrance passage. Must agree with the dungeon's approach:
 	 *        VerticalShaft / CaveOpening / Trapdoor need FromAbove, SlopedTunnel needs FromSide;
 	 *        a result with approach None accepts any style best-effort.
@@ -48,25 +52,10 @@ public:
 	 * @param SideTunnelFloorLift SlopedTunnel only: raise the tunnel floor this much above the
 	 *        entrance cell's bottom so it meets the room's walkable floor (tile slab or stone
 	 *        lining thickness) instead of stepping up into it.
+	 * @param Frame Frame space to world (FTransform::Identity: the world).
 	 * @return Number of voxels modified, or -1 on failure (including a style / approach mismatch).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "DungeonVoxelIntegration|Entrance")
-	int32 StitchEntrance(
-		const FDungeonResult& Result,
-		UVoxelChunkManager* ChunkManager,
-		const FVector& WorldOffset,
-		EDungeonEntranceStyle Style,
-		UDungeonVoxelConfig* Config,
-		bool bStopAtEntranceCellTop = false,
-		float SideTunnelFloorLift = 0.0f);
-
-	/**
-	 * StitchEntrance with the dungeon laid out in a frame (spherical Phase 5, SP-G6): WorldOffset and the passage plan are in
-	 * frame space, mapped to the world by Frame (a planet POI's pad space), and the terrain surface is the frame-space
-	 * height where the frame's vertical line meets the generated surface (DetectFrameSurfaceHeight). The identity frame is
-	 * StitchEntrance exactly.
-	 * @param Frame Frame space to world
-	 */
 	int32 StitchEntranceInFrame(
 		const FDungeonResult& Result,
 		UVoxelChunkManager* ChunkManager,
@@ -78,15 +67,13 @@ public:
 		const FTransform& Frame);
 
 private:
-	/** Detect terrain surface height at a world XY position using the world mode or vertical sweep. */
-	float DetectSurfaceHeight(UVoxelChunkManager* ChunkManager, float WorldX, float WorldY) const;
-
 	/**
-	 * The frame-space height of the generated terrain surface on the frame's vertical line through (FrameX, FrameY): where
-	 * the line's altitude equals the generated surface's along local up there (UVoxelChunkManager::GetGeneratedSurfacePoint,
-	 * conditioning included). Rotated frames only.
+	 * The frame-space height of the generated terrain surface on the lattice frame's vertical line through (X, Y): on a
+	 * heightmap world in the world frame UVoxelChunkManager::GetGeneratedSurfaceHeight (the analytic surface, continentalness
+	 * and conditioning included); in any other frame where the line's altitude equals the generated surface's along local up
+	 * there (GetGeneratedSurfacePoint, conditioning included). One sampler for every world (code review CR2, DNG-12).
 	 */
-	float DetectFrameSurfaceHeight(UVoxelChunkManager* ChunkManager, const FTransform& Frame, float FrameX, float FrameY) const;
+	float DetectSurfaceHeight(UVoxelChunkManager* ChunkManager, const struct FDungeonVoxelLattice& Lattice, float X, float Y) const;
 
 	/** Pass 1: add every lattice sample inside the column to OutInterior. */
 	static void CollectColumnInterior(

@@ -1,6 +1,7 @@
 // DungeonValidator.cpp — Validates dungeon generation results for structural correctness
 #include "DungeonValidator.h"
 #include "DungeonBoundaryRules.h"
+#include "RoomPlacement.h"
 #include "DungeonConfig.h"
 
 // ---------------------------------------------------------------------------
@@ -341,11 +342,7 @@ void FDungeonValidator::ValidateNoRoomOverlap(const FDungeonResult& Result, TArr
 			const FDungeonRoom& A = Result.Rooms[i];
 			const FDungeonRoom& B = Result.Rooms[j];
 
-			const bool bOverlapX = (A.Position.X < B.Position.X + B.Size.X) && (B.Position.X < A.Position.X + A.Size.X);
-			const bool bOverlapY = (A.Position.Y < B.Position.Y + B.Size.Y) && (B.Position.Y < A.Position.Y + A.Size.Y);
-			const bool bOverlapZ = (A.Position.Z < B.Position.Z + B.Size.Z) && (B.Position.Z < A.Position.Z + A.Size.Z);
-
-			if (bOverlapX && bOverlapY && bOverlapZ)
+			if (FRoomPlacement::RoomsOverlap(A.Position, A.Size, B.Position, B.Size, /*Buffer=*/0))
 			{
 				OutIssues.Add(FDungeonValidationIssue(
 					TEXT("Overlap"),
@@ -377,12 +374,8 @@ void FDungeonValidator::ValidateRoomBuffer(const FDungeonResult& Result, const U
 			const FDungeonRoom& A = Result.Rooms[i];
 			const FDungeonRoom& B = Result.Rooms[j];
 
-			// Expand AABBs by buffer on X/Y only (skip Z, matching RoomPlacement convention)
-			const bool bOverlapX = (A.Position.X - Buffer < B.Position.X + B.Size.X) && (B.Position.X - Buffer < A.Position.X + A.Size.X);
-			const bool bOverlapY = (A.Position.Y - Buffer < B.Position.Y + B.Size.Y) && (B.Position.Y - Buffer < A.Position.Y + A.Size.Y);
-			const bool bOverlapZ = (A.Position.Z < B.Position.Z + B.Size.Z) && (B.Position.Z < A.Position.Z + A.Size.Z);
-
-			if (bOverlapX && bOverlapY && bOverlapZ)
+			// The buffer on X/Y only (skip Z), the placement's own predicate.
+			if (FRoomPlacement::RoomsOverlap(A.Position, A.Size, B.Position, B.Size, Buffer))
 			{
 				OutIssues.Add(FDungeonValidationIssue(
 					TEXT("Buffer"),
@@ -688,21 +681,12 @@ void FDungeonValidator::FloodFill(const FDungeonGrid& Grid, const FIntVector& St
 	Stack.Push(Start);
 	VisitedIndices.Add(StartIdx);
 
-	static const FIntVector Directions[] =
-	{
-		FIntVector( 1,  0,  0),
-		FIntVector(-1,  0,  0),
-		FIntVector( 0,  1,  0),
-		FIntVector( 0, -1,  0),
-		FIntVector( 0,  0,  1),
-		FIntVector( 0,  0, -1),
-	};
 
 	while (Stack.Num() > 0)
 	{
 		const FIntVector Current = Stack.Pop();
 
-		for (const FIntVector& Dir : Directions)
+		for (const FIntVector& Dir : FDungeonGrid::FaceDirections)
 		{
 			const FIntVector Neighbor = Current + Dir;
 			if (!Grid.IsInBounds(Neighbor))

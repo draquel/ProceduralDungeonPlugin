@@ -55,6 +55,16 @@ struct DUNGEONCORE_API FRoomPlacement
 		const FIntVector& Position,
 		const FIntVector& Size);
 
+	/**
+	 * Whether two room boxes overlap with a buffer of cells between them on X and Y (hallway space) and none on Z (floors):
+	 * the one predicate of room placement and the validator's overlap and buffer checks (code review CR2, DNG-13).
+	 * @param PosA, SizeA The first box (min cell, cells)
+	 * @param PosB, SizeB The second box
+	 * @param Buffer Cells kept clear between them on X and Y (0: the boxes may touch)
+	 * @return True when they overlap, the buffer included
+	 */
+	static bool RoomsOverlap(const FIntVector& PosA, const FIntVector& SizeA, const FIntVector& PosB, const FIntVector& SizeB, int32 Buffer);
+
 	/** Set Type on every in-bounds EMPTY cell of the inclusive box (never overwrites placed content). */
 	static void FillEmptyBox(
 		FDungeonGrid& Grid,

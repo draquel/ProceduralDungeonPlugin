@@ -85,6 +85,17 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonEntrancePassagePlan
 	static EDungeonEntranceApproach RequiredApproach(EDungeonEntranceStyle Style);
 
 	/**
+	 * The entrance spec a style needs, the one table behind the dungeon's generation for a POI (its stamp and its tile
+	 * actor's rebuild) and RequiredApproach (code review CR2, DNG-15): the entrance room on the top floor; a vertical style
+	 * (VerticalShaft, CaveOpening, Trapdoor) approached from above with nothing above its lid to reserve, CaveOpening with a
+	 * cell of clearance since its displaced mouth exceeds the cell footprint; SlopedTunnel from a grid side (the face drawn
+	 * from the seed), the corridor running out through the reserved buffer cells to a ramp outside the footprint.
+	 * @param Style The entrance style
+	 * @return The spec
+	 */
+	static FDungeonEntranceSpec MakeSpecForStyle(EDungeonEntranceStyle Style);
+
+	/**
 	 * Build the plan.
 	 * @param Result                 Generated dungeon (EntranceCell, EntranceApproach, CellWorldSize, rooms).
 	 * @param WorldOffset            World position of grid cell (0,0,0)'s min corner.

@@ -172,7 +172,6 @@ namespace DungeonFrameTest
 		return FTransform(East, North, Up, Up * Radius);
 	}
 
-	static const FIntVector FaceDirections[6] = { {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1} };
 
 	bool IsOpen(const FDungeonResult& Result, const FIntVector& C)
 	{
@@ -181,7 +180,7 @@ namespace DungeonFrameTest
 
 	bool NeedsBoundary(const FDungeonResult& Result, const FIntVector& C, int32 Face)
 	{
-		const FIntVector N = C + FaceDirections[Face];
+		const FIntVector N = C + FDungeonGrid::FaceDirections[Face];
 		return Face < 4
 			? FDungeonBoundaryRules::NeedsWall(Result.Grid, C, N.X, N.Y, N.Z)
 			: FDungeonBoundaryRules::NeedsVerticalBoundary(Result.Grid, C, N.X, N.Y, N.Z);
@@ -219,9 +218,7 @@ bool FDungeonStampRotatedFrameTest::RunTest(const FString& Parameters)
 			W.ConfigureSmallPlane();
 			W.StartManager();
 			UDungeonVoxelStamper* Stamper = NewObject<UDungeonVoxelStamper>();
-			const FDungeonStampResult Stamp = Run == 0
-				? Stamper->StampDungeon(Result, W.Manager, PlaneOffset, Mode, VoxelConfig)
-				: Stamper->StampDungeonInFrame(Result, W.Manager, PlaneOffset, Mode, VoxelConfig, FTransform::Identity);
+			const FDungeonStampResult Stamp = Stamper->StampDungeonInFrame(Result, W.Manager, PlaneOffset, Mode, VoxelConfig, FTransform::Identity);
 			TestTrue(FString::Printf(TEXT("Mode %d run %d: the stamp succeeds"), static_cast<int32>(Mode), Run), Stamp.bSuccess);
 			Modified[Run] = Stamp.VoxelsModified;
 			if (const UVoxelEditManager* EditManager = W.Manager->GetEditManager())
@@ -304,11 +301,11 @@ bool FDungeonStampRotatedFrameTest::RunTest(const FString& Parameters)
 					}
 					for (int32 Face = 0; Face < 6; ++Face)
 					{
-						if (!NeedsBoundary(Result, C, Face) || IsOpen(Result, C + FaceDirections[Face]))
+						if (!NeedsBoundary(Result, C, Face) || IsOpen(Result, C + FDungeonGrid::FaceDirections[Face]))
 						{
 							continue;
 						}
-						const FVector Normal(FaceDirections[Face]);
+						const FVector Normal(FDungeonGrid::FaceDirections[Face]);
 						const FVector P = Centre + Normal * (Mode == EDungeonStampMode::CarveOnly ? SealMiddle : JacketMiddle);
 						++FaceProbes;
 						const FVoxelEdit* Edit = EditAt(*Edits, *W.Config, Frame.TransformPosition(P));
@@ -383,10 +380,8 @@ bool FDungeonStitchPlanetSurfaceTest::RunTest(const FString& Parameters)
 			W.ConfigureSmallPlane();
 			W.StartManager();
 			UDungeonEntranceStitcher* Stitcher = NewObject<UDungeonEntranceStitcher>();
-			Voxels[Run] = Run == 0
-				? Stitcher->StitchEntrance(Result, W.Manager, PlaneOffset, EDungeonEntranceStyle::VerticalShaft, VoxelConfig, bStopAtTop, 0.0f)
-				: Stitcher->StitchEntranceInFrame(Result, W.Manager, PlaneOffset, EDungeonEntranceStyle::VerticalShaft, VoxelConfig,
-					bStopAtTop, 0.0f, FTransform::Identity);
+			Voxels[Run] = Stitcher->StitchEntranceInFrame(Result, W.Manager, PlaneOffset, EDungeonEntranceStyle::VerticalShaft, VoxelConfig,
+				bStopAtTop, 0.0f, FTransform::Identity);
 			if (const UVoxelEditManager* EditManager = W.Manager->GetEditManager())
 			{
 				Edits[Run] = CollectEdits(*EditManager);

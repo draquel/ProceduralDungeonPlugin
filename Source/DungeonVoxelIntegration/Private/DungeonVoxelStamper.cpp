@@ -199,16 +199,6 @@ static int32 PlaceStaircaseSteps(
 // Main Stamp Entry Point
 // ============================================================================
 
-FDungeonStampResult UDungeonVoxelStamper::StampDungeon(
-	const FDungeonResult& Result,
-	UVoxelChunkManager* ChunkManager,
-	const FVector& WorldOffset,
-	EDungeonStampMode StampMode,
-	UDungeonVoxelConfig* Config)
-{
-	return StampDungeonInFrame(Result, ChunkManager, WorldOffset, StampMode, Config, FTransform::Identity);
-}
-
 FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 	const FDungeonResult& Result,
 	UVoxelChunkManager* ChunkManager,
@@ -354,12 +344,6 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 	// provide the lining, and boundary voxels inside the cell would bury them)
 	// and the rest of the jacket outside it
 	// ------------------------------------------------------------------
-	// Direction offsets: +X, -X, +Y, -Y, +Z, -Z
-	static const FIntVector Directions[6] = {
-		{1, 0, 0}, {-1, 0, 0},
-		{0, 1, 0}, {0, -1, 0},
-		{0, 0, 1}, {0, 0, -1},
-	};
 
 	// The jacket outside the cell. CarveOnly is lined by tile meshes, so its whole jacket goes outside
 	// (inside the cell it would bury the tiles); it still needs one: dungeons anchor at the cave layer,
@@ -398,7 +382,7 @@ FDungeonStampResult UDungeonVoxelStamper::StampDungeonInFrame(
 
 				for (int32 Face = 0; Face < 6; ++Face)
 				{
-					const FIntVector& Dir = Directions[Face];
+					const FIntVector& Dir = FDungeonGrid::FaceDirections[Face];
 					const int32 NX = GX + Dir.X;
 					const int32 NY = GY + Dir.Y;
 					const int32 NZ = GZ + Dir.Z;
