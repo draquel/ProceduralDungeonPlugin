@@ -1,5 +1,5 @@
 // DungeonConfig.cpp — UDungeonConfiguration constructor with default RoomTypeRules
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 
 UDungeonConfiguration::UDungeonConfiguration()
 {

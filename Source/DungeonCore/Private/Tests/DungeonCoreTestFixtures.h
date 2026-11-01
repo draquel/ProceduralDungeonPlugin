@@ -6,7 +6,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 
 /** The dungeon core suites' shared fixtures (code review CR2 row 17, DNG-35). */
 namespace DungeonCoreTesting

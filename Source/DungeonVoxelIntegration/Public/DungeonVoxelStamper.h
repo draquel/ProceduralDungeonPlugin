@@ -19,19 +19,19 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonStampResult
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category = "DungeonVoxelIntegration")
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon|Voxel")
 	bool bSuccess = false;
 
-	UPROPERTY(BlueprintReadOnly, Category = "DungeonVoxelIntegration")
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon|Voxel")
 	int32 VoxelsModified = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "DungeonVoxelIntegration")
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon|Voxel")
 	int32 ChunksAffected = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "DungeonVoxelIntegration")
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon|Voxel")
 	float StampTimeMs = 0.0f;
 
-	UPROPERTY(BlueprintReadOnly, Category = "DungeonVoxelIntegration")
+	UPROPERTY(BlueprintReadOnly, Category = "Dungeon|Voxel")
 	FString ErrorMessage;
 };
 
@@ -66,7 +66,7 @@ public:
 	 * @param Frame Frame space to world (FTransform::Identity: the world).
 	 * @return Stamp result with success flag and statistics.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "DungeonVoxelIntegration|Stamper")
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Voxel|Stamper")
 	FDungeonStampResult StampDungeonInFrame(
 		const FDungeonResult& Result,
 		UVoxelChunkManager* ChunkManager,

@@ -55,7 +55,7 @@ public:
 	 * @param Frame Frame space to world (FTransform::Identity: the world).
 	 * @return Number of voxels modified, or -1 on failure (including a style / approach mismatch).
 	 */
-	UFUNCTION(BlueprintCallable, Category = "DungeonVoxelIntegration|Entrance")
+	UFUNCTION(BlueprintCallable, Category = "Dungeon|Voxel|Entrance")
 	int32 StitchEntranceInFrame(
 		const FDungeonResult& Result,
 		UVoxelChunkManager* ChunkManager,
@@ -92,7 +92,7 @@ private:
 	 * @param SurfaceCache   Per-(IX,IY) surface heights, shared across the segments of one carve.
 	 * @return Voxels written.
 	 */
-	int32 PlaceColumnShell(
+	int32 PlaceColumnJacket(
 		class UVoxelEditManager* EditManager,
 		const FDungeonVoxelLattice& Lattice,
 		const FDungeonPassageSegment& Segment,

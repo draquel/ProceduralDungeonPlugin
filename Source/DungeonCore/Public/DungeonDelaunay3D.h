@@ -3,11 +3,11 @@
 #include "CoreMinimal.h"
 
 /**
- * FDelaunayTetrahedralization
+ * FDungeonDelaunay3D
  * 3D Bowyer-Watson algorithm. Takes room center points in 3D and produces connectivity edges.
  * Handles coplanar points (single-floor dungeons) via caller-provided jitter.
  */
-struct DUNGEONCORE_API FDelaunayTetrahedralization
+struct DUNGEONCORE_API FDungeonDelaunay3D
 {
 	/**
 	 * Compute 3D Delaunay tetrahedralization and extract unique edges.

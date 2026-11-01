@@ -1,8 +1,8 @@
 // DungeonValidator.cpp — Validates dungeon generation results for structural correctness
 #include "DungeonValidator.h"
 #include "DungeonBoundaryRules.h"
-#include "RoomPlacement.h"
-#include "DungeonConfig.h"
+#include "DungeonRoomPlacement.h"
+#include "DungeonConfiguration.h"
 
 // ---------------------------------------------------------------------------
 // FDungeonValidationResult
@@ -342,7 +342,7 @@ void FDungeonValidator::ValidateNoRoomOverlap(const FDungeonResult& Result, TArr
 			const FDungeonRoom& A = Result.Rooms[i];
 			const FDungeonRoom& B = Result.Rooms[j];
 
-			if (FRoomPlacement::RoomsOverlap(A.Position, A.Size, B.Position, B.Size, /*Buffer=*/0))
+			if (FDungeonRoomPlacement::RoomsOverlap(A.Position, A.Size, B.Position, B.Size, /*Buffer=*/0))
 			{
 				OutIssues.Add(FDungeonValidationIssue(
 					TEXT("Overlap"),
@@ -375,7 +375,7 @@ void FDungeonValidator::ValidateRoomBuffer(const FDungeonResult& Result, const U
 			const FDungeonRoom& B = Result.Rooms[j];
 
 			// The buffer on X/Y only (skip Z), the placement's own predicate.
-			if (FRoomPlacement::RoomsOverlap(A.Position, A.Size, B.Position, B.Size, Buffer))
+			if (FDungeonRoomPlacement::RoomsOverlap(A.Position, A.Size, B.Position, B.Size, Buffer))
 			{
 				OutIssues.Add(FDungeonValidationIssue(
 					TEXT("Buffer"),

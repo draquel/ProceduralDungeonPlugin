@@ -1,5 +1,5 @@
 // Test_DungeonTileModule.cpp — Tile module system (P1): the mapper emits a clean uniform-scale
-// anchor for module-backed types, and modules don't disturb the legacy per-type placement.
+// anchor for module-backed types, and modules don't disturb the per-type placement.
 #include "Misc/AutomationTest.h"
 #include "DungeonTypes.h"
 #include "DungeonTileSet.h"
@@ -92,9 +92,9 @@ bool FTileModuleUniformAnchor::RunTest(const FString& Parameters)
 }
 
 // A tileset with NO modules must be byte-identical to before the feature: the module path is a
-// no-op. (Uses the RoomFloor count as the witness; the wider legacy suite covers the rest.)
+// no-op. (Uses the RoomFloor count as the witness; the tile-mapper suite covers the rest.)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTileModuleBackwardCompat,
-	"Dungeon.TileModule.NoModules.MatchesLegacy",
+	"Dungeon.TileModule.NoModules.MatchesPerPiecePath",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
 bool FTileModuleBackwardCompat::RunTest(const FString& Parameters)
@@ -108,14 +108,14 @@ bool FTileModuleBackwardCompat::RunTest(const FString& Parameters)
 	FDungeonTileMapResult TileMap = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector);
 
 	const TArray<FTransform>& Floors = TileMap.Transforms[static_cast<int32>(EDungeonTileType::RoomFloor)];
-	TestEqual(TEXT("No-module tileset: 9 room floors, legacy path"), Floors.Num(), 9);
+	TestEqual(TEXT("No-module tileset: 9 room floors, the per-piece path"), Floors.Num(), 9);
 
-	// Legacy floor uses the default-cube auto-fit (extent 100 -> scale 4.0 on X/Y), NOT uniform —
-	// proving the module path did not alter legacy placement.
+	// The per-piece floor uses the default-cube auto-fit (extent 100 -> scale 4.0 on X/Y), NOT uniform —
+	// proving the module path did not alter per-piece placement.
 	if (Floors.Num() > 0)
 	{
 		const FVector S = Floors[0].GetScale3D();
-		TestTrue(TEXT("Legacy floor keeps per-axis auto-fit (X scale != uniform-1)"),
+		TestTrue(TEXT("The per-piece floor keeps per-axis auto-fit (X scale != uniform-1)"),
 			!FMath::IsNearlyEqual(S.X, 1.0f, 0.001f));
 	}
 

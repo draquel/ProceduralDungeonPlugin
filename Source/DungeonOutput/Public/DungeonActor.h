@@ -56,7 +56,7 @@ public:
 	 * dungeon's entrance approach. Leave off for standalone dungeons.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon")
-	bool bOpenEntranceCeiling = false;
+	bool bOpenEntranceOpening = false;
 
 	/**
 	 * Lay the tiles out in the actor's own frame (rotation included) instead of the world's: the tile map is built at a
@@ -81,19 +81,19 @@ public:
 	FDungeonEntranceSpec EntranceOverride;
 
 	/** Generate the dungeon and create tile geometry. */
-	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon|Actor")
 	void GenerateDungeon();
 
 	/** Destroy all tile geometry. */
-	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon|Actor")
 	void ClearDungeon();
 
 	/** Set a random seed and regenerate. */
-	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon")
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Dungeon|Actor")
 	void RandomizeSeed();
 
 	/** Get the cached generation result. */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Actor")
 	const FDungeonResult& GetDungeonResult() const { return CachedResult; }
 
 	/** The tile map of the last GenerateDungeon (instances, openings, fixtures); empty before. */
@@ -153,26 +153,26 @@ public:
 	 * @param InSeed        Seed (0 = config fallback, see UDungeonConfiguration::ResolveSeed).
 	 * @param bUseEntranceOverride Generate with EntranceOverride instead of the config's spec.
 	 * @param EntranceOverride     The spec when overriding.
-	 * @param bOpenEntranceCeiling Leave the entrance opening unbuilt (see MapToTiles).
+	 * @param bOpenEntranceOpening Leave the entrance opening unbuilt (see MapToTiles).
 	 * @param WorldOffset   World-space offset of the grid origin (the tile actor's location).
 	 * @param OutResult     The generated dungeon.
 	 * @param OutTileMap    The mapped tiles, openings and fixtures.
 	 * @return False (with a log) when Config or TileSet is missing.
 	 */
 	static bool BuildDungeon(UDungeonConfiguration* Config, const UDungeonTileSet* TileSet, int64 InSeed,
-		bool bUseEntranceOverride, const FDungeonEntranceSpec& EntranceOverride, bool bOpenEntranceCeiling,
+		bool bUseEntranceOverride, const FDungeonEntranceSpec& EntranceOverride, bool bOpenEntranceOpening,
 		const FVector& WorldOffset, FDungeonResult& OutResult, FDungeonTileMapResult& OutTileMap);
 
 	/** Get the world-space position of the entrance cell. */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Actor")
 	FVector GetEntranceWorldPosition() const;
 
 	/** Returns true if a dungeon has been generated. */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Actor")
 	bool HasDungeon() const { return bHasDungeon; }
 
 	/** Get total number of mesh instances across all tile types. */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Dungeon|Actor")
 	int32 GetTotalInstanceCount() const;
 
 	/**

@@ -1,7 +1,7 @@
 // Test_DungeonTileMapper.cpp — Unit and integration tests for the tile mapping algorithm
 #include "Misc/AutomationTest.h"
 #include "DungeonTypes.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonGenerator.h"
 #include "DungeonTileSet.h"
 #include "DungeonTileMapper.h"
@@ -494,7 +494,7 @@ bool FTileMapperOpenEntranceCeiling::RunTest(const FString& Parameters)
 
 	// Open: exactly the entrance cell's ceiling is skipped; floors untouched.
 	FDungeonTileMapResult Open = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector,
-		/*bOpenEntranceCeiling=*/true);
+		/*bOpenEntranceOpening=*/true);
 	TestEqual(TEXT("Open: 8 ceilings (entrance cell open)"),
 		Open.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 8);
 	TestEqual(TEXT("Open: floors unaffected"),
@@ -561,7 +561,7 @@ bool FTileMapperOpenEntranceCeilingTallRoom::RunTest(const FString& Parameters)
 	// Open: the lid over the entrance column is skipped -> 8. (Before the opening-cell fix the
 	// mapper skipped the ground-floor cell's non-existent ceiling and the lid stayed at 9.)
 	FDungeonTileMapResult Open = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector,
-		/*bOpenEntranceCeiling=*/true);
+		/*bOpenEntranceOpening=*/true);
 	TestEqual(TEXT("Open: 8 ceilings (lid over the entrance column open)"),
 		Open.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 8);
 
@@ -602,7 +602,7 @@ bool FTileMapperOpenEntranceSide::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Closed: 12 perimeter walls"), Closed.Transforms[WallIdx].Num(), 12);
 	TestEqual(TEXT("Closed: 9 ceilings"), Closed.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 9);
 
-	const FDungeonTileMapResult Open = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector, /*bOpenEntranceCeiling=*/true);
+	const FDungeonTileMapResult Open = FDungeonTileMapper::MapToTiles(Result, *TS, FVector::ZeroVector, /*bOpenEntranceOpening=*/true);
 	TestEqual(TEXT("Open: 11 walls (face wall open)"), Open.Transforms[WallIdx].Num(), 11);
 	TestEqual(TEXT("Open: ceilings untouched for a side approach"), Open.Transforms[static_cast<int32>(EDungeonTileType::RoomCeiling)].Num(), 9);
 	TestEqual(TEXT("Open: floors untouched"), Open.Transforms[static_cast<int32>(EDungeonTileType::RoomFloor)].Num(), 9);

@@ -18,7 +18,7 @@
 #include "DungeonVoxelTestFixtures.h"
 #include "Async/TaskGraphInterfaces.h"
 #include "DungeonBoundaryRules.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonGenerator.h"
 #include "DungeonTypes.h"
 #include "DungeonVoxelConfig.h"

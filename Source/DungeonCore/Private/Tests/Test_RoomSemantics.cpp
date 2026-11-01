@@ -2,9 +2,9 @@
 #include "Misc/AutomationTest.h"
 #include "DungeonCoreTestFixtures.h"
 #include "DungeonTypes.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonSeed.h"
-#include "RoomSemantics.h"
+#include "DungeonRoomSemantics.h"
 #include "DungeonGenerator.h"
 #include "DungeonValidator.h"
 
@@ -12,7 +12,7 @@
 // Test Helpers
 // ============================================================================
 
-namespace RoomSemanticsTestHelpers
+namespace DungeonRoomSemanticsTestHelpers
 {
 	using DungeonCoreTesting::CleanupConfig;
 
@@ -202,7 +202,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemBoundaryEdgePick, "Dungeon.RoomSemantic
 
 bool FRoomSemBoundaryEdgePick::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 	Config->EntrancePlacement = EDungeonEntrancePlacement::BoundaryEdge;
 
 	// Create result with 1 boundary room and 1 interior room
@@ -231,10 +231,10 @@ bool FRoomSemBoundaryEdgePick::RunTest(const FString& Parameters)
 	}
 
 	FDungeonSeed Seed(42);
-	int32 Chosen = FRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
+	int32 Chosen = FDungeonRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
 	TestEqual(TEXT("Boundary room chosen"), Chosen, 1);
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -243,7 +243,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemBottomFloorPick, "Dungeon.RoomSemantics
 
 bool FRoomSemBottomFloorPick::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 	Config->EntrancePlacement = EDungeonEntrancePlacement::BottomFloor;
 	Config->GridSize = FIntVector(20, 20, 3);
 
@@ -272,10 +272,10 @@ bool FRoomSemBottomFloorPick::RunTest(const FString& Parameters)
 	}
 
 	FDungeonSeed Seed(42);
-	int32 Chosen = FRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
+	int32 Chosen = FDungeonRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
 	TestEqual(TEXT("Bottom floor room chosen"), Chosen, 1);
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -284,7 +284,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemTopFloorPick, "Dungeon.RoomSemantics.En
 
 bool FRoomSemTopFloorPick::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 	Config->EntrancePlacement = EDungeonEntrancePlacement::TopFloor;
 	Config->GridSize = FIntVector(20, 20, 3);
 
@@ -313,10 +313,10 @@ bool FRoomSemTopFloorPick::RunTest(const FString& Parameters)
 	}
 
 	FDungeonSeed Seed(42);
-	int32 Chosen = FRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
+	int32 Chosen = FDungeonRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
 	TestEqual(TEXT("Top floor room chosen"), Chosen, 1);
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -325,16 +325,16 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemAnyPick, "Dungeon.RoomSemantics.Entranc
 
 bool FRoomSemAnyPick::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 	Config->EntrancePlacement = EDungeonEntrancePlacement::Any;
 
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateLinearResult(5);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateLinearResult(5);
 
 	FDungeonSeed Seed(42);
-	int32 Chosen = FRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
+	int32 Chosen = FDungeonRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
 	TestTrue(TEXT("Valid index returned"), Chosen >= 0 && Chosen < Result.Rooms.Num());
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -345,7 +345,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemBoundaryEdgeBuffered, "Dungeon.RoomSema
 
 bool FRoomSemBoundaryEdgeBuffered::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 	Config->EntrancePlacement = EDungeonEntrancePlacement::BoundaryEdge;
 	Config->RoomBuffer = 1;
 
@@ -371,7 +371,7 @@ bool FRoomSemBoundaryEdgeBuffered::RunTest(const FString& Parameters)
 	for (int32 SeedValue = 1; SeedValue <= 8; ++SeedValue)
 	{
 		FDungeonSeed Seed(SeedValue);
-		const int32 Chosen = FRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
+		const int32 Chosen = FDungeonRoomSemantics::SelectEntranceRoom(Result, *Config, Seed);
 		TestEqual(FString::Printf(TEXT("Seed %d: buffered boundary room chosen"), SeedValue), Chosen, 1);
 	}
 
@@ -381,10 +381,10 @@ bool FRoomSemBoundaryEdgeBuffered::RunTest(const FString& Parameters)
 	AddRoom(FIntVector(12, 25, 0), FIntVector(4, 4, 1)); // 1: Y + Size.Y == 29 == GridSize.Y - 1
 	{
 		FDungeonSeed Seed(3);
-		TestEqual(TEXT("MaxY buffered room chosen"), FRoomSemantics::SelectEntranceRoom(Result, *Config, Seed), 1);
+		TestEqual(TEXT("MaxY buffered room chosen"), FDungeonRoomSemantics::SelectEntranceRoom(Result, *Config, Seed), 1);
 	}
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -395,7 +395,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemBoundaryEdgeGenerated, "Dungeon.RoomSem
 
 bool FRoomSemBoundaryEdgeGenerated::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 	Config->EntrancePlacement = EDungeonEntrancePlacement::BoundaryEdge;
 	Config->RoomBuffer = 1;
 	Config->GridSize = FIntVector(20, 20, 1);
@@ -435,7 +435,7 @@ bool FRoomSemBoundaryEdgeGenerated::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Placement produced boundary-line rooms for some seeds (test is meaningful)"), SeedsWithBoundaryRoom > 0);
 
 	Generator->RemoveFromRoot();
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -478,8 +478,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemLinearDistances, "Dungeon.RoomSemantics
 
 bool FRoomSemLinearDistances::RunTest(const FString& Parameters)
 {
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateLinearResult(5);
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateLinearResult(5);
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	TestEqual(TEXT("Room 0 distance"), Contexts[0].GraphDistance, 0);
 	TestEqual(TEXT("Room 1 distance"), Contexts[1].GraphDistance, 1);
@@ -498,8 +498,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemLinearMainPath, "Dungeon.RoomSemantics.
 
 bool FRoomSemLinearMainPath::RunTest(const FString& Parameters)
 {
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateLinearResult(5);
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateLinearResult(5);
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	// In a linear chain, all rooms should be on the main path
 	for (int32 i = 0; i < 5; ++i)
@@ -515,8 +515,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemLeafDetection, "Dungeon.RoomSemantics.G
 
 bool FRoomSemLeafDetection::RunTest(const FString& Parameters)
 {
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateBranchingResult();
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateBranchingResult();
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	// Hub (room 0) has degree 4 — not a leaf
 	TestFalse(TEXT("Hub (room 0) is NOT a leaf"), Contexts[0].bIsLeafNode);
@@ -535,8 +535,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemBranchMainPath, "Dungeon.RoomSemantics.
 
 bool FRoomSemBranchMainPath::RunTest(const FString& Parameters)
 {
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateBranchingResult();
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateBranchingResult();
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	// All branch rooms are distance 1 from hub, so main path is hub → first branch (lowest index tie-break)
 	TestTrue(TEXT("Hub on main path"), Contexts[0].bOnMainPath);
@@ -560,8 +560,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemMultiFloorDetect, "Dungeon.RoomSemantic
 
 bool FRoomSemMultiFloorDetect::RunTest(const FString& Parameters)
 {
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateMultiFloorResult();
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateMultiFloorResult();
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	TestFalse(TEXT("Room 0 single floor"), Contexts[0].bSpansMultipleFloors);
 	TestTrue(TEXT("Room 1 multi-floor"), Contexts[1].bSpansMultipleFloors);
@@ -579,7 +579,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemBossAtFarthest, "Dungeon.RoomSemantics.
 
 bool FRoomSemBossAtFarthest::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 
 	FDungeonRoomTypeRule BossRule;
 	BossRule.RoomType = EDungeonRoomType::Boss;
@@ -589,17 +589,17 @@ bool FRoomSemBossAtFarthest::RunTest(const FString& Parameters)
 	BossRule.bPreferMainPath = true;
 	Config->RoomTypeRules.Add(BossRule);
 
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateLinearResult(5);
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateLinearResult(5);
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	FDungeonSeed Seed(42);
-	FRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
+	FDungeonRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
 
 	// Room 4 is at NormalizedDistance=1.0, should be Boss
 	TestEqual(TEXT("Room 4 is Boss"), Result.Rooms[4].RoomType, EDungeonRoomType::Boss);
 	TestEqual(TEXT("Room 0 is still Entrance"), Result.Rooms[0].RoomType, EDungeonRoomType::Entrance);
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -608,7 +608,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemTreasurePrefersLeaf, "Dungeon.RoomSeman
 
 bool FRoomSemTreasurePrefersLeaf::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 
 	FDungeonRoomTypeRule TreasureRule;
 	TreasureRule.RoomType = EDungeonRoomType::Treasure;
@@ -617,11 +617,11 @@ bool FRoomSemTreasurePrefersLeaf::RunTest(const FString& Parameters)
 	TreasureRule.bPreferLeafNodes = true;
 	Config->RoomTypeRules.Add(TreasureRule);
 
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateBranchingResult();
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateBranchingResult();
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	FDungeonSeed Seed(42);
-	FRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
+	FDungeonRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
 
 	// Find which room is Treasure — should be a leaf (rooms 1-4)
 	int32 TreasureIdx = -1;
@@ -640,7 +640,7 @@ bool FRoomSemTreasurePrefersLeaf::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Treasure room is a leaf"), Contexts[TreasureIdx].bIsLeafNode);
 	}
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -649,7 +649,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemMultipleRulesRespected, "Dungeon.RoomSe
 
 bool FRoomSemMultipleRulesRespected::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 
 	FDungeonRoomTypeRule BossRule;
 	BossRule.RoomType = EDungeonRoomType::Boss;
@@ -671,11 +671,11 @@ bool FRoomSemMultipleRulesRespected::RunTest(const FString& Parameters)
 	RestRule.Priority = 25;
 	Config->RoomTypeRules.Add(RestRule);
 
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateLinearResult(5);
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateLinearResult(5);
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	FDungeonSeed Seed(42);
-	FRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
+	FDungeonRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
 
 	// Count types
 	int32 EntranceCount = 0, BossCount = 0, TreasureCount = 0, RestCount = 0, GenericCount = 0;
@@ -698,7 +698,7 @@ bool FRoomSemMultipleRulesRespected::RunTest(const FString& Parameters)
 	TestEqual(TEXT("1 Rest"), RestCount, 1);
 	TestEqual(TEXT("1 Generic"), GenericCount, 1);
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -707,15 +707,15 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemBossGuaranteeFallback, "Dungeon.RoomSem
 
 bool FRoomSemBossGuaranteeFallback::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 	Config->bGuaranteeBossRoom = true;
 	// No Boss rule in RoomTypeRules — the fallback should auto-assign one
 
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateLinearResult(5);
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateLinearResult(5);
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	FDungeonSeed Seed(42);
-	FRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
+	FDungeonRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
 
 	bool bHasBoss = false;
 	for (const FDungeonRoom& Room : Result.Rooms)
@@ -729,7 +729,7 @@ bool FRoomSemBossGuaranteeFallback::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("Boss room assigned via guarantee fallback"), bHasBoss);
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -738,17 +738,17 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRoomSemEntranceAlwaysAssigned, "Dungeon.RoomSe
 
 bool FRoomSemEntranceAlwaysAssigned::RunTest(const FString& Parameters)
 {
-	UDungeonConfiguration* Config = RoomSemanticsTestHelpers::CreateConfig();
+	UDungeonConfiguration* Config = DungeonRoomSemanticsTestHelpers::CreateConfig();
 
-	FDungeonResult Result = RoomSemanticsTestHelpers::CreateLinearResult(3);
-	TArray<FRoomSemanticContext> Contexts = FRoomSemantics::ComputeGraphMetrics(Result);
+	FDungeonResult Result = DungeonRoomSemanticsTestHelpers::CreateLinearResult(3);
+	TArray<FDungeonRoomSemanticContext> Contexts = FDungeonRoomSemantics::ComputeGraphMetrics(Result);
 
 	FDungeonSeed Seed(42);
-	FRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
+	FDungeonRoomSemantics::AssignRoomTypes(Result, *Config, Contexts, Seed);
 
 	TestEqual(TEXT("Room 0 is Entrance"), Result.Rooms[0].RoomType, EDungeonRoomType::Entrance);
 
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -803,7 +803,7 @@ bool FRoomSemPipelineDeterminism::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Graph distances are deterministic"), bDistancesMatch);
 
 	Generator->RemoveFromRoot();
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
 
@@ -840,6 +840,6 @@ bool FRoomSemValidatorPasses::RunTest(const FString& Parameters)
 	TestEqual(TEXT("No semantics issues"), SemanticsIssues.Num(), 0);
 
 	Generator->RemoveFromRoot();
-	RoomSemanticsTestHelpers::CleanupConfig(Config);
+	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }

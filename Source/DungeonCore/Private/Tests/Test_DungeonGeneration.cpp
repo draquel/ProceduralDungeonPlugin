@@ -2,7 +2,7 @@
 #include "Misc/AutomationTest.h"
 #include "DungeonCoreTestFixtures.h"
 #include "DungeonTypes.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonGenerator.h"
 #include "DungeonValidator.h"
 

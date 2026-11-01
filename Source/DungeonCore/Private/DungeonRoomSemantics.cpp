@@ -1,15 +1,15 @@
 // RoomSemantics.cpp — Entrance selection, graph analysis, and room type assignment
-#include "RoomSemantics.h"
-#include "DungeonConfig.h"
+#include "DungeonRoomSemantics.h"
+#include "DungeonCoreModule.h"
+#include "DungeonConfiguration.h"
 #include "DungeonSeed.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogRoomSemantics, Log, All);
 
 // ---------------------------------------------------------------------------
 // SelectEntranceRoom
 // ---------------------------------------------------------------------------
 
-int32 FRoomSemantics::SelectEntranceRoom(
+int32 FDungeonRoomSemantics::SelectEntranceRoom(
 	const FDungeonResult& Result,
 	const UDungeonConfiguration& Config,
 	FDungeonSeed& Seed)
@@ -64,7 +64,7 @@ int32 FRoomSemantics::SelectEntranceRoom(
 	// Fallback: if no candidates matched the placement rule, use all rooms
 	if (Candidates.Num() == 0)
 	{
-		UE_LOG(LogRoomSemantics, Warning,
+		UE_LOG(LogDungeonCore, Warning,
 			TEXT("SelectEntranceRoom: No rooms match EntrancePlacement=%d, falling back to all rooms"),
 			static_cast<int32>(Config.EntrancePlacement));
 		for (int32 i = 0; i < Result.Rooms.Num(); ++i)
@@ -81,7 +81,7 @@ int32 FRoomSemantics::SelectEntranceRoom(
 // ComputeEntranceApproach
 // ---------------------------------------------------------------------------
 
-FDungeonEntranceApproachInfo FRoomSemantics::ComputeEntranceApproach(
+FDungeonEntranceApproachInfo FDungeonRoomSemantics::ComputeEntranceApproach(
 	const FDungeonRoom& Room,
 	const FIntVector& EntranceCell,
 	const FDungeonEntranceSpec& Spec,
@@ -164,10 +164,10 @@ FDungeonEntranceApproachInfo FRoomSemantics::ComputeEntranceApproach(
 // ComputeGraphMetrics
 // ---------------------------------------------------------------------------
 
-TArray<FRoomSemanticContext> FRoomSemantics::ComputeGraphMetrics(FDungeonResult& Result)
+TArray<FDungeonRoomSemanticContext> FDungeonRoomSemantics::ComputeGraphMetrics(FDungeonResult& Result)
 {
 	const int32 NumRooms = Result.Rooms.Num();
-	TArray<FRoomSemanticContext> Contexts;
+	TArray<FDungeonRoomSemanticContext> Contexts;
 	Contexts.SetNum(NumRooms);
 
 	if (NumRooms == 0 || Result.EntranceRoomIndex < 0)
@@ -255,7 +255,7 @@ TArray<FRoomSemanticContext> FRoomSemantics::ComputeGraphMetrics(FDungeonResult&
 	// Build contexts
 	for (int32 i = 0; i < NumRooms; ++i)
 	{
-		FRoomSemanticContext& Ctx = Contexts[i];
+		FDungeonRoomSemanticContext& Ctx = Contexts[i];
 		Ctx.RoomArrayIndex = i;
 		Ctx.GraphDistance = Distance[i];
 		Ctx.NormalizedDistance = (MaxDistance > 0 && Distance[i] >= 0)
@@ -280,7 +280,7 @@ TArray<FRoomSemanticContext> FRoomSemantics::ComputeGraphMetrics(FDungeonResult&
 		Result.Rooms[i].bOnMainPath = Ctx.bOnMainPath;
 	}
 
-	UE_LOG(LogRoomSemantics, Log,
+	UE_LOG(LogDungeonCore, Log,
 		TEXT("ComputeGraphMetrics: %d rooms, maxDist=%d, farthestRoom=%d, mainPath=%d rooms"),
 		NumRooms, MaxDistance, FarthestRoom, MainPathSet.Num());
 
@@ -291,10 +291,10 @@ TArray<FRoomSemanticContext> FRoomSemantics::ComputeGraphMetrics(FDungeonResult&
 // AssignRoomTypes
 // ---------------------------------------------------------------------------
 
-void FRoomSemantics::AssignRoomTypes(
+void FDungeonRoomSemantics::AssignRoomTypes(
 	FDungeonResult& Result,
 	const UDungeonConfiguration& Config,
-	const TArray<FRoomSemanticContext>& Contexts,
+	const TArray<FDungeonRoomSemanticContext>& Contexts,
 	FDungeonSeed& Seed)
 {
 	const int32 NumRooms = Result.Rooms.Num();
@@ -338,7 +338,7 @@ void FRoomSemantics::AssignRoomTypes(
 				continue;
 			}
 
-			const FRoomSemanticContext& Ctx = Contexts[i];
+			const FDungeonRoomSemanticContext& Ctx = Contexts[i];
 			const FDungeonRoom& Room = Result.Rooms[i];
 
 			// Hard filter: unreachable rooms
@@ -421,7 +421,7 @@ void FRoomSemantics::AssignRoomTypes(
 		// Boss guarantee fallback: relax distance constraint if Boss rule failed
 		if (Rule.RoomType == EDungeonRoomType::Boss && Assigned == 0 && Config.bGuaranteeBossRoom)
 		{
-			UE_LOG(LogRoomSemantics, Log,
+			UE_LOG(LogDungeonCore, Log,
 				TEXT("Boss rule matched 0 rooms with distance filter, relaxing constraints"));
 
 			// Find best unassigned room by score without distance filter
@@ -461,7 +461,7 @@ void FRoomSemantics::AssignRoomTypes(
 	// Global boss guarantee: if no Boss rule existed at all but bGuaranteeBossRoom is true
 	if (Config.bGuaranteeBossRoom && !bBossAssigned)
 	{
-		UE_LOG(LogRoomSemantics, Log,
+		UE_LOG(LogDungeonCore, Log,
 			TEXT("No Boss rule in config, auto-assigning farthest main-path room as Boss"));
 
 		int32 BestIdx = -1;
@@ -502,7 +502,7 @@ void FRoomSemantics::AssignRoomTypes(
 		TypeCounts.FindOrAdd(Room.RoomType, 0)++;
 	}
 
-	UE_LOG(LogRoomSemantics, Log,
+	UE_LOG(LogDungeonCore, Log,
 		TEXT("AssignRoomTypes: Entrance=%d, Boss=%d, Treasure=%d, Generic=%d (of %d total)"),
 		TypeCounts.FindRef(EDungeonRoomType::Entrance),
 		TypeCounts.FindRef(EDungeonRoomType::Boss),

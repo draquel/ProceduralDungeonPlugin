@@ -1,9 +1,9 @@
-#include "HallwayPathfinder.h"
+#include "DungeonPathfinder.h"
+#include "DungeonCoreModule.h"
 #include "DungeonTypes.h"
-#include "DungeonConfig.h"
+#include "DungeonConfiguration.h"
 #include "DungeonBoundaryRules.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogDungeonPathfinder, Log, All);
 
 namespace
 {
@@ -172,7 +172,7 @@ namespace
 // Staircase validation
 // ============================================================================
 
-bool FHallwayPathfinder::CanBuildStaircase(
+bool FDungeonPathfinder::CanBuildStaircase(
 	const FDungeonGrid& Grid,
 	const FIntVector& Entry,
 	int32 DirX, int32 DirY,
@@ -474,7 +474,7 @@ namespace
 					for (int32 Rise : {+1, -1})
 					{
 						FIntVector ExitCell;
-						if (!FHallwayPathfinder::CanBuildStaircase(Grid, CurCoord, Dir.DX, Dir.DY, Rise,
+						if (!FDungeonPathfinder::CanBuildStaircase(Grid, CurCoord, Dir.DX, Dir.DY, Rise,
 						                                           RiseToRun, HeadroomCells, ExitCell))
 						{
 							continue;
@@ -612,7 +612,7 @@ namespace
 	}
 }
 
-bool FHallwayPathfinder::FindPath(
+bool FDungeonPathfinder::FindPath(
 	const FDungeonGrid& Grid,
 	const FIntVector& Start,
 	const FIntVector& End,
@@ -663,12 +663,12 @@ bool FHallwayPathfinder::FindPath(
 		{
 			BlockedCells[Grid.CellIndex(Cell)] = true;
 		}
-		UE_LOG(LogDungeonPathfinder, Verbose,
+		UE_LOG(LogDungeonCore, Verbose,
 			TEXT("FindPath (%d,%d,%d)->(%d,%d,%d): attempt %d routed %d hallway cell(s) onto its own staircase flank; retrying"),
 			Start.X, Start.Y, Start.Z, End.X, End.Y, End.Z, Attempt + 1, Violations.Num());
 	}
 
-	UE_LOG(LogDungeonPathfinder, Warning,
+	UE_LOG(LogDungeonCore, Warning,
 		TEXT("FindPath (%d,%d,%d)->(%d,%d,%d): still has hallway cells on its own staircase flanks after %d attempts; keeping the path"),
 		Start.X, Start.Y, Start.Z, End.X, End.Y, End.Z, MaxAttempts);
 	return true;
@@ -678,7 +678,7 @@ bool FHallwayPathfinder::FindPath(
 // Hallway & Staircase Carving
 // ============================================================================
 
-void FHallwayPathfinder::CarveHallway(
+void FDungeonPathfinder::CarveHallway(
 	FDungeonGrid& Grid,
 	const TArray<FIntVector>& Path,
 	uint8 HallwayIndex,

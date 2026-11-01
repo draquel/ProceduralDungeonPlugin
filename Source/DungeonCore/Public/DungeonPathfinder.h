@@ -7,11 +7,11 @@ struct FDungeonStaircase;
 class UDungeonConfiguration;
 
 /**
- * FHallwayPathfinder
+ * FDungeonPathfinder
  * Modified A* that carves hallways between rooms on the dungeon grid.
  * Supports staircase moves for multi-floor pathfinding.
  */
-struct DUNGEONCORE_API FHallwayPathfinder
+struct DUNGEONCORE_API FDungeonPathfinder
 {
 	/**
 	 * Find a path between two grid cells using A*.

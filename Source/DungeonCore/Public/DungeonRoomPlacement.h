@@ -11,13 +11,13 @@ enum class EDungeonCellType : uint8;
 class UDungeonConfiguration;
 
 /**
- * FRoomPlacement
+ * FDungeonRoomPlacement
  * Places rooms randomly on the grid with non-overlap and buffer constraints. With an entrance
  * approach configured (UDungeonConfiguration::Entrance), the entrance room is placed FIRST under
  * the approach constraints and its approach volume is reserved (EDungeonCellType::Reserved) so
  * the remaining rooms — and later the hallway pathfinder — keep out of it.
  */
-struct DUNGEONCORE_API FRoomPlacement
+struct DUNGEONCORE_API FDungeonRoomPlacement
 {
 	/**
 	 * Place the entrance room first under Spec and reserve its approach volume.

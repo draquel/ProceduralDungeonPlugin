@@ -66,10 +66,10 @@ struct DUNGEONOUTPUT_API FDungeonCoverage
 	 * @param Result      The generated dungeon.
 	 * @param TileMap     Its tile map (world space, at WorldOffset).
 	 * @param WorldOffset The offset the map was built with.
-	 * @param bOpenEntranceCeiling Whether the entrance opening was left unbuilt (that boundary is
+	 * @param bOpenEntranceOpening Whether the entrance opening was left unbuilt (that boundary is
 	 *        then expected open and not reported).
 	 * @return The report.
 	 */
 	static FDungeonCoverageReport Analyse(const FDungeonResult& Result, const FDungeonTileMapResult& TileMap,
-		const FVector& WorldOffset, bool bOpenEntranceCeiling);
+		const FVector& WorldOffset, bool bOpenEntranceOpening);
 };

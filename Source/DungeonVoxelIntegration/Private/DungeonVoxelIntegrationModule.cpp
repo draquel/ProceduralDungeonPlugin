@@ -1,4 +1,4 @@
-#include "DungeonVoxelIntegration.h"
+#include "DungeonVoxelIntegrationModule.h"
 
 DEFINE_LOG_CATEGORY(LogDungeonVoxelIntegration);
 

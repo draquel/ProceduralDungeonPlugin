@@ -2,7 +2,7 @@
 #include "DungeonEntrancePassagePlan.h"
 #include "DungeonVoxelConfig.h"
 #include "DungeonVoxelLattice.h"
-#include "DungeonVoxelIntegration.h"
+#include "DungeonVoxelIntegrationModule.h"
 #include "DungeonTypes.h"
 #include "DungeonBoundaryRules.h"
 #include "VoxelData.h"
@@ -19,7 +19,7 @@ namespace
 	 * triplanar texturing. Two voxels give the mesher a solid interior sample so both faces
 	 * mesh cleanly (and the shell survives a grazing edit).
 	 */
-	constexpr float ShellVoxels = 2.0f;
+	constexpr float JacketVoxels = 2.0f;
 
 	/**
 	 * Shell voxels are only written this many voxels or more below the LOCAL terrain surface.
@@ -110,7 +110,7 @@ void UDungeonEntranceStitcher::CollectColumnInterior(
 		});
 }
 
-int32 UDungeonEntranceStitcher::PlaceColumnShell(
+int32 UDungeonEntranceStitcher::PlaceColumnJacket(
 	UVoxelEditManager* EditManager,
 	const FDungeonVoxelLattice& Lattice,
 	const FDungeonPassageSegment& Segment,
@@ -129,11 +129,11 @@ int32 UDungeonEntranceStitcher::PlaceColumnShell(
 	}
 
 	const FVoxelData WallVoxel = FVoxelData::Solid(WallMaterialID, BiomeID);
-	const float Thickness = ShellVoxels * VoxelSize;
+	const float Thickness = JacketVoxels * VoxelSize;
 	const float SurfaceSkin = SurfaceSkinVoxels * VoxelSize;
 	const FVector& C = Segment.Center;
 	const float Outer = Segment.HalfExtentXY + Thickness;
-	const float ZPad = Segment.bFloorCeilingShell ? Thickness : 0.0f;
+	const float ZPad = Segment.bFloorCeilingJacket ? Thickness : 0.0f;
 
 	int32 Written = 0;
 	Lattice.ForEachSampleInBox(
@@ -186,9 +186,9 @@ int32 UDungeonEntranceStitcher::PlaceColumnShell(
 			const bool bWithinOuterXY = DX < Outer && DY < Outer;
 			const bool bWithinInnerXY = DX < Segment.HalfExtentXY && DY < Segment.HalfExtentXY;
 			const bool bWithinZ = FramePos.Z >= Segment.BottomZ && FramePos.Z < Segment.TopZ;
-			const bool bSideShell = bWithinOuterXY && !bWithinInnerXY && bWithinZ;
-			const bool bCapShell = Segment.bFloorCeilingShell && bWithinOuterXY && !bWithinZ;
-			if (!bSideShell && !bCapShell)
+			const bool bSideJacket = bWithinOuterXY && !bWithinInnerXY && bWithinZ;
+			const bool bCapJacket = Segment.bFloorCeilingJacket && bWithinOuterXY && !bWithinZ;
+			if (!bSideJacket && !bCapJacket)
 			{
 				return;
 			}
@@ -223,8 +223,8 @@ int32 UDungeonEntranceStitcher::CarveCaveOpening(
 	const FVoxelData AirVoxel = FVoxelData::Air();
 	const FVoxelData WallVoxel = FVoxelData::Solid(Config->WallMaterialID, Config->DungeonBiomeID);
 
-	// Carve a column with noise-displaced radius per Z-level; 2-voxel shell (see ShellVoxels).
-	const float WallThickness = ShellVoxels * VoxelSize;
+	// Carve a column with noise-displaced radius per Z-level; 2-voxel shell (see JacketVoxels).
+	const float WallThickness = JacketVoxels * VoxelSize;
 	const float TotalHeight = CarveTopZ - EntranceZ;
 
 	const UVoxelWorldConfiguration* VoxelConfig = ChunkManager->GetConfiguration();
@@ -386,7 +386,7 @@ int32 UDungeonEntranceStitcher::StitchEntranceInFrame(
 		TMap<FIntPoint, float> SurfaceCache;
 		for (const FDungeonPassageSegment& Seg : Plan.Segments)
 		{
-			VoxelsModified += PlaceColumnShell(EditManager, Lattice, Seg, Interior, Result, WorldOffset,
+			VoxelsModified += PlaceColumnJacket(EditManager, Lattice, Seg, Interior, Result, WorldOffset,
 				VoxelSize, SampleSurface, SurfaceCache, Config->WallMaterialID, Config->DungeonBiomeID);
 		}
 	}

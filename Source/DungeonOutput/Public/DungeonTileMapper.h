@@ -306,7 +306,7 @@ struct DUNGEONOUTPUT_API FDungeonTileMapper
 	 * @param Result      The generated dungeon grid data.
 	 * @param TileSet     Mesh mapping (used to determine which slots are active).
 	 * @param WorldOffset World-space offset applied to all transforms (typically actor location).
-	 * @param bOpenEntranceCeiling Leave the entrance OPENING unbuilt so a stitched passage can
+	 * @param bOpenEntranceOpening Leave the entrance OPENING unbuilt so a stitched passage can
 	 *        enter the entrance room. Which tile is skipped follows Result.EntranceApproach:
 	 *        the lid of the opening cell (FromAbove, and results with no approach) or its wall on
 	 *        the approach face (FromSide). Off by default: a
@@ -317,7 +317,7 @@ struct DUNGEONOUTPUT_API FDungeonTileMapper
 		const FDungeonResult& Result,
 		const UDungeonTileSet& TileSet,
 		const FVector& WorldOffset,
-		bool bOpenEntranceCeiling = false);
+		bool bOpenEntranceOpening = false);
 
 	/**
 	 * Deterministic identity of an interactable placed on a cell face — the key of the per-dungeon

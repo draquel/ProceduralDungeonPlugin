@@ -1,5 +1,7 @@
 #include "DungeonCoreModule.h"
 
+DEFINE_LOG_CATEGORY(LogDungeonCore);
+
 #define LOCTEXT_NAMESPACE "FDungeonCoreModule"
 
 void FDungeonCoreModule::StartupModule()

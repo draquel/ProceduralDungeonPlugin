@@ -146,7 +146,7 @@ FDungeonEntrancePassagePlan FDungeonEntrancePassagePlan::Build(
 			Seg.BottomZ = FloorZ;
 			Seg.TopZ = CeilingZ;
 			Seg.bWalls = (Cell != A.OpeningCell);
-			Seg.bFloorCeilingShell = Seg.bWalls;
+			Seg.bFloorCeilingJacket = Seg.bWalls;
 			Seg.Cell = Cell;
 			Seg.bInsideGrid = true;
 			Cell += FIntVector(DX, DY, 0);
@@ -177,7 +177,7 @@ FDungeonEntrancePassagePlan FDungeonEntrancePassagePlan::Build(
 			Seg.BottomZ = Bottom;
 			Seg.TopZ = Bottom + (CeilingZ - FloorZ);
 			Seg.bWalls = true;
-			Seg.bFloorCeilingShell = true;
+			Seg.bFloorCeilingJacket = true;
 			Seg.bInsideGrid = false;
 
 			++Step;

@@ -3,10 +3,10 @@
 #include "CoreMinimal.h"
 
 /**
- * FMinimumSpanningTree
+ * FDungeonMST
  * Prim's algorithm on a weighted graph. Produces the MST edge set.
  */
-struct DUNGEONCORE_API FMinimumSpanningTree
+struct DUNGEONCORE_API FDungeonMST
 {
 	/**
 	 * Compute MST from edges with Euclidean distance weights.
