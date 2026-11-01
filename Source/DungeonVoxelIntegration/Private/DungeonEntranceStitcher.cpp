@@ -53,16 +53,16 @@ float UDungeonEntranceStitcher::DetectSurfaceHeight(UVoxelChunkManager* ChunkMan
 	{
 		return 0.0f;
 	}
-	// The world frame on a heightmap world: GetGeneratedSurfaceHeight is the canonical analytic surface, continentalness
+	// The world frame on a heightmap world: GetGeneratedSurfacePoint is the canonical analytic surface, continentalness
 	// AND terrain-conditioning zones included, so the shaft top lands on the REAL generated surface. (The raw
 	// IVoxelWorldMode::GetTerrainHeightAt misses conditioning: on a flattened POI pad it either capped the shaft below the
 	// pad crust or collared it above.)
 	if (!Lattice.bRotated && WorldMode->IsHeightmapBased())
 	{
-		return ChunkManager->GetGeneratedSurfaceHeight(X, Y);
+		return ChunkManager->GetGeneratedSurfacePoint(FVector(X, Y, 0.0)).Z;
 	}
 	// Any other frame (a planet POI's pad space, or the world frame off a heightmap): the frame-space height where the
-	// frame's vertical line through (X, Y) meets the generated surface (conditioning included, as GetGeneratedSurfaceHeight
+	// frame's vertical line through (X, Y) meets the generated surface (conditioning included, as GetGeneratedSurfacePoint
 	// on a heightmap): the root of f(z) = altitude(P(z)) - the generated surface's altitude along P(z)'s up line. df/dz is the
 	// cosine between the frame's z and local up, within a few degrees of 1 across a dungeon, so a few corrected steps
 	// converge to a hundredth of a unit.
