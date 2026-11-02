@@ -243,7 +243,7 @@ void ADungeonActor::GenerateDungeon()
 	// so identical geometry — from different tile types, pieces or module elements — shares one
 	// instanced component. A single-mesh piece emits one instance; a module piece expands to one
 	// instance per element at (ModuleElement.RelativeTransform * TileAnchor). See
-	// Documentation/TILE_MODULE_SYSTEM_PLAN.md.
+	// Documentation/Archive/TILE_MODULE_SYSTEM_PLAN.md.
 	struct FRenderBatch
 	{
 		UStaticMesh* Mesh = nullptr;

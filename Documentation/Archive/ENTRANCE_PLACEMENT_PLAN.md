@@ -1,5 +1,7 @@
 # Entrance Placement Control — Review & Design Plan
 
+> **Archived 2026-11-02** (code review CR5, D-CR6): the September entrance placement plan, P0-P3 built 2026-09-26 (`FromBelow` deleted in CR1). Current: [ARCHITECTURE.md](../ARCHITECTURE.md) §5 ("Entrance approach") and §7 ("Entrance stitching"). Kept as history.
+
 **Status:** P0 merged (PDP#11 / parent #44) and P1 merged (PDP#12 / parent #45), 2026-09-26.
 P2 merged (PDP#13 / parent #46): `FDungeonEntrancePassagePlan` (pure carve geometry from
 `EntranceApproach`, unit-tested), stitcher refuses style/approach mismatches, `SlopedTunnel`

@@ -1,6 +1,8 @@
 # Tile Module System — Design Plan
 
-**Status:** Proposed (not implemented)
+> **Archived 2026-11-02** (code review CR5, D-CR6): the September plan for multi-mesh tile modules, built (P1-P4, the content 2026-09-23; slot model 5b, `FDungeonTileSlot`). Current: [ARCHITECTURE.md](../ARCHITECTURE.md) §6 ("Tile modules"). Kept as history.
+
+**Status at archiving:** built, P1-P4.
 **Scope:** `DungeonOutput` module only. No `DungeonCore` change; the generator and
 `FDungeonResult` are untouched. The voxel-carve/stamp path (`DungeonVoxelIntegration`) is
 independent and unaffected.
