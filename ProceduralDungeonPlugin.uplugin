@@ -18,6 +18,10 @@
 			"Name": "VoxelWorlds",
 			"Enabled": true,
 			"Optional": true
+		},
+		{
+			"Name": "DataValidation",
+			"Enabled": true
 		}
 	],
 	"Modules": [
