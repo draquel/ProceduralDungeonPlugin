@@ -1,170 +1,101 @@
 # ProceduralDungeon — Claude Code Instructions
 
-## Project Overview
+> State as of 2026-11-02 (code review CR5). Terms: `Documentation/GLOSSARY.md` ("Dungeons and places").
 
-ProceduralDungeon is a **standalone Unreal Engine 5.7 plugin** that generates 3D procedural dungeons using a TinyKeep-derived algorithm (Vazgriz). It operates independently but has an optional integration layer for the VoxelWorlds voxel terrain plugin.
+A standalone Unreal Engine 5.8 plugin that generates 3D multi-floor dungeons (a TinyKeep-derived algorithm, after
+Vazgriz), dresses them with instanced tiles and stamps them into VoxelWorlds terrain. These are the rules; the system
+itself is described in `Documentation/ARCHITECTURE.md`.
 
-**Reference Algorithm**: https://vazgriz.com/119/procedurally-generated-dungeons/
+## Reading order
 
-## Architecture Principles
+1. `Documentation/ARCHITECTURE.md` — modules, data, the pipeline, the entrance approach, tiles and modules, the voxel
+   bridge, determinism. Start here for any change.
+2. The headers of the module you touch (`Source/<Module>/Public/`); each class carries its own doc comment.
+3. For the voxel bridge: `Plugins/VoxelWorlds/Documentation/Features/EDIT_LAYER.md` and `WORLD_MODES.md` (frames).
+4. For POI dungeons (stamp once, tile actor over the carve, interactables, saves): the VoxelWorldPOI docs,
+   `Plugins/VoxelWorldPOI/Documentation/POI_DUNGEON_PLAN.md`.
+5. History only: `Documentation/Archive/` (entrance placement, environment polish, tile module plans, all built).
 
-1. **Standalone Core**: `DungeonCore` has zero plugin dependencies — only UE Core/CoreUObject/Engine. All generation logic lives here.
-2. **Optional VoxelWorlds Integration**: `DungeonVoxelIntegration` module is disabled by default. It bridges dungeon data to VoxelWorlds via edit layer stamping or a custom `IVoxelWorldMode`.
-3. **Deterministic Generation**: ALL randomness flows through `FDungeonSeed` (wraps `FRandomStream`). No `FMath::Rand()`, no hash map iteration order dependence. Forked sub-seeds per pipeline stage.
-4. **Semantic Rooms**: Room types (Entrance, Boss, Treasure, Secret, etc.) are first-class concepts that affect placement rules during generation, not decorators applied after.
-5. **Abstract Output**: The generator produces `FDungeonResult` (pure data). Rendering is handled by output backends (tile-based actors, voxel stamping, etc.) via `IDungeonOutputHandler`.
+## Modules and dependencies (strict)
 
-## Module Structure
+| Module | Type | Depends on |
+|--------|------|------------|
+| `DungeonCore` | Runtime | Core, CoreUObject, Engine only |
+| `DungeonOutput` | Runtime | `DungeonCore` (+ `UnrealEd` privately in editor builds) |
+| `DungeonEditor` | Editor | `DungeonCore`, `DungeonOutput` |
+| `DungeonVoxelIntegration` | Runtime | `DungeonCore`; VoxelWorlds' modules privately |
 
-```
-DungeonCore         → Core algorithm, data structures, no plugin deps
-DungeonOutput       → Tile-based static mesh output, ADungeonActor
-DungeonEditor       → Editor-only tools, preview actor, debug viz
-DungeonVoxelIntegration → Optional VoxelWorlds bridge (disabled by default)
-```
+- Never add a VoxelWorlds dependency to `DungeonCore` or `DungeonOutput`, and nothing game-specific (interaction,
+  inventory, saves) to any module: the game layer (VoxelWorldPOI) subclasses and hooks in.
+- `DungeonVoxelIntegration` is loaded unconditionally by the `.uplugin` and links VoxelWorlds; it is not "disabled by
+  default" (DNG-29).
 
-### Dependency Rules (STRICT)
+## Rules
 
-- `DungeonCore`: Depends on NOTHING except UE Core modules
-- `DungeonOutput`: Depends on `DungeonCore` only
-- `DungeonEditor`: Depends on `DungeonCore` + `DungeonOutput`
-- `DungeonVoxelIntegration`: Depends on `DungeonCore` + `VoxelCore` (from VoxelWorlds)
-- **NEVER** add VoxelWorlds dependencies to DungeonCore or DungeonOutput
+**Boundary rules.** `FDungeonBoundaryRules` (DungeonCore) is the one source of wall / floor / ceiling decisions:
+`NeedsWall`, `NeedsVerticalBoundary`, `OwnsSharedFace`, `IsOpenCell`. The tile mapper and the voxel stamper call it;
+never re-implement a predicate in a backend (copies drifted three times, each sealing a doorway or dropping a floor).
+Every rule has a test under `Dungeon.BoundaryRules.*`; a new rule gets one.
 
-## Key Interfaces & Classes
+**Determinism.** Identical seed + configuration + entrance spec must give an identical dungeon on every platform.
+- All randomness through `FDungeonSeed`; no `FMath::Rand()` / `FMath::SRand()`.
+- No dependence on `TMap` / `TSet` iteration order; sort by a deterministic key.
+- One `Fork` per sub-system (rooms 1, edges 2, entrance selection 3, types 4, entrance room 5, Delaunay jitter 99); a
+  new consumer takes a new fork number so existing layouts do not change.
+- Integer math on the grid; float only in the Delaunay circumsphere tests.
+- Tile choices (variants, decor) hash seed, cell, type and salt; they take no stream draws.
+- Seed precedence: a non-zero `Seed` passed to `Generate` always wins; `bUseFixedSeed` / `FixedSeed` only replace the
+  clock fallback for seed 0 (`UDungeonConfiguration::ResolveSeed`).
 
-### Interfaces
-- `IDungeonOutputHandler` — Abstract output consumer (tile actors, voxel stamper, etc.)
+**One build path.** Anything that must agree with a tile actor's layout goes through `ADungeonActor::BuildDungeon` with
+the same inputs (configuration, tileset, seed, entrance override, opening flag). The entrance spec changes room
+placement, so a caller that drops it builds a different dungeon.
 
-### Core Classes
-- `UDungeonGenerator` — Main generation orchestrator, runs the full pipeline
-- `FDungeonSeed` — Deterministic RNG wrapper with fork support
-- `FDungeonGrid` — 3D integer grid holding all cell data
-- `UDungeonConfiguration` — Data asset with all generation parameters
-- `FDungeonBoundaryRules` — THE wall / floor / ceiling predicates (`NeedsWall`, `NeedsVerticalBoundary`, `IsOpenCell`). Every output backend (tile mapper, voxel stamper, world mode) must call these; never re-implement them in a backend — they drifted three times and each drift sealed a doorway or dropped a floor. Rule-per-test coverage in `Dungeon.BoundaryRules.*`
+**The result is immutable.** Never modify an `FDungeonResult` after generation; derive what you need.
 
-### Algorithm Classes
-- `FDungeonDelaunay3D` — 3D Bowyer-Watson (ported from Vazgriz C#)
-- `FDungeonMST` — Prim's algorithm on room graph
-- `FDungeonPathfinder` — Modified A* with staircase constraints
-- `FDungeonRoomPlacement` — Room placement with semantic type awareness
+**The entrance.** Declare the approach (`FDungeonEntranceSpec`) before generation; backends read
+`FDungeonResult::EntranceApproach` and `GetEntranceOpeningCell()`, never re-derive them. Approach `None` is the
+standalone default, not a legacy value. A stitcher style must match the approach (`VerticalShaft`, `CaveOpening`,
+`Trapdoor` → `FromAbove`; `SlopedTunnel` → `FromSide`).
 
-### Output Classes
-- `ADungeonActor` — Runtime actor owning a generated dungeon
-- `FDungeonTileMapper` — Grid cell → tile instances (per piece), plus `Openings` (door leaves), `Fixtures` (wall lights); the wall profile fit and corner posts live here
-- `UDungeonTileSet` — Data asset: per-type `FDungeonTileSlot` (mesh or module, weighted `Variants`), `RoomTypeOverrides`, `WallProfile`, `FixtureRules`, `DecorRules`, `InteriorLighting`, door-leaf / wall-light meshes
-- `FDungeonBoundaryRules` (DungeonCore) — the ONE source of wall / floor / ceiling decisions, incl. `OwnsSharedFace`; the tile mapper and voxel stamper both call it
-- `FDungeonWallProfileConformance` — measures wall-family modules (variants and overrides included) against the tileset profile; `UDungeonTileSetValidator` (DungeonEditor) surfaces it as asset validation
-- `FDungeonCoverage` — light-tightness report of a tile map (needed boundaries vs placed pieces); `ADungeonActor::DescribeCoverage`
-- `ADungeonActor::BuildDungeon` — the single generate + map entry point every consumer (the actor, POI gameplay) goes through
-- `IDungeonInteractable`, `ADungeonDoorActor`, `ADungeonTorchActor` — the gameplay half of a tiled dungeon: the tile actor spawns one `DoorActorClass` per Doorway opening (at `LeafHinge`) and one `WallLightActorClass` per WallLight fixture (at `Anchor`) in game worlds on authority (`bSpawnInteractables`, `SpawnInteractables()`, `GetOpenings()` / `GetFixtures()` for Blueprint), and tells each actor its record through the interface. The plugin actors replicate state and animate; they keep NO persistence and NO interaction prompt (no game-framework dependency) — game layers subclass them (VoxelWorldPOI's `APOIDungeonDoor` / `APOIDungeonTorch` add the state record and `UInteractableComponent`) and set `bSpawnInteractables = false` when they hang their own
-- Props (feature 3 loot, feature 5 hazards): a FloorDecor / HallwayDecor slot or variant with `Role = EDungeonPropRole::Container` or `Trap` is instanced like any decor AND recorded as an `FDungeonProp` (cell, room index, kind Container / Trap, piece, transform, plus `TileType` + `InstanceIndex` addressing its instance) in `FDungeonTileMapResult::Props` (`ADungeonActor::GetProps()`); gameplay hangs an actor on the record (VoxelWorldPOI's `APOIDungeonContainer` / `APOIDungeonTrap`) keyed by `MakeInteractableId(cell, 0, 0, kind)`. `ADungeonActor::SetTileInstanceHidden(TileType, InstanceIndex, bHidden)` collapses one instance to zero scale (a broken crate) in every render batch it contributed to, without rebuilding; the actor keeps an `InstanceLookup` from (type, index) to (batch key, batch index). The plugin spawns nothing for props itself. Test: `Dungeon.Interactables.ContainerPropsFromDecor`
-- See `Documentation/ENVIRONMENT_POLISH_PLAN.md` (E1–E6 as built) and `TILE_MODULE_SYSTEM_PLAN.md`
+**Tiles.** Bulk tiles are HISM instances, one HISM per (mesh, material) batch; never a component or actor per tile.
+Actors are for what carries state (doors, torches; props hang actors on `FDungeonProp` records), counted in the tens.
+Wall-family pieces are authored to the tileset's `FDungeonWallProfile`; run `UDungeonTileSet::CheckWallProfile()` (the
+editor validator does on save) after changing one. A floor's walkable top is `FDungeonTileMapper::TileThickness`.
+Never hard-code the cell size: read `UDungeonConfiguration::CellWorldSize`.
 
-### VoxelWorlds Integration Classes
-- `UDungeonVoxelStamper` — Converts dungeon cells to voxel edit operations
-- `UDungeonEntranceStitcher` — Connects dungeon entrance to terrain surface
-- `UDungeonVoxelConfig` — Material mapping (dungeon cells → voxel MaterialIDs)
+**Interactables.** `ADungeonDoorActor` / `ADungeonTorchActor` replicate state and animate; persistence and prompts
+belong to game-layer subclasses through the virtual hooks and `IDungeonInteractable`. IDs come from
+`FDungeonTileMapper::MakeInteractableId` and must stay stable.
 
-### Core Data Structures
-- `FDungeonCell` — 8 bytes per grid cell (type, room index, floor, material hint, flags)
-- `FDungeonRoom` — Room with semantic type, position, size, connectivity
-- `FDungeonHallway` — Carved path between two rooms
-- `FDungeonStaircase` — Vertical connection with rise:run and headroom
-- `FDungeonResult` — Complete immutable output of the generator
+**The voxel bridge.**
+- Stamp and stitch through `StampDungeonInFrame` / `StitchEntranceInFrame` (the one entry point each): system edits
+  through `UVoxelEditManager`, one operation, outside the undo history.
+- The jacket is `UDungeonVoxelConfig::WallThickness` layers around every closed face: in `CarveUnderground` the lining
+  (`InnerLiningLayers`, one) inside the cell and the seal outside, never into another open cell; in `CarveOnly` all of it
+  outside, past `CarveMarginVoxels`. Never line more than one layer inside a cell: a jacket lined from inside filled
+  one-storey rooms solid (G24). Content on a voxel-carved floor stands `GetInnerLiningThickness` over the cell's bottom
+  plane (`Dungeon.Stamp.VoxelLining`, `Dungeon.Stamp.CarvedFloorCollision`).
+- Frames: enumerate samples through `FDungeonVoxelLattice::ForEachSampleInBox` (never `RangeForBox` directly in new stamp
+  code) so a rotated frame works, and keep the identity frame bit for bit (`Dungeon.Stamp.RotatedFrame` compares the
+  edits). Tiles in a frame: `ADungeonActor::bMapInActorFrame`.
+- Scale: `CellWorldSize / VoxelSize` voxels per cell (`UDungeonVoxelConfig::GetEffectiveVoxelsPerCell`).
 
-## Generation Pipeline (10 Steps)
+**Performance.** The A\* pathfinder is O(N²) worst case: keep runtime grids at or under 50×50×10. Generation is
+synchronous and CPU-only.
 
-```
-1. Initialize Grid → 2. Seed RNG → 3. Place Rooms → 4. Assign Room Types
-→ 5. Delaunay Tetrahedralization → 6. MST (Prim's) → 7. Edge Re-addition
-→ 8. Mark Main Path → 9. A* Hallway Carving → 10. Place Entrances & Doors
-```
+## Naming
 
-Steps 3-4 run in two passes: structural constraints before graph, graph-based constraints after MST.
+Every type carries `Dungeon` after the UE letter: `FDungeonRoom`, `UDungeonTileSet`, `ADungeonActor`,
+`IDungeonInteractable`, `EDungeonRoomType`. One primary class per file; headers in `Public/`, implementations in `Private/`, tests in
+`Private/Tests/Test_*.cpp`. Function categories follow `Dungeon|Sub` (`Dungeon|Actor`, `Dungeon|Voxel|Stamper`). A
+renamed reflected name gets a `[CoreRedirects]` line in `Config/DefaultProceduralDungeonPlugin.ini`.
 
-## Naming Conventions
+## Tests
 
-Follow UE conventions with dungeon-specific prefixes:
-- `FDungeon*` — Dungeon-specific structs
-- `UDungeon*` — Dungeon UObject classes
-- `ADungeon*` — Dungeon actors
-- `IDungeon*` — Dungeon interfaces (currently only `IDungeonOutputHandler`)
-- `EDungeon*` — Dungeon enums
-
-## File Organization
-
-```cpp
-// 1. #pragma once
-// 2. CoreMinimal.h
-// 3. Engine includes
-// 4. DungeonCore includes (for other modules)
-// 5. Forward declarations
-// 6. Class/struct definitions
-```
-
-Headers in `Public/`, implementations in `Private/`. One primary class per file.
-
-## Determinism Rules (CRITICAL)
-
-These rules ensure identical seed + config → identical dungeon across platforms:
-
-1. **No `FMath::Rand()` or `FMath::SRand()`** — ALL randomness via `FDungeonSeed`
-2. **No hash map iteration** where order matters — use `TArray` sorted by deterministic key
-3. **Fork seeds per sub-system** — `Seed.Fork(1)` for rooms, `Seed.Fork(2)` for edges, etc.
-4. **Integer math for grid ops** — float only for Delaunay circumsphere (deterministic given identical inputs)
-5. **No platform-specific float rounding** — `FRandomStream` is cross-platform deterministic in UE
-6. **Seed precedence** — an explicit non-zero `Seed` passed to `Generate` always wins; `bUseFixedSeed`/`FixedSeed` only replace the clock fallback when the caller passes 0 (`UDungeonConfiguration::ResolveSeed`). A config must never silently override a caller's seed.
-
-## VoxelWorlds Integration Notes
-
-When working on `DungeonVoxelIntegration`:
-- Dungeon stamping uses VoxelWorlds' `UVoxelEditManager` (edit layer overlay)
-- Material mapping: dungeon cell type → `FVoxelData::MaterialID` via `UDungeonVoxelConfig` (`MaterialHint` was deleted in CR1, DNG-06)
-- Entrance stitching traces from terrain surface down to dungeon entrance cell
-- Scale bridging: `CellWorldSize / VoxelSize` = voxels per dungeon cell
-- The voxel jacket (`UDungeonVoxelConfig::WallThickness` layers around every closed face): the voxel-lined modes put
-  `InnerLiningLayers` (one) inside the cell, the surface a floor stands on, and the rest OUTSIDE it through the outer
-  seal (never into an open cell); `CarveOnly` puts all of it outside. Never line more than that inside a cell: a jacket
-  lined from inside filled one-storey rooms solid (G24, VoxelWorlds review plan §19.8). Content standing on a voxel-carved
-  floor goes `GetInnerLiningThickness` over the cell's bottom plane (`Dungeon.Stamp.VoxelLining`,
-  `Dungeon.Stamp.CarvedFloorCollision`)
-- Frames (spherical Phase 5): `StampDungeonInFrame` / `StitchEntranceInFrame` take a frame (frame space to world) and
-  `ADungeonActor::bMapInActorFrame` lays the tiles out in the actor's frame; enumerate samples through
-  `FDungeonVoxelLattice::ForEachSampleInBox` (never `RangeForBox` directly in new stamp code) so a rotated frame works,
-  and keep the identity frame bit for bit (`Dungeon.Stamp.RotatedFrame` compares the edits)
-
-## Performance Constraints
-
-- A* pathfinder is O(N²) worst-case — keep grids ≤ 50×10×50
-- Generation is CPU-only (algorithm is inherently sequential)
-- Large dungeons (50×10×50) should use async generation
-- Tile output should use ISM batching, not individual StaticMeshComponents
-- Voxel stamping may touch 20-50 chunks — queue remeshes, don't block
-
-## Common Development Commands
-
-```bash
-# Build plugin
-UE5Editor-Cmd.exe YourProject.uproject -run=UnrealBuildTool -mode=build
-
-# Run tests
-UE5Editor-Cmd.exe YourProject.uproject -run=AutomationTest -filter="Dungeon"
-```
-
-## Documentation
-
-All documentation lives in `Documentation/`:
-- `ARCHITECTURE.md` — Complete system design (START HERE)
-- `ALGORITHM_REFERENCE.md` — Detailed algorithm walkthrough
-- `QUICK_START.md` — Getting started
-
-## Anti-Patterns (AVOID)
-
-- ❌ Adding VoxelWorlds deps to DungeonCore or DungeonOutput
-- ❌ Using `FMath::Rand()` anywhere in generation code
-- ❌ Iterating `TMap` where order affects output
-- ❌ Individual `UStaticMeshComponent` per tile (use ISM)
-- ❌ Synchronous voxel stamping on game thread
-- ❌ Hardcoded cell size (always use `UDungeonConfiguration::CellWorldSize`)
-- ❌ Modifying `FDungeonResult` after generation (it's immutable output)
+Automation tests are `Dungeon.*` (`Dungeon.BoundaryRules`, `Generation`, `GridValidation`, `RoomSemantics`, `Seed`,
+`TileMapper`, `TileModule`, `WallProfile`, `Variety`, `Interactables`, `Coverage`, `Stamp`, `Stitch`, `VoxelLattice`,
+`VoxelStampPlan`, `EntrancePassagePlan`). Run them in the editor (`Automation RunTests Dungeon`, or unreal-mcp's
+automation test toolset) or headless with the project's usual `UnrealEditor-Cmd.exe` automation run. A change to the
+generator also runs `Dungeon.Generation.Determinism.*`; a change to the stamper or stitcher, `Dungeon.Stamp.*` and
+`Dungeon.Stitch.*`.

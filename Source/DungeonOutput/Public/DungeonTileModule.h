@@ -47,7 +47,7 @@ struct DUNGEONOUTPUT_API FDungeonModuleElement
  *
  * Modules bake down to shared HISM instances at render time (one HISM per unique
  * (mesh, material) across the whole tileset), so N composed tiles cost the same draw calls as N
- * single meshes — no per-tile actors. See Documentation/TILE_MODULE_SYSTEM_PLAN.md.
+ * single meshes — no per-tile actors. See Documentation/Archive/TILE_MODULE_SYSTEM_PLAN.md.
  */
 UCLASS(BlueprintType)
 class DUNGEONOUTPUT_API UDungeonTileModule : public UDataAsset

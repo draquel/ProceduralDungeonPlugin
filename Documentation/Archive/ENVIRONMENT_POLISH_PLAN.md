@@ -1,5 +1,7 @@
 # Dungeon Environment Polish — Design Plan (final generation phase)
 
+> **Archived 2026-11-02** (code review CR5, D-CR6): the September environment polish epic E1-E6, done and signed off 2026-09-27, with the post-sign-off fixes of 2026-10-05. Current: [ARCHITECTURE.md](../ARCHITECTURE.md) §6 ("Environment polish"). Kept as history.
+
 **Status:** EPIC COMPLETE — E6 sweep + sign-off done 2026-09-27 (see §8). E5 merged (PDP#20 / parent #53). E4 merged (PDP#19 / parent #52). E3 merged (PDP#18 / parent #51). E2 merged (PDP#17 / parent #50). E1 merged (PDP#16 / parent #49): `OwnsSharedFace`,
 `WallPartition` slot + mapper ownership (not a tileset default: map properties serialize as a
 delta against the class default, so a new default key would appear as an engine cube in every
