@@ -22,7 +22,7 @@
 
 namespace DungeonStaircaseFlankTestHelpers
 {
-	/** The DungeonTest map's configuration (DA /Game/PluginTesting/Config/DungeonConfig). */
+	/** The DungeonTest map's configuration (DA /Game/PluginTesting/Tests/Dungeon/DungeonConfig). */
 	UDungeonConfiguration* CreateDungeonTestConfig()
 	{
 		UDungeonConfiguration* Config = NewObject<UDungeonConfiguration>();
