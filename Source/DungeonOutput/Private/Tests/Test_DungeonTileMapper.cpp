@@ -7,6 +7,8 @@
 #include "DungeonTileMapper.h"
 #include "DungeonBoundaryRules.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 // ============================================================================
 // Test Helpers
 // ============================================================================
@@ -807,3 +809,5 @@ bool FTileMapperWallCoverage::RunTest(const FString& Parameters)
 	Config->RemoveFromRoot();
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

@@ -7,6 +7,8 @@
 #include "DungeonTypes.h"
 #include "DungeonBoundaryRules.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 namespace DungeonBoundaryRulesTestHelpers
 {
 	/** A 3x3x3 grid, all Empty, with (1,1,1) as the "current" cell under test. */
@@ -470,3 +472,5 @@ bool FBoundarySharedFaceOwner::RunTest(const FString& Parameters)
 	}
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

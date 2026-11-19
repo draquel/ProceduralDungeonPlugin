@@ -13,6 +13,8 @@
 #include "Misc/AutomationTest.h"
 #include "DungeonVoxelLattice.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 namespace
 {
 	/** The demo's numbers: 400 cm cells on a 75 cm voxel grid. */
@@ -222,3 +224,5 @@ bool FDungeonLatticeSurfaceWithinHalfVoxel::RunTest(const FString& Parameters)
 	}
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

@@ -5,6 +5,8 @@
 #include "DungeonEntrancePassagePlan.h"
 #include "DungeonTypes.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 namespace
 {
 	constexpr float PassageCS = 400.0f;
@@ -306,3 +308,5 @@ bool FPassagePlanShellFlags::RunTest(const FString& Parameters)
 	TestFalse(TEXT("shaft: no cap shell"), Shaft.Segments[0].bFloorCeilingJacket);
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

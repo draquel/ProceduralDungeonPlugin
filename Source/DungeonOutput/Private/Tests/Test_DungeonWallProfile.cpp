@@ -10,6 +10,8 @@
 #include "DungeonBoundaryRules.h"
 #include "Engine/StaticMesh.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 namespace DungeonWallProfileTestHelpers
 {
 	const FSoftObjectPath EngineCube(TEXT("/Engine/BasicShapes/Cube.Cube")); // 100 x 100 x 100, centred
@@ -429,3 +431,5 @@ bool FWallProfileHeight::RunTest(const FString& Parameters)
 	}
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

@@ -12,6 +12,8 @@
 #include "DungeonTileSet.h"
 #include "DungeonTileMapper.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 namespace DungeonTileMapperStairFlankTestHelpers
 {
 	/** Wall segments placed on a given cell's face (matched by placement yaw and cell proximity). */
@@ -164,3 +166,5 @@ bool FTileMapperHeadroomEntryWalled::RunTest(const FString& Parameters)
 	TS->RemoveFromRoot();
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS
