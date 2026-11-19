@@ -2,6 +2,8 @@
 #include "Misc/AutomationTest.h"
 #include "DungeonSeed.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 // ============================================================================
 // Same seed produces same sequence
 // ============================================================================
@@ -171,3 +173,5 @@ bool FDungeonSeedRandBoolDistribution::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS
