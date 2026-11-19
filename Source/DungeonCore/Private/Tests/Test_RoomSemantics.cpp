@@ -8,6 +8,8 @@
 #include "DungeonGenerator.h"
 #include "DungeonValidator.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 // ============================================================================
 // Test Helpers
 // ============================================================================
@@ -843,3 +845,5 @@ bool FRoomSemValidatorPasses::RunTest(const FString& Parameters)
 	DungeonRoomSemanticsTestHelpers::CleanupConfig(Config);
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

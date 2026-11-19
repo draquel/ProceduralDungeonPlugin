@@ -6,6 +6,8 @@
 #include "DungeonGenerator.h"
 #include "DungeonValidator.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 // ============================================================================
 // Test Helpers
 // ============================================================================
@@ -553,3 +555,5 @@ bool FDungeonGenStressTightGrid::RunTest(const FString& Parameters)
 	DungeonGenerationTestHelpers::CleanupConfig(Config);
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

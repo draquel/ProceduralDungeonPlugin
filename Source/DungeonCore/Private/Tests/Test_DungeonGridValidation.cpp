@@ -5,6 +5,8 @@
 #include "DungeonConfiguration.h"
 #include "DungeonValidator.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 // ============================================================================
 // Test Helpers
 // ============================================================================
@@ -605,3 +607,5 @@ bool FDungeonValidateMetricsMismatch::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS
