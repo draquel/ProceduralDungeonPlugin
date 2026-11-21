@@ -7,6 +7,8 @@
 #include "DungeonTileModule.h"
 #include "Engine/StaticMesh.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 namespace DungeonTileModuleTestHelpers
 {
 	// A 3x3 room at (1,1,0) in a 5x5x1 grid; floor below is OOB so all 9 cells get floors.
@@ -122,3 +124,5 @@ bool FTileModuleBackwardCompat::RunTest(const FString& Parameters)
 	TS->RemoveFromRoot();
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

@@ -6,6 +6,8 @@
 #include "DungeonModuleTools.h"
 #include "DungeonTileModule.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDungeonModuleCaptureRoundTrip,
 	"Dungeon.TileModule.Capture.RoundTrip",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
@@ -40,3 +42,5 @@ bool FDungeonModuleCaptureRoundTrip::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

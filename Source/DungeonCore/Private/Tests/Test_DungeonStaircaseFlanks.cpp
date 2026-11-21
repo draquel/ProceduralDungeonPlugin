@@ -20,9 +20,11 @@
 #include "DungeonGenerator.h"
 #include "DungeonBoundaryRules.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 namespace DungeonStaircaseFlankTestHelpers
 {
-	/** The DungeonTest map's configuration (DA /Game/PluginTesting/Config/DungeonConfig). */
+	/** The DungeonTest map's configuration (DA /Game/PluginTesting/Tests/Dungeon/DungeonConfig). */
 	UDungeonConfiguration* CreateDungeonTestConfig()
 	{
 		UDungeonConfiguration* Config = NewObject<UDungeonConfiguration>();
@@ -134,3 +136,5 @@ bool FDungeonStaircaseFlanksClear::RunTest(const FString& Parameters)
 	Config->RemoveFromRoot();
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

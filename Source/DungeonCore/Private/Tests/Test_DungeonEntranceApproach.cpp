@@ -9,6 +9,8 @@
 #include "DungeonValidator.h"
 #include "DungeonRoomPlacement.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 namespace DungeonEntranceApproachTestHelpers
 {
 	UDungeonConfiguration* CreateConfig(const FIntVector& GridSize, int32 RoomCount, const FIntVector& MaxRoomSize, int32 Buffer = 1)
@@ -412,3 +414,5 @@ bool FApproachOverride::RunTest(const FString& Parameters)
 	Cleanup(Config, Generator);
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS
