@@ -457,6 +457,20 @@ cell's bottom plane (G24; `Dungeon.Stamp.VoxelLining`, `Dungeon.Stamp.CarvedFloo
 The voxel lattice is the world's, corner-sampled: `FDungeonVoxelLattice` enumerates the samples inside a cell box, so the
 meshed surface lies within half a voxel of each cell plane (`Dungeon.VoxelLattice.*`, `Dungeon.VoxelStampPlan.*`).
 
+**The planned stamp** (G280). The passes (carve, lining and seal, steps) live once (`DungeonStampPasses` in
+`DungeonVoxelStamper.cpp`) and hand each write to a sink. `StampDungeonInFrame`'s sink writes into the edit manager as
+the passes go, in one operation. `PlanStampInFrame(Result, Layout, WorldOffset, StampMode, Config, Frame, OutPlan)` keeps
+them instead: each voxel once with its last write's value (every write is a Set, so the last is the voxel the one-frame
+stamp leaves), grouped by the chunk the edit manager resolves it to (`FDungeonPlannedStamp`: the chunks in coordinate
+order, the writes counted as the one-frame stamp counts them and the distinct voxels). It touches no voxel world, only
+the world's layout read beforehand on the game thread (`GetWorldLayout`: origin, voxel and chunk size) and the
+configuration, so it runs on a worker. `ApplyPlannedChunks(EditManager, Plan, FirstChunk, NumChunks)` writes whole chunks
+in one operation (System, outside the history, the replication class the caller sets), and `MarkPlannedChunksDirty`
+marks the cells' chunks as the one-frame stamp does after its operation. Applying every chunk, in any order, leaves the
+one-frame stamp's edit layer (`Dungeon.Stamp.Planned`: both modes, a plane and a planet frame, the plan made on a worker
+and applied last chunk first; half the chunks applied leave exactly those chunks' voxels). VoxelWorldPOI plans on a
+worker and writes a few chunks a tick (`POI_SYSTEM.md`, "Over several ticks").
+
 `UDungeonVoxelConfig` holds the material IDs (`WallMaterialID`, `FloorMaterialID`, `CeilingMaterialID`,
 `StaircaseMaterialID`, `DoorFrameMaterialID`, all 2 by default), `RoomTypeMaterialOverrides`, `VoxelsPerCellOverride`
 (0 = `CellWorldSize / VoxelSize`), `WallThickness` (1-8), `CarveMarginVoxels` (0-3) and `DungeonBiomeID`.
@@ -554,7 +568,9 @@ to call them is the caller's choice:
   per world (`StampDungeonInFrame`, `StitchEntranceInFrame`), and for tile-dressed types spawns a tile actor over the
   carve that rebuilds from the seed on every stream-in.
 
-There is no async wrapper and no pre-placed dungeon record in the plugin. The February design's preview actor, pre-placed
+Generation and `PlanStampInFrame` are callable from any thread (VoxelWorldPOI generates and plans a POI's stamp on a worker,
+G280); writing a plan goes through the edit manager on the game thread. There is no async wrapper and no pre-placed
+dungeon record in the plugin. The February design's preview actor, pre-placed
 record, output interface and async subsystem were never built (`ADungeonPreviewActor`, `FPreplacedDungeon`, `IDungeonOutputHandler`);
 the actor, the tile mapper and the stamper took their places.
 
@@ -583,6 +599,11 @@ is about 1,200 tiles in a few dozen batches. Interactables are counted in the te
 At `CellWorldSize` 400 and `VoxelSize` 100 a cell is 4×4×4 = 64 voxels, so 2,000 open cells write about 128,000 edits
 plus the jacket, across 20-50 chunks. The stamp runs on the calling thread as one edit operation (`FDungeonStampResult`
 reports `VoxelsModified`, `ChunksAffected` and `StampTimeMs`); VoxelWorlds remeshes the touched chunks on its workers.
+On `VoxelDemo` (a tiled 20 x 20 x 3 dungeon, 400 uu cells, 75 uu voxels, a seal of 3 voxels and a margin of 1.5) a stamp
+is 210,000 to 290,000 writes and 75 to 130 ms on the game thread in the editor, the writes through the edit manager most
+of it (the carve 27 to 39 ms, the seal's planning and writes 38 to 73 ms). Planned (`PlanStampInFrame`), the same stamp is
+about 110 ms on a worker and 162,000 distinct voxels in 12 chunks, written over 4 ticks in 25 ms, the densest chunk
+10 to 11.5 ms (G280).
 
 ---
 
