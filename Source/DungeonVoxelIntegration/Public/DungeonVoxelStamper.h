@@ -35,6 +35,69 @@ struct DUNGEONVOXELINTEGRATION_API FDungeonStampResult
 	FString ErrorMessage;
 };
 
+/** The voxel world's layout as a stamp needs it (UDungeonVoxelStamper::GetWorldLayout). */
+struct FDungeonStampWorldLayout
+{
+	/** The voxel world's WorldOrigin (its lattice's anchor). */
+	FVector WorldOrigin = FVector::ZeroVector;
+
+	/** The voxel world's VoxelSize. */
+	float VoxelSize = 100.0f;
+
+	/** The voxel world's ChunkSize (voxels per chunk edge). */
+	int32 ChunkSize = 32;
+};
+
+/** One voxel a planned stamp writes: its index on the world's lattice and the voxel (FVoxelData packed). */
+struct FDungeonStampWrite
+{
+	FIntVector Index = FIntVector::ZeroValue;
+	uint32 PackedVoxel = 0;
+};
+
+/** A planned stamp's voxels in one chunk, each once, in the order the passes first reached them. */
+struct FDungeonStampChunkWrites
+{
+	FIntVector ChunkCoord = FIntVector::ZeroValue;
+	TArray<FDungeonStampWrite> Writes;
+};
+
+/**
+ * A stamp worked out and not yet written (UDungeonVoxelStamper::PlanStampInFrame, G280): every voxel the stamp writes, once,
+ * with the value of the stamp's last write to it, by chunk. Planned on a worker and applied a few chunks a tick on the game
+ * thread, it leaves the edit layer the one-frame stamp leaves: every write of a stamp is a Set, which replaces what the
+ * voxel held, so a voxel's last write is its value, and a chunk's voxels are written in one operation.
+ */
+struct FDungeonPlannedStamp
+{
+	/** The world's lattice in the dungeon's frame (the writes' edit positions). */
+	FDungeonVoxelLattice Lattice;
+
+	/** The voxel world's layout the plan was made for. */
+	FDungeonStampWorldLayout Layout;
+
+	/** The chunks, in coordinate order (Z, then Y, then X). */
+	TArray<FDungeonStampChunkWrites> Chunks;
+
+	/** The chunks of the cells' centres, which the one-frame stamp marks dirty after its operation. */
+	TArray<FIntVector> DirtyChunks;
+
+	/** The writes the passes made, a voxel written twice counted twice (the one-frame stamp's VoxelsModified). */
+	int32 VoxelWrites = 0;
+
+	/** The distinct voxels written. */
+	int32 Voxels = 0;
+
+	/** Whether the plan was made. */
+	bool bValid = false;
+
+	/** Why not, when it was not. */
+	FString ErrorMessage;
+
+	/** How long the planning took. */
+	float PlanTimeMs = 0.0f;
+};
+
 /**
  * Stamps dungeon geometry into a voxel world.
  *
@@ -75,66 +138,58 @@ public:
 		UDungeonVoxelConfig* Config,
 		const FTransform& Frame);
 
-private:
-	// Open-cell / wall / floor decisions come from FDungeonBoundaryRules (DungeonCore), shared
-	// with the tile mapper. Do not add local copies here: they drift, and a drifted rule means
-	// tiles seal space the voxels carved (or vice versa).
-
-	/** Returns the EDungeonRoomType for a cell based on its RoomIndex, or Generic for non-room cells. */
-	static EDungeonRoomType GetRoomTypeForCell(const FDungeonCell& Cell, const FDungeonResult& Result);
-
-	/** Carve a single cell's voxel volume to air. Returns number of voxels modified. */
-	int32 CarveCell(
-		class UVoxelEditManager* EditManager,
-		const FDungeonVoxelLattice& Lattice,
-		const FVector& CellWorldMin,
-		float CellWorldSize);
+	/**
+	 * The voxel world's layout as a stamp needs it, read on the game thread so a stamp can be planned on any thread.
+	 * @param ChunkManager The voxel world
+	 * @param OutLayout    Receives the world's origin, voxel size and chunk size
+	 * @return False when the chunk manager has no configuration
+	 */
+	static bool GetWorldLayout(const UVoxelChunkManager* ChunkManager, FDungeonStampWorldLayout& OutLayout);
 
 	/**
-	 * Place boundary voxels on a cell face, INSIDE the open cell (the stone lining that makes a
-	 * VoxelCarved dungeon read as rock; UDungeonVoxelConfig::GetInnerLiningThickness deep, the rest
-	 * of the jacket goes outside through PlaceOuterSeal). Returns number of voxels placed.
+	 * Work out a stamp without writing it (G280): the same passes as StampDungeonInFrame, each voxel kept once with the
+	 * value of its last write, grouped by the chunk the edit manager puts it in. Touches no voxel world and no UObject but
+	 * the configuration (read only), so it runs on a worker. Applying every chunk of the plan (ApplyPlannedChunks) leaves
+	 * the edit layer StampDungeonInFrame leaves, voxel for voxel.
+	 * @param Result      The generated dungeon data
+	 * @param Layout      The voxel world's layout (GetWorldLayout)
+	 * @param WorldOffset Offset applied to all grid coordinates (frame space)
+	 * @param StampMode   How to apply the dungeon to existing terrain
+	 * @param Config      Material and scale configuration
+	 * @param Frame       Frame space to world (FTransform::Identity: the world)
+	 * @param OutPlan     Receives the plan
+	 * @return Whether the plan is valid (else OutPlan.ErrorMessage says why)
 	 */
-	int32 PlaceBoundary(
-		class UVoxelEditManager* EditManager,
-		const FDungeonVoxelLattice& Lattice,
-		const FVector& CellWorldMin,
-		float CellWorldSize,
-		int32 Face,
-		float Thickness,
-		uint8 MaterialID,
-		uint8 BiomeID);
+	static bool PlanStampInFrame(
+		const FDungeonResult& Result,
+		const FDungeonStampWorldLayout& Layout,
+		const FVector& WorldOffset,
+		EDungeonStampMode StampMode,
+		const UDungeonVoxelConfig* Config,
+		const FTransform& Frame,
+		FDungeonPlannedStamp& OutPlan);
 
 	/**
-	 * Place seal voxels on a cell face, OUTSIDE the open cell.
-	 *
-	 * CarveOnly dungeons are lined by tile meshes, so the inward boundary pass is skipped — but
-	 * that also removed the only thing asserting the surrounding voxel field is solid. Dungeons
-	 * are deliberately anchored at the cave layer, so procedural cave voids intersect the volume
-	 * and breach it: terrain reads straight through the thin tiles. This writes the shell just
-	 * outside each boundary face instead, sealing the volume without occupying the cell where the
-	 * tiles stand. The voxel-lined modes write the jacket's layers past their inner lining here too.
-	 *
-	 * Which lattice samples the slab writes is decided by FDungeonVoxelStampPlan: every sample
-	 * that Pass 1 carved (any open cell) is excluded by index, so a seal can never plug a
-	 * neighbouring room or hallway, nor re-solidify a layer of the cell it belongs to.
-	 *
-	 * @param OpenCellSamples Lattice indices of every sample inside any open cell, as carved.
-	 * @param SealedVoxels Lattice indices already sealed by this stamp. The six face slabs of a
-	 *        cell overlap at its edges and corners (that overlap is what closes the shell), and
-	 *        neighbouring cells re-seal each other's shells, so without this the same voxel is
-	 *        written many times over — all redundant, since every write is the same value.
-	 * @return Number of voxels placed.
+	 * Write some of a planned stamp's chunks into the edit manager, game thread: one edit operation outside the undo
+	 * history with the System source (left set, as StampDungeonInFrame leaves it), whole chunks only, so its listeners
+	 * (the re-mesh, the collision cook, scatter) see each chunk's stamp complete.
+	 * @param EditManager The voxel world's edit manager
+	 * @param Plan        The plan (PlanStampInFrame)
+	 * @param FirstChunk  The first chunk to write (an index into Plan.Chunks)
+	 * @param NumChunks   How many chunks to write
+	 * @return The voxels written
 	 */
-	int32 PlaceOuterSeal(
-		class UVoxelEditManager* EditManager,
-		const FDungeonVoxelLattice& Lattice,
-		const FVector& CellWorldMin,
-		float CellWorldSize,
-		int32 Face,
-		float Thickness,
-		uint8 MaterialID,
-		uint8 BiomeID,
-		const TSet<FIntVector>& OpenCellSamples,
-		TSet<FIntVector>& SealedVoxels);
+	static int32 ApplyPlannedChunks(class UVoxelEditManager* EditManager, const FDungeonPlannedStamp& Plan, int32 FirstChunk, int32 NumChunks);
+
+	/**
+	 * Mark the chunks of the cells' centres dirty, as StampDungeonInFrame does after its operation: call once every chunk of
+	 * the plan is applied.
+	 * @param ChunkManager The voxel world
+	 * @param Plan         The applied plan
+	 */
+	static void MarkPlannedChunksDirty(UVoxelChunkManager* ChunkManager, const FDungeonPlannedStamp& Plan);
+
+	// Open-cell / wall / floor decisions come from FDungeonBoundaryRules (DungeonCore), shared with the tile mapper, and the
+	// passes that apply them live once in DungeonVoxelStamper.cpp (DungeonStampPasses), shared by the one-frame and the
+	// planned stamp. Do not add local copies: they drift, and a drifted rule means tiles seal space the voxels carved.
 };
