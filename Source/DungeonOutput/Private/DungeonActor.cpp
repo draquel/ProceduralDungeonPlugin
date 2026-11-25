@@ -8,6 +8,7 @@
 #include "DungeonTileMapper.h"
 #include "DungeonTileModule.h"
 #include "DungeonTorchActor.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "Engine/World.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/BoxComponent.h"
@@ -229,6 +230,7 @@ void ADungeonActor::GenerateDungeon()
 		ClearDungeon();
 	}
 
+	TRACE_CPUPROFILER_EVENT_SCOPE(DungeonActor_GenerateDungeon);
 	// Generate dungeon data + map to tiles through the ONE shared build (see BuildDungeon).
 	if (!BuildDungeon(DungeonConfig, TileSet, Seed, bUseEntranceOverride, EntranceOverride, bOpenEntranceOpening,
 		GetMapOrigin(), CachedResult, CachedTileMap))
@@ -260,6 +262,7 @@ void ADungeonActor::GenerateDungeon()
 
 	TMap<FName, FRenderBatch> Batches;
 	InstanceLookup.Empty();
+	TRACE_CPUPROFILER_EVENT_SCOPE(DungeonActor_Batches);
 	TMap<int32, UDungeonTileModule*> ModuleByPiece;
 	TMap<int32, UStaticMesh*> MeshByPiece;
 	TMap<FSoftObjectPath, UStaticMesh*> ElementMeshes;
@@ -379,6 +382,7 @@ void ADungeonActor::GenerateDungeon()
 		{
 			continue;
 		}
+		TRACE_CPUPROFILER_EVENT_SCOPE(DungeonActor_Batch);
 
 		UHierarchicalInstancedStaticMeshComponent* HISMC = NewObject<UHierarchicalInstancedStaticMeshComponent>(
 			this, NAME_None, RF_Transient);
@@ -392,9 +396,15 @@ void ADungeonActor::GenerateDungeon()
 		HISMC->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		HISMC->SetCollisionResponseToAllChannels(ECR_Block);
 		HISMC->AttachToComponent(Root, FAttachmentTransformRules::KeepRelativeTransform);
-		HISMC->RegisterComponent();
+		{
+			TRACE_CPUPROFILER_EVENT_SCOPE(DungeonActor_Register);
+			HISMC->RegisterComponent();
+		}
 		// World-space instances from the actor's location, or relative to the actor in its own frame.
-		HISMC->AddInstances(Batch.Instances, false, /*bWorldSpace=*/!bMapInActorFrame);
+		{
+			TRACE_CPUPROFILER_EVENT_SCOPE(DungeonActor_AddInstances);
+			HISMC->AddInstances(Batch.Instances, false, /*bWorldSpace=*/!bMapInActorFrame);
+		}
 
 		TileComponents.Add(Pair.Key, HISMC);
 
@@ -430,6 +440,7 @@ bool ADungeonActor::BuildDungeon(UDungeonConfiguration* Config, const UDungeonTi
 		return false;
 	}
 
+	TRACE_CPUPROFILER_EVENT_SCOPE(DungeonActor_BuildDungeon);
 	UDungeonGenerator* Generator = NewObject<UDungeonGenerator>();
 	OutResult = bUseEntranceOverride
 		? Generator->GenerateWithEntrance(Config, InSeed, EntranceOverride)
@@ -439,6 +450,7 @@ bool ADungeonActor::BuildDungeon(UDungeonConfiguration* Config, const UDungeonTi
 		OutResult.Rooms.Num(), OutResult.Hallways.Num(),
 		OutResult.Staircases.Num(), OutResult.GenerationTimeMs);
 
+	TRACE_CPUPROFILER_EVENT_SCOPE(DungeonActor_MapToTiles);
 	OutTileMap = FDungeonTileMapper::MapToTiles(OutResult, *TileSet, WorldOffset, bOpenEntranceOpening);
 	return true;
 }
