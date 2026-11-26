@@ -465,7 +465,9 @@ stamp leaves), grouped by the chunk the edit manager resolves it to (`FDungeonPl
 order, the writes counted as the one-frame stamp counts them and the distinct voxels). It touches no voxel world, only
 the world's layout read beforehand on the game thread (`GetWorldLayout`: origin, voxel and chunk size) and the
 configuration, so it runs on a worker. `ApplyPlannedChunks(EditManager, Plan, FirstChunk, NumChunks)` writes whole chunks
-in one operation (System, outside the history, the replication class the caller sets), and `MarkPlannedChunksDirty`
+in one operation (System, outside the history, the replication class the caller sets), each chunk in one call to the
+edit manager (`UVoxelEditManager::ApplySetVoxelsInChunk`, G291: its voxels by their place in the chunk, a lattice index
+less the chunk's first, with no change record, since nothing undoes or cancels a stamp), and `MarkPlannedChunksDirty`
 marks the cells' chunks as the one-frame stamp does after its operation. Applying every chunk, in any order, leaves the
 one-frame stamp's edit layer (`Dungeon.Stamp.Planned`: both modes, a plane and a planet frame, the plan made on a worker
 and applied last chunk first; half the chunks applied leave exactly those chunks' voxels). VoxelWorldPOI plans on a
@@ -603,7 +605,7 @@ On `VoxelDemo` (a tiled 20 x 20 x 3 dungeon, 400 uu cells, 75 uu voxels, a seal 
 is 210,000 to 290,000 writes and 75 to 130 ms on the game thread in the editor, the writes through the edit manager most
 of it (the carve 27 to 39 ms, the seal's planning and writes 38 to 73 ms). Planned (`PlanStampInFrame`), the same stamp is
 about 110 ms on a worker and 162,000 distinct voxels in 12 chunks, written over 4 ticks in 25 ms, the densest chunk
-10 to 11.5 ms (G280).
+10 to 11.5 ms (G280). Each chunk in one call to the edit manager (G291), the densest chunk (about 69,000 voxels) is 2.4 to 5.6 ms (median 2.7) against 11.7 to 15.5 voxel by voxel, and the stamp is written in 2 ticks; the longest tick, 4.9 to 7.3 ms, is now the budget's last chunk and the entrance stitch in the last tick (G302).
 
 ---
 
