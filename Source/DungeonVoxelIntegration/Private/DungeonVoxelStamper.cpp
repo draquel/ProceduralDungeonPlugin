@@ -620,13 +620,26 @@ int32 UDungeonVoxelStamper::ApplyPlannedChunks(UVoxelEditManager* EditManager, c
 	// voxel the stamp writes in a chunk is in the slice that applies it, so no chunk is ever meshed or cooked half stamped.
 	EditManager->BeginEditOperation(TEXT("Dungeon Stamp"), /*bAddToUndoHistory=*/false);
 	EditManager->SetEditSource(EEditSource::System);
+
+	// Each chunk in one call (G291): the chunk's layer looked up once, its voxels by their place in the chunk (a lattice
+	// index less the chunk's first: the plan filed each write under the chunk its edit position falls in). No change record:
+	// the stamp is outside the history and nothing cancels it; the POI bridge makes it Local (an operation that is not
+	// keeps its record, which its replicated change is sent from).
+	const int32 ChunkSize = Plan.Layout.ChunkSize;
+	TArray<FVoxelChunkSetVoxel> Voxels;
 	int32 Count = 0;
 	for (int32 ChunkIndex = FirstChunk; ChunkIndex < End; ++ChunkIndex)
 	{
-		for (const FDungeonStampWrite& Entry : Plan.Chunks[ChunkIndex].Writes)
+		const FDungeonStampChunkWrites& Chunk = Plan.Chunks[ChunkIndex];
+		const FIntVector First = Chunk.ChunkCoord * ChunkSize;
+		Voxels.Reset(Chunk.Writes.Num());
+		for (const FDungeonStampWrite& Entry : Chunk.Writes)
 		{
-			Count += EditManager->ApplyEdit(Plan.Lattice.EditPosition(Entry.Index), FVoxelData::Unpack(Entry.PackedVoxel), EEditMode::Set) ? 1 : 0;
+			FVoxelChunkSetVoxel& Voxel = Voxels.AddDefaulted_GetRef();
+			Voxel.LocalPosition = Entry.Index - First;
+			Voxel.Voxel = FVoxelData::Unpack(Entry.PackedVoxel);
 		}
+		Count += EditManager->ApplySetVoxelsInChunk(Chunk.ChunkCoord, Voxels, /*bKeepChangeRecord=*/false);
 	}
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(DungeonStamp_EndOperation);

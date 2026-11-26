@@ -172,7 +172,8 @@ public:
 	/**
 	 * Write some of a planned stamp's chunks into the edit manager, game thread: one edit operation outside the undo
 	 * history with the System source (left set, as StampDungeonInFrame leaves it), whole chunks only, so its listeners
-	 * (the re-mesh, the collision cook, scatter) see each chunk's stamp complete.
+	 * (the re-mesh, the collision cook, scatter) see each chunk's stamp complete. Each chunk goes to the edit manager in one
+	 * call (UVoxelEditManager::ApplySetVoxelsInChunk, G291) with no change record: the stamp is never undone or cancelled.
 	 * @param EditManager The voxel world's edit manager
 	 * @param Plan        The plan (PlanStampInFrame)
 	 * @param FirstChunk  The first chunk to write (an index into Plan.Chunks)
